@@ -29,9 +29,10 @@ export const CLEAR_TIME_MAX = Math.max(...CLEAR_FX.filter(Boolean).map(f => f.ti
 // Tunable feel — adjust after real-hands testing.
 export const CTRL = {
   moveStep: 0.55,   // cells of finger travel per horizontal step
-  softStep: 0.70,   // cells of finger travel per soft-drop step
-  flickVel: 0.95,   // px/ms downward that counts as a hard-drop flick
-  flickDist: 1.30,  // cells of downward travel required for a flick
+  softStep: 0.85,   // cells of finger travel per soft-drop step
+  flickVel: 1.25,   // px/ms downward (smoothed) that counts as a hard-drop flick
+  flickDist: 2.00,  // cells that must be covered *while fast* to commit a flick
+  flickSmooth: 0.45,// weight of the newest velocity sample; lower = steadier
   holdSwipe: 1.20,  // cells of upward travel that trigger hold
   tapDist: 12,      // px of travel still considered a tap
   tapTime: 260,     // ms

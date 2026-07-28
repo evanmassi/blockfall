@@ -23,7 +23,7 @@ const ctxStub = () => {
 };
 
 const docHandlers = {}, handlers = {}, els = {};
-const IDS = ['board','holdCanvas','nextCanvas','overlay','toast','stage','railLeft',
+const IDS = ['board','holdCanvas','nextCanvas','overlay','toast','stage','railLeft','railRight',
              'score','level','lines','pauseBtn','muteBtn'];
 
 for (const id of IDS) {
@@ -89,7 +89,7 @@ const { G } = await import('../src/state.js');
 const { THEMES, theme, savedThemeName } = await import('../src/themes.js');
 const board = await import('../src/board.js');
 const game = await import('../src/game.js');
-const { applyTheme } = await import('../src/render.js');
+const { applyTheme, view } = await import('../src/render.js');
 const { themeBar } = await import('../src/ui.js');
 await import('../src/main.js'); // boots: theme, resize, menu, loop
 
@@ -433,6 +433,40 @@ console.log('\nTouch gestures');
   fire('pointerdown', { pointerId: 10, pointerType: 'touch', button: 0, clientX: 200, clientY: 300, timeStamp: ts });
   fire('pointerup', { pointerId: 10, clientX: 201, clientY: 300, timeStamp: ts + 80 });
   check('tap rotates', G.active.rot === 1, 'rot=' + G.active.rot);
+}
+
+console.log('\nDrop gestures');
+{
+  const fire = (type, ev) => { for (const fn of handlers.stage[type] || []) fn(ev); };
+
+  const drag = (id, samples) => {
+    fresh();
+    put('T', 4, 4, 0);
+    const piece = G.active;
+    let ts = clock, y = 300;
+    fire('pointerdown', { pointerId: id, pointerType: 'touch', button: 0, clientX: 200, clientY: y, timeStamp: ts });
+    for (const [dy, dt] of samples) {
+      y += dy; ts += dt;
+      fire('pointermove', { pointerId: id, clientX: 200, clientY: y, timeStamp: ts });
+    }
+    fire('pointerup', { pointerId: id, clientX: 200, clientY: y, timeStamp: ts + 15 });
+    return { piece, dropped: G.active !== piece };
+  };
+
+  // Unhurried drag containing one fast sample — the 120Hz false positive that
+  // was slamming pieces to the floor mid-drag.
+  const blip = drag(20, Array.from({ length: 12 }, (_, i) => (i === 6 ? [14, 8] : [5, 26])));
+  check('slow drag with a speed blip does not hard drop', !blip.dropped);
+  check('slow drag still soft drops', G.active.y > 4, 'y=' + G.active.y);
+
+  // Sustained fast movement — a genuine flick must still fire.
+  const flick = drag(21, Array.from({ length: 5 }, () => [22, 8]));
+  check('a deliberate flick still hard drops', flick.dropped);
+  pumpMs(CLEAR_TIME_MAX + 60);
+
+  // A brief fast twitch that stops short must not count either.
+  const twitch = drag(22, [[20, 8], [18, 8]]);
+  check('a short fast twitch does not hard drop', !twitch.dropped);
 }
 
 console.log('\nRandom play stress');

@@ -4,7 +4,7 @@ import { theme, setTheme } from './themes.js';
 import { G } from './state.js';
 import { collides } from './board.js';
 import { blockSprite, ghostSprite, grayOf, rgbOf, clearSprites } from './sprites.js';
-import { boardCv, boardCtx, holdCv, holdCtx, nextCv, nextCtx, stage, railLeft } from './dom.js';
+import { boardCv, boardCtx, holdCv, holdCtx, nextCv, nextCtx, stage, railLeft, railRight } from './dom.js';
 
 export const view = { cell: 24, dpr: 1, previewSize: 12 };
 
@@ -24,6 +24,11 @@ export function resize() {
   boardCv.width = Math.round(w * view.dpr);
   boardCv.height = Math.round(h * view.dpr);
   boardCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+
+  // The board is centred in whatever vertical slack the screen has, so the
+  // rails have to be pinned to its height or their contents float above it.
+  railLeft.style.height = h + 'px';
+  railRight.style.height = h + 'px';
 
   // Previews are width-bound: every spawn orientation is at most 4 cells wide
   // and 2 tall, so size off the rail's inner width and let height follow.

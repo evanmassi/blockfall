@@ -85,6 +85,7 @@ stage.addEventListener('pointerdown', e => {
     lastX: e.clientX, lastY: e.clientY,
     lastT: e.timeStamp, startT: e.timeStamp,
     accX: 0, accY: 0, maxDist: 0, dropped: false,
+    vy: 0, burstY: 0,
   };
 });
 
@@ -98,7 +99,17 @@ stage.addEventListener('pointermove', e => {
   const totalX = e.clientX - gesture.startX, totalY = e.clientY - gesture.startY;
   gesture.maxDist = Math.max(gesture.maxDist, Math.hypot(totalX, totalY));
 
-  if (dy / dt > CTRL.flickVel && totalY > view.cell * CTRL.flickDist && Math.abs(totalY) > Math.abs(totalX)) {
+  // A single pointermove is a terrible speedometer — at 120Hz one 8ms sample
+  // can read as a flick in the middle of an unhurried drag, which slammed the
+  // piece to the floor. Smooth the velocity, and require the finger to stay
+  // fast across enough distance to actually mean it.
+  gesture.vy += (dy / dt - gesture.vy) * CTRL.flickSmooth;
+  if (gesture.vy < CTRL.flickVel * 0.5) gesture.burstY = 0;
+  else if (dy > 0) gesture.burstY += dy;
+
+  if (gesture.vy > CTRL.flickVel &&
+      gesture.burstY > view.cell * CTRL.flickDist &&
+      Math.abs(totalY) > Math.abs(totalX)) {
     gesture.dropped = true;
     hardDrop();
     return;
