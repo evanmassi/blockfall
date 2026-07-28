@@ -1,3 +1,7 @@
+// The rules: spawning, movement, locking, clearing, scoring and the state
+// machine behind the menu, pause, death and game-over screens. The only module
+// that writes G, apart from input.js's gesture bookkeeping.
+
 import {
   COLS, ROWS, HIDDEN,
   LINE_SCORES, TSPIN_SCORES, TSPIN_MINI_SCORES, PERFECT_SCORES,
@@ -79,6 +83,11 @@ export function move(dx) {
   return true;
 }
 
+/**
+ * Rotates the active piece, trying each SRS kick offset in turn.
+ * @param {number} dir  positive clockwise, negative anticlockwise.
+ * @returns {boolean} false if every kick was blocked, leaving the piece as-is.
+ */
 export function rotate(dir) {
   const a = G.active;
   if (!a || a.type === 'O') return false;
@@ -146,6 +155,15 @@ export function holdPiece() {
 
 // ---------- locking & clearing ----------
 
+/**
+ * Classifies the active piece's position as a T-spin, by the three-corner rule.
+ *
+ * Must be called *before* the piece is written into the grid — it inspects the
+ * cells diagonally around the T's centre, and once the piece has settled those
+ * corners include the piece itself.
+ *
+ * @returns {'full'|'mini'|null}
+ */
 export function tSpinType() {
   const a = G.active;
   if (a.type !== 'T' || !G.rotatedLast) return null;
@@ -402,6 +420,13 @@ export function showMenu() {
 
 // ---------- per-frame ----------
 
+/**
+ * Advances one frame.
+ * @param {number} dt  milliseconds since the last frame, clamped by the caller.
+ *
+ * Must run *after* input.js's updateKeyRepeat for the same frame, so a piece
+ * moved by held keys is settled before gravity and lock delay are applied.
+ */
 export function update(dt) {
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 0.03);
 

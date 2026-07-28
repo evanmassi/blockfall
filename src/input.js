@@ -1,3 +1,6 @@
+// Keyboard and touch handling. Gestures are measured in cells rather than
+// pixels, so they behave the same on any screen size.
+
 import { CTRL } from './config.js';
 import { G } from './state.js';
 import { view } from './render.js';
@@ -14,6 +17,14 @@ import {
 const keys = { left: 0, right: 0, down: 0 };
 let dasTimer = 0, arrTimer = 0, softTimer = 0, dasDir = 0;
 
+/**
+ * Applies held-key auto-repeat for one frame: DAS before the first repeat,
+ * then ARR between them.
+ *
+ * Called from the frame loop rather than from update(), so game.js and this
+ * module only depend on each other in one direction. Must run before
+ * update() for the same frame.
+ */
 export function updateKeyRepeat(dt) {
   const dir = keys.left && !keys.right ? -1 : keys.right && !keys.left ? 1 : 0;
   if (dir !== dasDir) { dasDir = dir; dasTimer = 0; arrTimer = 0; }

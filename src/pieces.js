@@ -1,3 +1,7 @@
+// The seven tetrominoes and the SRS rotation and kick tables. Pure data plus
+// matrix helpers — no board, no DOM, no mutable state. Collision and the spawn
+// bag live in board.js.
+
 const SHAPES = {
   I: ['....','IIII','....','....'],
   J: ['J..','JJJ','...'],
@@ -48,11 +52,16 @@ for (const type of TYPES) {
   for (let i = 1; i < 4; i++) ROTATIONS[type].push(rotateCW(ROTATIONS[type][i - 1]));
 }
 
+/**
+ * Index of the topmost filled row of a rotation matrix. Lets a spawning piece
+ * be settled far enough down that its highest cell clears the hidden buffer.
+ */
 export function topRow(m) {
   for (let y = 0; y < m.length; y++) if (m[y].some(Boolean)) return y;
   return 0;
 }
 
+/** Calls fn(x, y) for each filled cell of rotation matrix `m`. */
 export function forEachCell(m, fn) {
   for (let y = 0; y < m.length; y++) for (let x = 0; x < m.length; x++) if (m[y][x]) fn(x, y);
 }

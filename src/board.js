@@ -1,3 +1,7 @@
+// Piece supply and collision — the parts of the rules that only need the grid.
+// Kept separate from game.js so render.js can test collision for the ghost
+// piece without importing the game loop.
+
 import { COLS, ROWS } from './config.js';
 import { TYPES, ROTATIONS } from './pieces.js';
 import { G } from './state.js';
@@ -23,6 +27,15 @@ export function makePiece(type) {
   return { type, rot: 0, x: type === 'O' ? 4 : 3, y: 0, m: ROTATIONS[type][0] };
 }
 
+/**
+ * Whether rotation matrix `m` placed at grid cell (px, py) overlaps a wall,
+ * the floor or a settled block.
+ *
+ * Note the asymmetry: the sides and floor block, but *above* the field does
+ * not. Pieces spawn in the hidden rows with negative-ish coordinates and must
+ * be free to sit there — treating the ceiling as solid would make every spawn
+ * an immediate collision.
+ */
 export function collides(m, px, py) {
   for (let y = 0; y < m.length; y++) {
     for (let x = 0; x < m.length; x++) {

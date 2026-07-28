@@ -1,3 +1,7 @@
+// Sound effects synthesised through WebAudio — no audio files, so nothing to
+// load or cache. The context can only be created inside a user gesture, which
+// is why init() is called from input handlers rather than at startup.
+
 export const Sound = {
   ctx: null,
   muted: localStorage.getItem('blockfall.muted') === '1',

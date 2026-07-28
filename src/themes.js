@@ -1,6 +1,22 @@
-// A theme owns every color decision, including how blocks are lit — block.glow
-// varies a lot between these, which is most of what separates Neon from Forest.
-// Dark wells only; a light background was tried and rejected.
+// Every colour decision in the game, including how blocks are lit. Adding a
+// theme is one entry here; nothing else needs to change.
+//
+//   bg/panel/edge/text/dim/accent  pushed to CSS custom properties by setTheme
+//   well, gridLine                 the playfield behind the blocks
+//   overlay / overlaySoft          menu and game-over backdrop / pause backdrop
+//   boardShadow                    full CSS box-shadow value for the well
+//   flash                          "r,g,b" for the line-clear wash; must read
+//                                  against `well`, so it is not always white
+//   scanlines                      CRT overlay on or off
+//   block.glow                     0–1 multiplier on the baked sprite glow;
+//                                  most of what separates Neon from Forest
+//   block.light/shade              bevel alphas, lit top-left, shaded bottom-right
+//   block.outline                  1px sprite edge, as a full rgba() string
+//   pieces                         one hex per tetromino; all seven must be
+//                                  visually distinct or pieces become
+//                                  indistinguishable mid-game
+//
+// Dark wells only — a light theme was built and rejected.
 export const THEMES = {
   neon: {
     name: 'Neon',

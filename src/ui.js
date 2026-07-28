@@ -1,3 +1,7 @@
+// Overlay screens, HUD text and the markup helpers the game builds them from.
+// Owns no game rules; game.js composes these into the menu, pause and game-over
+// screens.
+
 import { G } from './state.js';
 import { THEMES, theme } from './themes.js';
 import { ROTATIONS, forEachCell } from './pieces.js';
@@ -83,6 +87,15 @@ let actionHandler = null;
 // buttons can be bound directly instead of delegated through the overlay.
 export function onOverlayAction(fn) { actionHandler = fn; }
 
+/**
+ * Renders an overlay screen and wires up anything inside it.
+ *
+ * @param {string} html
+ * @param {{soft?: boolean, intro?: boolean}} [opts]
+ *   soft  — lighter backdrop, so the board stays readable behind it (pause).
+ *   intro — stage the contents in after the title's drop animation (menu).
+ *           Leave it off anywhere that must appear instantly.
+ */
 export function showOverlay(html, opts = {}) {
   overlay.innerHTML = html;
   overlay.classList.toggle('soft', !!opts.soft);   // board readable behind
@@ -102,6 +115,14 @@ export function showOverlay(html, opts = {}) {
   }
 }
 
+/**
+ * Buttons for an overlay screen.
+ *
+ * @param {Array<[string, string]>} actions  [action, label] pairs.
+ *   The action string is dispatched to the onOverlayAction handler in
+ *   input.js — a value with no branch there produces a button that silently
+ *   does nothing, so the two must be kept in step.
+ */
 export function actionBar(actions) {
   const buttons = actions
     .map(([act, label]) => `<button class="menuBtn" data-act="${act}">${label}</button>`)

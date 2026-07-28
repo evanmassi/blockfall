@@ -1,3 +1,7 @@
+// Element and canvas-context lookups, done once. These run at import time, so
+// this module must not be imported anywhere that could execute before the
+// document has parsed.
+
 const $ = id => document.getElementById(id);
 
 export const boardCv = $('board'), boardCtx = boardCv.getContext('2d');

@@ -1,3 +1,7 @@
+// The single mutable game state, plus its persistence. Everything shared lives
+// on `G` because ES module bindings cannot be reassigned across files — a
+// module-level `let` here could be read elsewhere but never updated.
+
 import { COLS, ROWS } from './config.js';
 
 const STORE = 'blockfall.stats';
@@ -32,7 +36,16 @@ export const G = {
   stats: { best: 0, bestLines: 0, bestCombo: 0 },
 
   gravityAcc: 0,
+
+  // Lock delay: once grounded, a piece gets LOCK_DELAY ms before it sets, and
+  // each successful move or rotation restarts that clock — capped at
+  // MAX_LOCK_RESETS so a piece cannot be stalled indefinitely.
   lockTimer: 0, lockResets: 0, grounded: false,
+
+  // T-spin detection. A spin only counts if the piece's last successful action
+  // was a rotation, so `rotatedLast` is cleared by any move or by gravity.
+  // `lastKick` is the index into the SRS kick table that succeeded; index 4
+  // promotes a mini T-spin to a full one.
   lastKick: 0, rotatedLast: false,
 
   clearRows: null, clearTimer: 0, clearTime: 200, clearCount: 0, pendingClear: null,

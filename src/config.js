@@ -1,3 +1,9 @@
+// Board geometry, scoring tables and every tunable number. No behaviour here —
+// anything that feels wrong on a device should be adjustable from this file
+// alone, without reading the code that consumes it.
+
+// Rows above VIS_ROWS are the spawn buffer: pieces are created there and are
+// not drawn, so a piece never appears half-cut at the top of the well.
 export const COLS = 10, VIS_ROWS = 20, HIDDEN = 2, ROWS = VIS_ROWS + HIDDEN;
 
 export const LINE_SCORES = [0, 100, 300, 500, 800];

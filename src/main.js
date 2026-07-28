@@ -1,3 +1,6 @@
+// Entry point: boot order, the frame loop, and the window-level listeners that
+// belong to no single subsystem.
+
 import { G, loadStats } from './state.js';
 import { setTheme, savedThemeName } from './themes.js';
 import { resize, render } from './render.js';
@@ -58,9 +61,13 @@ window.visualViewport?.addEventListener('resize', resize);
 let lastFrame = 0;
 
 function frame(t) {
+  // Clamped so a backgrounded tab doesn't return with a delta large enough to
+  // drop a piece through the stack in one step.
   const dt = Math.min(t - lastFrame, 100);
   lastFrame = t;
 
+  // Order matters: held keys move the piece, then gravity and lock delay act on
+  // where it ended up, then it's drawn once.
   if (G.state === 'playing' && G.active) updateKeyRepeat(dt);
   update(dt);
   render();

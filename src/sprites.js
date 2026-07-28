@@ -1,5 +1,10 @@
+// Pre-rendered block sprites. Glow and bevel are baked in once per
+// (theme, colour, size) so the frame loop only ever calls drawImage —
+// shadowBlur per block per frame is far too slow on a phone.
+
 const sprites = new Map();
 
+/** Must be called whenever the theme or the cell size changes. */
 export function clearSprites() { sprites.clear(); }
 
 // Hard-edged square with a classic raised bevel: lit top/left, shaded bottom/right.
@@ -85,6 +90,7 @@ export function rgbOf(hex) {
 
 const grayCache = new Map();
 
+/** Luminance-preserving grey, so a drained stack stays readable as shapes. */
 export function grayOf(hex) {
   let out = grayCache.get(hex);
   if (out) return out;

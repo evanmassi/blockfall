@@ -1,3 +1,7 @@
+// All canvas drawing and the layout maths that sizes it. Reads G but never
+// writes it: nothing here changes the game, so a dropped frame can only ever
+// cost a repaint.
+
 import { COLS, VIS_ROWS, HIDDEN, ROWS, CLEAR_FX } from './config.js';
 import { ROTATIONS, forEachCell } from './pieces.js';
 import { theme, setTheme } from './themes.js';
@@ -8,6 +12,10 @@ import { boardCv, boardCtx, holdCv, holdCtx, nextCv, nextCtx, stage, railLeft, r
 // railLeft/railRight are sized directly rather than measured — reading back a
 // width we just wrote would force an extra layout every resize.
 
+/**
+ * Current layout, in CSS pixels. `cell` is also the unit input.js measures
+ * gestures against, so a drag covers the same number of cells on any screen.
+ */
 export const view = { cell: 24, dpr: 1, previewSize: 12 };
 
 let wellCanvas;
@@ -213,6 +221,11 @@ const PREVIEW_STACK = [
   [1, 2, 'Z'], [3, 2, 'O'],
 ];
 
+/**
+ * Paints a miniature well into `cv` using `th` — a THEMES entry, not
+ * necessarily the active theme. That is the whole point: the picker has to
+ * show palettes that are not currently applied.
+ */
 export function drawThemePreview(cv, th) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   const w = cv.clientWidth || 64, h = cv.clientHeight || 52;
@@ -248,6 +261,7 @@ export function drawThemePreview(cv, th) {
 // The L tetromino in its first rotation is, conveniently, the letter L.
 const WORDMARK_L = [[0, 0], [0, 1], [0, 2], [1, 2]];
 
+/** Draws the title's L glyph. Sized by CSS to 1cap, so it matches the type. */
 export function drawWordmarkL(cv, th = theme) {
   const cell = 26, pad = 3;
   cv.width = cell * 2 + pad * 2;
