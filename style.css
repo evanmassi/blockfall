@@ -142,7 +142,11 @@ html, body {
   background:var(--overlay);
   backdrop-filter:blur(3px);
   text-align:center; padding:24px;
+  overflow-y:auto;
 }
+/* Column flex items shrink by default — without this the swatch canvases get
+   squeezed flat when the menu is taller than the screen. */
+#overlay > * { flex:0 0 auto; }
 #overlay.hidden { display:none; }
 
 /* Pause keeps the board readable underneath rather than blanking it out. */
@@ -151,6 +155,7 @@ html, body {
 .themes { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
 
 .swatch {
+  flex:0 0 auto;
   display:flex; flex-direction:column; align-items:stretch; gap:6px;
   padding:4px 4px 6px; border-radius:var(--radius); cursor:pointer;
   background:var(--panel); border:1px solid var(--edge);
@@ -171,11 +176,16 @@ html, body {
   color:var(--accent); text-shadow:0 0 26px var(--accent), 0 0 60px var(--accent);
 }
 
-/* The first L is the real L tetromino, drawn with the theme's bevel and glow. */
-#overlay h1.mark { display:flex; align-items:center; justify-content:center; }
+/* The first L is the real L tetromino, drawn with the theme's bevel and glow.
+   Baseline alignment plus 1cap locks it to the same baseline and cap height as
+   the letters, so it reads as a device rather than a mistake. The em fallback
+   is only for browsers without cap units. */
+#overlay h1.mark { display:flex; align-items:baseline; justify-content:center; }
 #overlay h1.mark .markL {
-  height:.86em; width:auto; aspect-ratio:2 / 3;
-  margin:0 .08em; position:relative; top:.03em;
+  height:.62em;
+  height:1cap;
+  width:auto; aspect-ratio:2 / 3;
+  margin:0 .1em;
 }
 
 #overlay h2 {
