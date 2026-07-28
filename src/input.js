@@ -3,6 +3,7 @@ import { G } from './state.js';
 import { view } from './render.js';
 import { Sound } from './audio.js';
 import { stage, overlay, pauseBtn, muteBtn } from './dom.js';
+import { onOverlayAction } from './ui.js';
 import {
   move, rotate, softDrop, hardDrop, holdPiece,
   startGame, togglePause, showMenu,
@@ -64,25 +65,40 @@ document.addEventListener('keyup', e => {
 
 let gesture = null, extraPointers = 0;
 
-// Overlay buttons live inside the tap-anywhere surface, so both the swatches
-// and these have to be excluded from it.
-overlay.addEventListener('click', e => {
-  const btn = e.target.closest?.('[data-act]');
-  if (!btn) return;
-  Sound.init();
-  const act = btn.dataset.act;
-  if (act === 'restart') startGame();
-  else if (act === 'menu') showMenu();
-  else if (act === 'resume') togglePause();
-});
+// Everything here dispatches on pointerdown rather than click. The overlay is a
+// tap-anywhere surface, so the button case has to be decided in the same event
+// that would otherwise resume — and click is not guaranteed to arrive at all.
+let lastTouchTap = -Infinity;
 
 overlay.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
-  if (e.target.closest?.('[data-theme]')) return; // let the swatch handle it
-  if (e.target.closest?.('[data-act]')) return;   // let the button handle it
+
+  // A touch also emits a compatibility "mouse" pointerdown at the same spot a
+  // moment later. Any action that swaps the overlay's contents means that ghost
+  // lands on whatever replaced them — which is how MAIN MENU ended up starting
+  // a game instead. preventDefault suppresses it; the timer catches the rest.
+  const now = e.timeStamp ?? 0;
+  if (e.pointerType === 'mouse' && now - lastTouchTap < 700) return;
+  if (e.pointerType !== 'mouse') lastTouchTap = now;
+  e.preventDefault();
+
+  if (e.target.closest?.('[data-theme]')) return; // the swatch handles it
+
+  // A thumb that lands in the button row but misses a button must do nothing.
+  // Falling through would resume the game they were trying to leave, which
+  // reads as the button being broken.
+  if (e.target.closest?.('.menuBtns')) return;
+
   Sound.init();
   if (G.state === 'menu' || G.state === 'over') startGame();
   else if (G.state === 'paused' || G.state === 'pausedClearing') togglePause();
+});
+
+onOverlayAction(act => {
+  Sound.init();
+  if (act === 'restart') startGame();
+  else if (act === 'menu') showMenu();
+  else if (act === 'resume') togglePause();
 });
 
 stage.addEventListener('pointerdown', e => {

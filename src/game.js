@@ -21,7 +21,7 @@ function addScore(n) {
   if (!G.newBest && G.runBest > 0 && G.score > G.runBest) {
     G.newBest = true;
     setRecordStyle(true);
-    showToast('NEW BEST', theme.accent);
+    showToast('NEW HIGH SCORE!', theme.accent);
     Sound.record();
   }
   updateHud();
@@ -268,7 +268,7 @@ function applyScore(cleared, spin) {
   if (G.level > prevLevel) Sound.levelUp();
 
   // Beating the record outranks the clear label — addScore already toasted it.
-  if (!hadBest && G.newBest) { /* keep NEW BEST on screen */ }
+  if (!hadBest && G.newBest) { /* keep the high-score toast on screen */ }
   else if (G.level > prevLevel) showToast('LEVEL ' + G.level, theme.pieces.S);
   else if (label) showToast(label, color);
 }
@@ -336,13 +336,13 @@ function finishGameOver() {
   commitStats();
 
   showOverlay(`
-    <h2${G.newBest ? ' class="record"' : ''}>${G.newBest ? 'NEW BEST' : 'GAME OVER'}</h2>
+    <h2${G.newBest ? ' class="record"' : ''}>${G.newBest ? 'NEW HIGH SCORE!' : 'GAME OVER'}</h2>
     <div class="best${G.newBest ? ' new' : ''}">
       <span class="label">SCORE</span>
       <b>${G.score.toLocaleString()}</b>
     </div>
     <p>LINES ${G.lines} &nbsp;·&nbsp; LEVEL ${G.level}${
-      G.newBest ? '' : `<br>BEST ${G.stats.best.toLocaleString()}`}</p>
+      G.newBest ? '' : `<br>HIGH SCORE ${G.stats.best.toLocaleString()}`}</p>
     ${themeBar()}
     ${actionBar([['menu', 'MAIN MENU']])}
     <p class="cta">TAP TO PLAY AGAIN</p>
@@ -390,7 +390,7 @@ export function showMenu() {
     ${wordmark()}
     ${G.stats.best ? `
       <div class="best">
-        <span class="label">BEST</span>
+        <span class="label">HIGH SCORE</span>
         <b>${G.stats.best.toLocaleString()}</b>
       </div>` : ''}
     <p>${controls}</p>

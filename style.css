@@ -49,6 +49,11 @@ html, body {
    iOS Safari ignores user-scalable=no, which is where that showed up. */
 #app, #app * { touch-action:none; }
 
+/* ...but tappable controls want `manipulation` instead: still no double-tap
+   zoom, but taps behave normally. Needs the #app prefix — `#app *` carries an
+   id, so a bare class selector loses to it. */
+#app .menuBtn, #app .swatch, #app .sysBtn { touch-action:manipulation; }
+
 #app {
   position:fixed; inset:0;
   display:flex; flex-direction:column;
@@ -132,7 +137,9 @@ html, body {
   position:absolute; left:50%; top:26%;
   transform:translate(-50%,-50%);
   font-size:clamp(11px,3.9vw,17px); letter-spacing:.02em; line-height:1.5;
-  text-align:center; white-space:nowrap; pointer-events:none; opacity:0;
+  /* Wraps rather than nowrap: "NEW HIGH SCORE!" and "B2B T-SPIN DOUBLE 3×" are
+     both wider than the well in a pixel face. */
+  max-width:94%; text-align:center; pointer-events:none; opacity:0;
   text-shadow:0 0 18px currentColor;
 }
 
@@ -268,14 +275,19 @@ html, body {
   100% { opacity:1; transform:translateY(0); }
 }
 
-.menuBtns { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+/* Padding on the row itself widens the forgiving area around the buttons; a tap
+   that lands in here but misses is swallowed rather than resuming the game. */
+.menuBtns {
+  display:flex; flex-wrap:wrap; justify-content:center; gap:10px;
+  padding:6px 10px;
+}
 .menuBtn {
   font-family:var(--font-display); font-weight:400; font-synthesis:none;
-  font-size:8px; letter-spacing:.06em; line-height:1;
-  padding:10px 12px; border-radius:var(--radius); cursor:pointer;
+  font-size:10px; letter-spacing:.06em; line-height:1;
+  min-height:46px; padding:8px 18px; border-radius:var(--radius); cursor:pointer;
   background:var(--panel); border:1px solid var(--edge); color:var(--dim);
 }
-.menuBtn:active { color:var(--text); border-color:var(--accent); }
+.menuBtn:active { color:var(--text); border-color:var(--accent); background:var(--edge); }
 
 .bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
 .bgfall i {
@@ -291,6 +303,13 @@ html, body {
   100% { transform:translateY(120vh) rotate(90deg); }
 }
 #overlay > *:not(.bgfall) { position:relative; z-index:1; }
+
+#debug {
+  position:fixed; left:0; right:0; bottom:0; z-index:99;
+  padding:6px 8px; background:#000; color:#0f0;
+  font:10px/1.35 ui-monospace,monospace; text-align:left;
+  pointer-events:none; word-break:break-all; white-space:pre-wrap;
+}
 
 @media (prefers-reduced-motion: reduce) {
   /* !important because the staged reveal uses a multi-animation shorthand. */

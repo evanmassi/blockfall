@@ -59,7 +59,21 @@ const previewCanvas = () => ({
 const markCv = previewCanvas();
 
 const swatchEls = [];
-els.overlay.querySelectorAll = () => swatchEls;
+// showOverlay() binds listeners straight onto the action buttons, so the stub
+// has to hand back real-ish elements parsed from the markup it just rendered.
+let actionButtons = [];
+els.overlay.querySelectorAll = sel => {
+  if (sel !== '[data-act]') return swatchEls;
+  actionButtons = [...els.overlay.innerHTML.matchAll(/data-act="([^"]+)"/g)].map(m => {
+    const listeners = {};
+    return {
+      dataset: { act: m[1] },
+      listeners,
+      addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); },
+    };
+  });
+  return actionButtons;
+};
 els.overlay.querySelector = sel => (sel === '.markL' ? markCv : null);
 
 function fakeSwatch(name) {
@@ -84,6 +98,7 @@ globalThis.localStorage = {
   setItem: (k, v) => { store[k] = String(v); },
 };
 globalThis.requestAnimationFrame = fn => rafQueue.push(fn);
+globalThis.location = { search: '' };
 // Node supplies a read-only `navigator` with no serviceWorker, so main.js's
 // registration guard short-circuits on its own.
 globalThis.window = {
@@ -188,6 +203,12 @@ console.log('\nOffline packaging');
   check('every font is cached by the worker', faces.every(f => listed.includes(f)), faces.join(', '));
   check('font licence shipped alongside it', exists('fonts/OFL.txt'));
 
+  // `#app *` sets touch-action:none and carries an id, so the override for
+  // tappable controls has to be id-qualified or it silently loses.
+  const flat = css.replace(/\s+/g, ' ');
+  check('touch-action override outranks #app *',
+        /#app \.menuBtn, #app \.swatch, #app \.sysBtn \{ touch-action:manipulation/.test(flat));
+
   // Splash motion has to be opt-out, and must never gate starting a game.
   check('motion respects prefers-reduced-motion',
         /@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(css) &&
@@ -243,14 +264,14 @@ console.log('\nThemes');
   swatchEls.length = 0;
   for (const n of names) swatchEls.push(fakeSwatch(n));
   const swatchTarget = { closest: sel => sel === '[data-theme]' ? { dataset: { theme: 'forest' } } : null };
-  for (const fn of handlers.overlay.click || []) fn({ target: swatchTarget });
-  check('clicking a swatch applies that theme', theme.key === 'forest', theme.key);
-  check('selection mark moves', swatchEls.find(s => s.dataset.theme === 'forest').on === true);
-
   const before = G.state;
+  // pointerdown only — `touch-action: none` means a synthesized click may never
+  // arrive on WebKit, so firing click here would hide a real failure.
   for (const fn of handlers.overlay.pointerdown || []) {
-    fn({ pointerType: 'touch', button: 0, target: swatchTarget });
+    fn({ pointerType: 'touch', button: 0, target: swatchTarget, timeStamp: 0, preventDefault: noop });
   }
+  check('tapping a swatch applies that theme', theme.key === 'forest', theme.key);
+  check('selection mark moves', swatchEls.find(s => s.dataset.theme === 'forest').on === true);
   check('swatch tap does not start the game', G.state === before, `${before} -> ${G.state}`);
 
   applyTheme('neon');
@@ -451,6 +472,7 @@ console.log('\nOverlay restart');
   const tap = {
     pointerId: 3, pointerType: 'touch', button: 0, clientX: 10, clientY: 10, timeStamp: clock,
     target: { closest: () => null }, // tapped the backdrop, not a swatch
+    preventDefault: noop,
   };
   for (const fn of handlers.overlay.pointerdown || []) fn(tap);
   check('tapping the overlay restarts', G.state === 'playing', G.state);
@@ -514,10 +536,10 @@ console.log('\nNew high score');
   check('fires once past the target', G.newBest === true, 'score=' + G.score);
   check('score element lit for the rest of the run', els.score.classes.has('record'));
 
-  // Game over should acknowledge it rather than showing a flat BEST line.
+  // Game over should acknowledge it rather than showing a flat high score line.
   game.gameOver();
   pumpMs(DEATH_ROW_MS * 25 + DEATH_HOLD_MS + 150);
-  check('game over celebrates the record', els.overlay.innerHTML.includes('NEW BEST'));
+  check('game over celebrates the record', els.overlay.innerHTML.includes('NEW HIGH SCORE!'));
   check('record persisted as the new best', G.stats.best === G.score, `${G.stats.best} vs ${G.score}`);
 
   // Starting again clears the marking.
@@ -529,8 +551,38 @@ console.log('\nNew high score');
 
 console.log('\nOverlay actions');
 {
-  const fireOverlay = (type, ev) => { for (const fn of handlers.overlay[type] || []) fn(ev); };
-  const target = act => ({ closest: sel => (sel === '[data-act]' ? { dataset: { act } } : null) });
+  // Everything fires pointerdown only. These controls sit under
+  // `touch-action: none`, where a synthesized click is not guaranteed to
+  // arrive, so a test that fires click would pass against broken code.
+  let tapClock = 1000;
+  const fireDown = (pointerType, target) => {
+    for (const fn of handlers.overlay.pointerdown || []) {
+      fn({ pointerType, button: 0, target, timeStamp: tapClock, preventDefault: noop });
+    }
+  };
+  // A real touch tap: the touch event, then the compatibility mouse event the
+  // browser emits ~50ms later at the same coordinates. By then the overlay may
+  // have been replaced, so the ghost lands on whatever is now underneath.
+  const tap = (target, ghostTarget = target) => {
+    tapClock += 400;
+    fireDown('touch', target);
+    tapClock += 50;
+    fireDown('mouse', ghostTarget);
+  };
+  // Buttons are bound directly now, so exercise them the way the DOM would:
+  // fire the listener showOverlay attached to the button element itself.
+  const pressButton = act => {
+    const btn = actionButtons.find(b => b.dataset.act === act);
+    for (const fn of btn.listeners.pointerdown || []) {
+      fn({ pointerType: 'touch', button: 0, target: btn, timeStamp: tapClock, stopPropagation: noop, preventDefault: noop });
+    }
+  };
+  const button = act => ({ closest: sel => (sel === '[data-act]' ? { dataset: { act } } : null) });
+  const backdrop = { closest: () => null };
+  // Landed in the button row, but between the buttons.
+  const nearMiss = { closest: sel => (sel === '.menuBtns' ? {} : null) };
+
+  check('no overlay behaviour depends on click', !(handlers.overlay.click || []).length);
 
   game.startGame();
   pumpMs(20);
@@ -540,12 +592,18 @@ console.log('\nOverlay actions');
   check('pause offers a route to the menu', paused.includes('data-act="menu"'));
   check('pause keeps tap-to-resume', paused.includes('TAP TO RESUME'));
 
-  // Tapping a button must not also fall through to "tap anywhere to resume".
-  fireOverlay('pointerdown', { pointerType: 'touch', button: 0, target: target('menu') });
-  check('button tap does not resume', G.state === 'paused', G.state);
+  tap(nearMiss);
+  check('missing a button does not resume', G.state === 'paused', G.state);
 
-  fireOverlay('click', { target: target('menu') });
-  check('main menu returns to the menu', G.state === 'menu', G.state);
+  tap(backdrop);
+  check('tapping the backdrop still resumes', G.state === 'playing', G.state);
+
+  game.togglePause();
+  pressButton('menu');
+  // The compatibility mouse event lands on the menu that just replaced the
+  // pause screen — the sequence that made MAIN MENU start a game on touch.
+  fireDown('mouse', backdrop);
+  check('main menu goes to the menu, not back into the game', G.state === 'menu', G.state);
   check('menu clears the abandoned board', G.grid.every(r => r.every(c => !c)));
 
   // Abandoning a good run should still keep the score.
@@ -559,8 +617,10 @@ console.log('\nOverlay actions');
 
   game.startGame();
   pumpMs(20);
+  G.score = 999;
   game.togglePause();
-  fireOverlay('click', { target: target('restart') });
+  pressButton('restart');
+  fireDown('mouse', backdrop);
   check('restart starts a fresh game', G.state === 'playing' && G.score === 0, `${G.state}/${G.score}`);
 }
 

@@ -64,7 +64,10 @@ function paintOverlayCanvases() {
   if (mark) drawWordmarkL(mark);
 }
 
-overlay.addEventListener('click', e => {
+// pointerdown, not click: `touch-action: none` on the board suppresses
+// synthesized clicks on WebKit, and this listener runs before the one in
+// input.js that would otherwise treat the tap as "start/resume".
+overlay.addEventListener('pointerdown', e => {
   const btn = e.target.closest?.('[data-theme]');
   if (!btn) return;
   applyTheme(btn.dataset.theme);
@@ -74,12 +77,29 @@ overlay.addEventListener('click', e => {
   paintOverlayCanvases(); // the wordmark follows the new palette
 });
 
+let actionHandler = null;
+
+// input.js registers what the overlay's buttons do. Inverted this way so the
+// buttons can be bound directly instead of delegated through the overlay.
+export function onOverlayAction(fn) { actionHandler = fn; }
+
 export function showOverlay(html, opts = {}) {
   overlay.innerHTML = html;
   overlay.classList.toggle('soft', !!opts.soft);   // board readable behind
   overlay.classList.toggle('intro', !!opts.intro); // staged reveal after the drop
   overlay.classList.remove('hidden');
   paintOverlayCanvases();
+
+  // Bound on the button itself, and stopPropagation keeps the tap from also
+  // reaching the overlay's tap-anywhere handler. Delegating this through the
+  // overlay left the two competing for the same event.
+  for (const btn of overlay.querySelectorAll?.('[data-act]') || []) {
+    btn.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      actionHandler?.(btn.dataset.act);
+    });
+  }
 }
 
 export function actionBar(actions) {
