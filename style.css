@@ -39,7 +39,7 @@ html, body {
 #hud {
   flex:0 0 auto;
   display:flex; flex-direction:column; align-items:center;
-  padding:10px 12px 7px;
+  padding:6px 12px 7px;
 }
 
 .label { font-size:9px; letter-spacing:.18em; color:var(--dim); }
@@ -52,20 +52,22 @@ html, body {
   color:var(--text); text-shadow:0 0 16px var(--accent), 0 0 40px var(--accent);
 }
 
-#subStats { display:flex; gap:24px; margin-top:7px; }
+#subStats { display:flex; gap:24px; margin-top:4px; }
 .stat { display:flex; align-items:baseline; gap:6px; }
 .stat b {
   font-size:clamp(14px,4.6vw,20px); font-weight:700; letter-spacing:.03em;
   font-variant-numeric:tabular-nums;
 }
 
+/* flex-start, not center: the leftover vertical space would otherwise be split
+   above and below the board, opening a gap under the score. */
 #stage {
-  flex:1; display:flex; align-items:center; justify-content:center; gap:8px;
+  flex:1; display:flex; align-items:flex-start; justify-content:center; gap:8px;
   min-height:0; padding:0 10px 10px;
 }
 
 .rail {
-  width:var(--rail); flex:0 0 var(--rail); align-self:center;
+  width:var(--rail); flex:0 0 var(--rail); align-self:flex-start;
   display:flex; flex-direction:column; gap:8px;
 }
 

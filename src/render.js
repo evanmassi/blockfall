@@ -5,18 +5,30 @@ import { G } from './state.js';
 import { collides } from './board.js';
 import { blockSprite, ghostSprite, grayOf, rgbOf, clearSprites } from './sprites.js';
 import { boardCv, boardCtx, holdCv, holdCtx, nextCv, nextCtx, stage, railLeft, railRight } from './dom.js';
+// railLeft/railRight are sized directly rather than measured — reading back a
+// width we just wrote would force an extra layout every resize.
 
 export const view = { cell: 24, dpr: 1, previewSize: 12 };
 
 let wellCanvas;
 
+const MIN_RAIL = 46, MAX_RAIL = 88;
+const PAD_X = 20, PAD_Y = 10, GAPS = 16;
+
 export function resize() {
   view.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 
-  const railW = railLeft.getBoundingClientRect().width;
-  const availW = stage.clientWidth - 20 - railW * 2 - 16; // padding + both rails + gaps
-  const availH = stage.clientHeight - 10;
-  view.cell = Math.max(8, Math.floor(Math.min(availW / COLS, availH / VIS_ROWS)));
+  // A 10x20 well on a tall phone is width-bound with height to spare, so the
+  // rails get sized last: the board takes every pixel of width its height can
+  // actually use, and whatever is left over becomes rail.
+  const availH = stage.clientHeight - PAD_Y;
+  const totalW = stage.clientWidth - PAD_X - GAPS;
+  const cellByH = Math.floor(availH / VIS_ROWS);
+
+  const railW = Math.max(MIN_RAIL, Math.min(MAX_RAIL, Math.round((totalW - cellByH * COLS) / 2)));
+  document.documentElement.style.setProperty('--rail', railW + 'px');
+
+  view.cell = Math.max(8, Math.min(cellByH, Math.floor((totalW - railW * 2) / COLS)));
 
   const w = view.cell * COLS, h = view.cell * VIS_ROWS;
   boardCv.style.width = w + 'px';
@@ -32,7 +44,7 @@ export function resize() {
 
   // Previews are width-bound: every spawn orientation is at most 4 cells wide
   // and 2 tall, so size off the rail's inner width and let height follow.
-  view.previewSize = Math.max(7, Math.floor((railW - 12) / 4));
+  view.previewSize = Math.max(6, Math.floor((railW - 12) / 4));
   sizeMini(holdCv, holdCtx, view.previewSize * 4 + 2, view.previewSize * 2 + 4);
   sizeMini(nextCv, nextCtx, view.previewSize * 4 + 2, (view.previewSize * 2 + 8) * 3);
 
