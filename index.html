@@ -18,6 +18,7 @@
     --text:#e8e6ff;
     --dim:#7b74a8;
     --accent:#ff2d95;
+    --rail:clamp(46px,14.5vw,76px);
   }
 
   html, body {
@@ -39,56 +40,65 @@
   }
 
   #hud {
-    display:flex; align-items:stretch; gap:8px;
-    padding:10px 12px 8px;
     flex:0 0 auto;
+    display:flex; flex-direction:column; align-items:center;
+    padding:10px 12px 7px;
+  }
+
+  .label { font-size:9px; letter-spacing:.18em; color:var(--dim); }
+
+  #scoreBox { display:flex; flex-direction:column; align-items:center; gap:2px; }
+  #scoreBox .label { font-size:10px; letter-spacing:.3em; }
+  #score {
+    font-size:clamp(30px,10.5vw,48px); font-weight:800; line-height:1;
+    letter-spacing:.04em; font-variant-numeric:tabular-nums;
+    color:var(--text); text-shadow:0 0 16px var(--accent), 0 0 40px var(--accent);
+  }
+
+  #subStats { display:flex; gap:24px; margin-top:7px; }
+  .stat { display:flex; align-items:baseline; gap:6px; }
+  .stat b {
+    font-size:clamp(14px,4.6vw,20px); font-weight:700; letter-spacing:.03em;
+    font-variant-numeric:tabular-nums;
+  }
+
+  #stage {
+    flex:1; display:flex; align-items:center; justify-content:center; gap:8px;
+    min-height:0; padding:0 10px 10px;
+  }
+
+  .rail {
+    width:var(--rail); flex:0 0 var(--rail); align-self:stretch;
+    display:flex; flex-direction:column; gap:8px;
   }
 
   .slot {
-    display:flex; flex-direction:column; gap:3px;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
     background:var(--panel);
     border:1px solid var(--edge);
-    border-radius:10px;
-    padding:5px 7px 6px;
+    border-radius:6px;
+    padding:4px 3px 5px;
   }
+  .slot .label { font-size:8px; letter-spacing:.14em; }
 
-  .label { font-size:9px; letter-spacing:.16em; color:var(--dim); }
-
-  #stats {
-    flex:1; display:flex; flex-direction:column; justify-content:center; gap:2px;
-    padding-left:4px; min-width:0;
-  }
-  .stat { display:flex; align-items:baseline; gap:7px; }
-  .stat b {
-    font-size:clamp(13px,4.2vw,19px); font-weight:600; letter-spacing:.03em;
-    font-variant-numeric:tabular-nums;
-  }
-  #score { color:var(--accent); text-shadow:0 0 12px var(--accent); }
-
-  #sysBtns { display:flex; flex-direction:column; gap:6px; justify-content:center; }
+  #sysBtns { display:flex; flex-direction:column; gap:6px; align-items:center; margin-top:auto; }
   .sysBtn {
-    width:34px; height:34px; border-radius:9px;
+    width:34px; height:34px; border-radius:6px;
     background:var(--panel); border:1px solid var(--edge); color:var(--dim);
     font-size:14px; line-height:1; cursor:pointer;
   }
   .sysBtn:active { color:var(--text); border-color:var(--accent); }
 
-  #stage {
-    flex:1; position:relative;
-    display:flex; align-items:center; justify-content:center;
-    min-height:0; padding:0 12px 12px;
-  }
-
-  #boardWrap { position:relative; }
+  #boardWrap { position:relative; flex:0 0 auto; }
 
   #board {
     display:block;
-    border-radius:8px;
+    border-radius:2px;
     box-shadow:0 0 0 1px var(--edge), 0 0 46px -8px var(--accent);
   }
 
   #scanlines {
-    position:absolute; inset:0; border-radius:8px; pointer-events:none;
+    position:absolute; inset:0; border-radius:2px; pointer-events:none;
     background:repeating-linear-gradient(to bottom,
       rgba(0,0,0,0) 0 2px, rgba(0,0,0,.22) 2px 4px);
     mix-blend-mode:multiply;
@@ -126,32 +136,43 @@
 <body>
 <div id="app">
   <header id="hud">
-    <div class="slot">
-      <span class="label">HOLD</span>
-      <canvas id="holdCanvas"></canvas>
+    <div id="scoreBox">
+      <span class="label">SCORE</span>
+      <b id="score">0</b>
     </div>
-    <div id="stats">
-      <div class="stat"><span class="label">SCORE</span><b id="score">0</b></div>
-      <div class="stat"><span class="label">LEVEL</span><b id="level">1</b><span class="label">LINES</span><b id="lines">0</b></div>
-    </div>
-    <div class="slot">
-      <span class="label">NEXT</span>
-      <canvas id="nextCanvas"></canvas>
-    </div>
-    <div id="sysBtns">
-      <button class="sysBtn" id="pauseBtn" aria-label="Pause">❚❚</button>
-      <button class="sysBtn" id="muteBtn" aria-label="Mute">♪</button>
+    <div id="subStats">
+      <div class="stat"><span class="label">LEVEL</span><b id="level">1</b></div>
+      <div class="stat"><span class="label">LINES</span><b id="lines">0</b></div>
     </div>
   </header>
 
   <main id="stage">
+    <aside class="rail" id="railLeft">
+      <div class="slot">
+        <span class="label">HOLD</span>
+        <canvas id="holdCanvas"></canvas>
+      </div>
+      <div id="sysBtns">
+        <button class="sysBtn" id="pauseBtn" aria-label="Pause">❚❚</button>
+        <button class="sysBtn" id="muteBtn" aria-label="Mute">♪</button>
+      </div>
+    </aside>
+
     <div id="boardWrap">
       <canvas id="board"></canvas>
       <div id="scanlines"></div>
       <div id="toast"></div>
     </div>
-    <div id="overlay"></div>
+
+    <aside class="rail" id="railRight">
+      <div class="slot">
+        <span class="label">NEXT</span>
+        <canvas id="nextCanvas"></canvas>
+      </div>
+    </aside>
   </main>
+
+  <div id="overlay"></div>
 </div>
 
 <script>
@@ -239,18 +260,20 @@ const CTRL = {
 };
 
 const LOCK_DELAY = 500, MAX_LOCK_RESETS = 15, CLEAR_TIME = 190;
+const DEATH_ROW_MS = 34, DEATH_HOLD_MS = 280;
 
 const $ = id => document.getElementById(id);
 const boardCv = $('board'), boardCtx = boardCv.getContext('2d');
 const holdCv = $('holdCanvas'), holdCtx = holdCv.getContext('2d');
 const nextCv = $('nextCanvas'), nextCtx = nextCv.getContext('2d');
-const overlay = $('overlay'), toastEl = $('toast'), stage = $('stage');
+const overlay = $('overlay'), toastEl = $('toast'), stage = $('stage'), railLeft = $('railLeft');
 
 let grid, active, queue, hold, canHold, bag;
 let state = 'menu';
 let score, lines, level, combo, backToBack, stats;
 let gravityAcc, lockTimer, lockResets, grounded, lastKick, rotatedLast;
 let clearRows, clearTimer, pendingClear;
+let deathRow, deathTimer;
 let particles, shake, cell, dpr, wellCanvas;
 let lastFrame = 0;
 
@@ -296,12 +319,16 @@ const Sound = {
   clear(n)  { this.arp(n >= 4 ? [523, 659, 784, 1047, 1319] : [440, 587, 740].slice(0, n + 1), 0.05, 'square', 0.05); },
   tspin()   { this.arp([392, 587, 880, 1175], 0.05, 'sine', 0.06); },
   levelUp() { this.arp([523, 784, 1047], 0.07, 'triangle', 0.05); },
+  curtain(i){ this.tone(Math.max(90, 300 - i * 9), 0.05, 'square', 0.022); },
   over()    { this.arp([392, 330, 262, 196], 0.11, 'sawtooth', 0.055); },
 };
 
 // ---------- sprites ----------
 
 const sprites = new Map();
+
+// Hard-edged square with a classic raised bevel: lit top/left, shaded bottom/right.
+// The neon glow is baked in here so nothing needs shadowBlur at frame time.
 function blockSprite(color, size) {
   const key = color + '@' + size;
   if (sprites.has(key)) return sprites.get(key);
@@ -312,26 +339,35 @@ function blockSprite(color, size) {
   const g = cv.getContext('2d');
   g.translate(pad, pad);
 
-  const inset = Math.max(1, size * 0.06), r = size * 0.2;
+  const gap = Math.max(1, Math.round(size * 0.045));
+  const x0 = gap, y0 = gap, s = size - gap * 2;
+  const b = Math.max(1, Math.round(s * 0.16));
+
   g.shadowColor = color;
-  g.shadowBlur = size * 0.5;
+  g.shadowBlur = size * 0.42;
   g.fillStyle = color;
-  roundRect(g, inset, inset, size - inset * 2, size - inset * 2, r);
-  g.fill(); g.fill();
+  g.fillRect(x0, y0, s, s);
+  g.fillRect(x0, y0, s, s);
   g.shadowBlur = 0;
 
-  const grad = g.createLinearGradient(0, 0, 0, size);
-  grad.addColorStop(0, 'rgba(255,255,255,.45)');
-  grad.addColorStop(0.45, 'rgba(255,255,255,.06)');
-  grad.addColorStop(1, 'rgba(0,0,0,.35)');
-  g.fillStyle = grad;
-  roundRect(g, inset, inset, size - inset * 2, size - inset * 2, r);
+  g.beginPath();
+  g.moveTo(x0, y0); g.lineTo(x0 + s, y0);
+  g.lineTo(x0 + s - b, y0 + b); g.lineTo(x0 + b, y0 + b);
+  g.lineTo(x0 + b, y0 + s - b); g.lineTo(x0, y0 + s);
+  g.closePath();
+  g.fillStyle = 'rgba(255,255,255,.5)';
   g.fill();
 
-  g.strokeStyle = 'rgba(255,255,255,.55)';
-  g.lineWidth = Math.max(1, size * 0.05);
-  roundRect(g, inset, inset, size - inset * 2, size - inset * 2, r);
-  g.stroke();
+  g.beginPath();
+  g.moveTo(x0 + s, y0); g.lineTo(x0 + s, y0 + s); g.lineTo(x0, y0 + s);
+  g.lineTo(x0 + b, y0 + s - b); g.lineTo(x0 + s - b, y0 + s - b); g.lineTo(x0 + s - b, y0 + b);
+  g.closePath();
+  g.fillStyle = 'rgba(0,0,0,.42)';
+  g.fill();
+
+  g.strokeStyle = 'rgba(255,255,255,.28)';
+  g.lineWidth = 1;
+  g.strokeRect(x0 + .5, y0 + .5, s - 1, s - 1);
 
   const sprite = { cv, pad };
   sprites.set(key, sprite);
@@ -344,38 +380,40 @@ function ghostSprite(color, size) {
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
   const g = cv.getContext('2d');
-  const inset = Math.max(1, size * 0.1);
+  const gap = Math.max(1, Math.round(size * 0.045));
+  const lw = Math.max(1, Math.round(size * 0.08));
+  g.globalAlpha = 0.45;
   g.strokeStyle = color;
-  g.globalAlpha = 0.5;
-  g.lineWidth = Math.max(1, size * 0.09);
-  roundRect(g, inset, inset, size - inset * 2, size - inset * 2, size * 0.18);
-  g.stroke();
-  g.globalAlpha = 0.1;
+  g.lineWidth = lw;
+  g.strokeRect(gap + lw / 2, gap + lw / 2, size - gap * 2 - lw, size - gap * 2 - lw);
+  g.globalAlpha = 0.09;
   g.fillStyle = color;
-  g.fill();
+  g.fillRect(gap, gap, size - gap * 2, size - gap * 2);
   const sprite = { cv, pad: 0 };
   sprites.set(key, sprite);
   return sprite;
 }
 
-function roundRect(g, x, y, w, h, r) {
-  g.beginPath();
-  if (g.roundRect) { g.roundRect(x, y, w, h, r); return; }
-  g.moveTo(x + r, y);
-  g.arcTo(x + w, y, x + w, y + h, r);
-  g.arcTo(x + w, y + h, x, y + h, r);
-  g.arcTo(x, y + h, x, y, r);
-  g.arcTo(x, y, x + w, y, r);
-  g.closePath();
+const grayCache = new Map();
+function grayOf(hex) {
+  let out = grayCache.get(hex);
+  if (out) return out;
+  const n = parseInt(hex.slice(1), 16);
+  const lum = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+  const v = Math.round(38 + lum * 0.4);
+  out = '#' + ((v << 16) | (v << 8) | v).toString(16).padStart(6, '0');
+  grayCache.set(hex, out);
+  return out;
 }
 
 // ---------- layout ----------
 
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-  const pad = 24;
-  const availW = stage.clientWidth - pad;
-  const availH = stage.clientHeight - pad;
+
+  const railW = railLeft.getBoundingClientRect().width;
+  const availW = stage.clientWidth - 20 - railW * 2 - 16; // padding + both rails + gaps
+  const availH = stage.clientHeight - 10;
   cell = Math.max(8, Math.floor(Math.min(availW / COLS, availH / VIS_ROWS)));
 
   const w = cell * COLS, h = cell * VIS_ROWS;
@@ -385,9 +423,9 @@ function resize() {
   boardCv.height = Math.round(h * dpr);
   boardCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const mini = Math.max(7, Math.round(cell * 0.42));
-  sizeMini(holdCv, holdCtx, mini * 4 + 6, mini * 2 + 6);
-  sizeMini(nextCv, nextCtx, mini * 4 + 6, mini * 6 + 14);
+  const mini = Math.max(6, Math.floor((railW - 14) / 4.4));
+  sizeMini(holdCv, holdCtx, Math.round(mini * 4.2), Math.round(mini * 2.6));
+  sizeMini(nextCv, nextCtx, Math.round(mini * 4.2), Math.round(mini * 7.8));
 
   sprites.clear();
   buildWell();
@@ -715,6 +753,7 @@ function startGame() {
   score = 0; lines = 0; level = 1; combo = -1; backToBack = false;
   gravityAcc = 0; particles = []; shake = 0;
   clearRows = null; pendingClear = null;
+  deathRow = ROWS; deathTimer = 0;
   state = 'playing';
   hideOverlay();
   fillQueue();
@@ -722,9 +761,18 @@ function startGame() {
   updateHud();
 }
 
+// Death is a two-beat sequence: a grey curtain sweeps up from the floor,
+// then the summary appears.
 function gameOver() {
-  state = 'over';
+  if (state === 'dying' || state === 'over') return;
+  state = 'dying';
   active = null;
+  deathRow = ROWS;
+  deathTimer = 0;
+}
+
+function finishGameOver() {
+  state = 'over';
   Sound.over();
   stats.best = Math.max(stats.best, score);
   stats.bestLines = Math.max(stats.bestLines, lines);
@@ -798,6 +846,17 @@ function update(dt) {
     if (p.life <= 0) particles.splice(i, 1);
   }
 
+  if (state === 'dying') {
+    deathTimer += dt;
+    while (deathRow > HIDDEN && deathTimer >= DEATH_ROW_MS) {
+      deathTimer -= DEATH_ROW_MS;
+      deathRow--;
+      Sound.curtain(ROWS - 1 - deathRow);
+    }
+    if (deathRow <= HIDDEN && deathTimer >= DEATH_HOLD_MS) finishGameOver();
+    return;
+  }
+
   if (state === 'clearing') {
     clearTimer -= dt;
     if (clearTimer <= 0) finishClear();
@@ -847,7 +906,9 @@ function render() {
   for (let y = HIDDEN; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const t = grid[y][x];
-      if (t) drawBlock(boardCtx, x * cell, (y - HIDDEN) * cell, theme.pieces[t], cell);
+      if (!t) continue;
+      const color = theme.pieces[t];
+      drawBlock(boardCtx, x * cell, (y - HIDDEN) * cell, y >= deathRow ? grayOf(color) : color, cell);
     }
   }
 
@@ -977,15 +1038,16 @@ document.addEventListener('keyup', e => {
 
 let gesture = null, extraPointers = 0;
 
+overlay.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  Sound.init();
+  if (state === 'menu' || state === 'over') startGame();
+  else if (state === 'paused' || state === 'pausedClearing') togglePause();
+});
+
 stage.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
-
-  if (state !== 'playing') {
-    Sound.init();
-    if (state === 'menu' || state === 'over') startGame();
-    else if (state === 'paused' || state === 'pausedClearing') togglePause();
-    return;
-  }
+  if (state !== 'playing') return;
 
   if (gesture) { extraPointers++; rotate(-1); return; }
 
@@ -1052,9 +1114,13 @@ function endGesture(e) {
 stage.addEventListener('pointerup', endGesture);
 stage.addEventListener('pointercancel', e => { if (gesture && e.pointerId === gesture.id) gesture = null; });
 
-$('pauseBtn').addEventListener('click', e => { e.stopPropagation(); Sound.init(); togglePause(); });
+// The buttons live inside #stage, so swallow pointerdown or a tap on them
+// also registers as a rotate gesture on the board.
+for (const id of ['pauseBtn', 'muteBtn']) {
+  $(id).addEventListener('pointerdown', e => e.stopPropagation());
+}
+$('pauseBtn').addEventListener('click', () => { Sound.init(); togglePause(); });
 $('muteBtn').addEventListener('click', e => {
-  e.stopPropagation();
   Sound.muted = !Sound.muted;
   localStorage.setItem('blockfall.muted', Sound.muted ? '1' : '0');
   e.currentTarget.textContent = Sound.muted ? '♪̸' : '♪';
@@ -1080,6 +1146,7 @@ function frame(t) {
 stats = loadStats();
 grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 queue = []; particles = []; shake = 0; score = 0; lines = 0; level = 1; combo = -1;
+deathRow = ROWS; deathTimer = 0;
 $('muteBtn').textContent = Sound.muted ? '♪̸' : '♪';
 resize();
 showMenu();
