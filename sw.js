@@ -7,6 +7,7 @@ const ASSETS = [
   './src/ui.js', './src/game.js', './src/input.js', './src/audio.js', './src/main.js',
   './icons/icon-192.png', './icons/icon-512.png',
   './icons/maskable-512.png', './icons/apple-touch-180.png',
+  './fonts/press-start-2p.woff2',
 ];
 
 self.addEventListener('install', e => {

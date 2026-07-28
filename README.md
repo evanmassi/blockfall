@@ -85,6 +85,14 @@ Picker swatches are canvases drawn with the real block renderer, so each one sho
 
 Adding one is a single object in `src/themes.js`. `setTheme()` pushes the palette to CSS custom properties and the Android status bar; `applyTheme()` also clears the sprite cache and rebuilds the pre-rendered well, both of which bake in theme colors.
 
+## Typography
+
+Display type is **Press Start 2P** (Cody Boisclair, SIL Open Font License) — the latin subset only, 12.5KB, in `fonts/`, cached by the service worker so it renders offline. Licence text ships in `fonts/OFL.txt`.
+
+It's one weight and renders far larger and wider per pixel than a normal face, so everything using it sets its own size and near-zero letter-spacing, and `font-synthesis: none` prevents faux bolding. Body copy stays in the monospace stack — the pixel face is unreadable in running text.
+
+The title's first L is the real L tetromino: in its first rotation the piece is already the shape of the letter.
+
 ## Not done yet
 
 - Zen mode (no top-out)

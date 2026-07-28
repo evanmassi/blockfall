@@ -173,6 +173,13 @@ console.log('\nOffline packaging');
   check('index links the manifest', html.includes('rel="manifest"'));
   check('index links an icon', html.includes('rel="icon"'));
 
+  // A @font-face the worker doesn't cache means fallback type when offline.
+  const css = read('style.css');
+  const faces = [...css.matchAll(/url\('([^']+)'\)/g)].map(m => m[1]);
+  check('every @font-face file exists', faces.every(f => exists(f)), faces.join(', '));
+  check('every font is cached by the worker', faces.every(f => listed.includes(f)), faces.join(', '));
+  check('font licence shipped alongside it', exists('fonts/OFL.txt'));
+
   check('worker registration resolves against the module', read('src/main.js').includes("new URL('../sw.js', import.meta.url)"));
 }
 

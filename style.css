@@ -1,3 +1,9 @@
+@font-face {
+  font-family:'Press Start 2P';
+  src:url('fonts/press-start-2p.woff2') format('woff2');
+  font-weight:400; font-style:normal; font-display:swap;
+}
+
 *{ margin:0; padding:0; box-sizing:border-box; }
 
 /* Defaults so the shell renders before JS runs; setTheme() overwrites these. */
@@ -14,7 +20,17 @@
   --scanlines:block;
   --rail:clamp(52px,17vw,88px);
   --radius:2px;
-  --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --font-display:'Press Start 2P',ui-monospace,Menlo,Consolas,monospace;
+}
+
+/* Press Start 2P is one weight and renders much larger and wider per px than a
+   normal face, so anything using it sets its own size and tight letter-spacing,
+   and must never be synthetically bolded. */
+[class*="label"], .stat b, .best b, .swatch em,
+#score, #toast, #overlay h1, #overlay h2, #overlay .cta {
+  font-family:var(--font-display);
+  font-weight:400;
+  font-synthesis:none;
 }
 
 html, body {
@@ -45,25 +61,22 @@ html, body {
   padding:6px 12px 7px;
 }
 
-.label { font-size:9px; letter-spacing:.18em; color:var(--dim); }
+.label { font-size:7px; letter-spacing:.06em; color:var(--dim); }
 
-#scoreBox { display:flex; flex-direction:column; align-items:center; gap:2px; }
-#scoreBox .label { font-size:10px; letter-spacing:.3em; }
+#scoreBox { display:flex; flex-direction:column; align-items:center; gap:5px; }
+#scoreBox .label { font-size:7px; letter-spacing:.16em; }
 #score {
-  font-size:clamp(30px,10.5vw,48px); font-weight:800; line-height:1;
-  letter-spacing:.04em; font-variant-numeric:tabular-nums;
+  font-size:clamp(19px,6.6vw,32px); line-height:1.1;
+  letter-spacing:.01em;
   color:var(--text); text-shadow:0 0 16px var(--accent), 0 0 40px var(--accent);
 }
 
 /* Stays lit for the rest of the run once the record falls. */
 #score.record { color:var(--accent); text-shadow:0 0 18px var(--accent), 0 0 48px var(--accent); }
 
-#subStats { display:flex; gap:24px; margin-top:4px; }
+#subStats { display:flex; gap:22px; margin-top:6px; }
 .stat { display:flex; align-items:baseline; gap:6px; }
-.stat b {
-  font-size:clamp(14px,4.6vw,20px); font-weight:700; letter-spacing:.03em;
-  font-variant-numeric:tabular-nums;
-}
+.stat b { font-size:clamp(10px,3.2vw,14px); letter-spacing:.01em; }
 
 /* flex-start, not center: the leftover vertical space would otherwise be split
    above and below the board, opening a gap under the score. */
@@ -84,7 +97,7 @@ html, body {
   border-radius:var(--radius);
   padding:4px 3px 5px;
 }
-.slot .label { font-size:8px; letter-spacing:.14em; }
+.slot .label { font-size:6px; letter-spacing:.02em; }
 
 /* Offsets are from #app's padding box, so the safe-area insets are already
    accounted for. Below #overlay's z-index so pausing can't trap you. */
@@ -118,7 +131,7 @@ html, body {
 #toast {
   position:absolute; left:50%; top:26%;
   transform:translate(-50%,-50%);
-  font-size:clamp(17px,6vw,26px); font-weight:700; letter-spacing:.1em;
+  font-size:clamp(11px,3.9vw,17px); letter-spacing:.02em; line-height:1.5;
   text-align:center; white-space:nowrap; pointer-events:none; opacity:0;
   text-shadow:0 0 18px currentColor;
 }
@@ -148,27 +161,25 @@ html, body {
   border-radius:0; border:1px solid var(--edge);
 }
 .swatch em {
-  font-size:9px; letter-spacing:.14em; font-style:normal; text-transform:uppercase;
-  text-align:center;
+  font-size:6px; letter-spacing:.02em; font-style:normal; text-transform:uppercase;
+  text-align:center; line-height:1.6;
 }
 .swatch.on { border-color:var(--accent); color:var(--text); box-shadow:0 0 14px -3px var(--accent); }
 
 #overlay h1 {
-  font-family:var(--font-display);
-  font-size:clamp(30px,11vw,52px); font-weight:900; letter-spacing:.1em;
+  font-size:clamp(17px,6.2vw,31px); letter-spacing:.02em; line-height:1.4;
   color:var(--accent); text-shadow:0 0 26px var(--accent), 0 0 60px var(--accent);
 }
 
 /* The first L is the real L tetromino, drawn with the theme's bevel and glow. */
 #overlay h1.mark { display:flex; align-items:center; justify-content:center; }
 #overlay h1.mark .markL {
-  height:.78em; width:auto; aspect-ratio:2 / 3;
-  margin:0 .1em 0 .12em; position:relative; top:.02em;
+  height:.86em; width:auto; aspect-ratio:2 / 3;
+  margin:0 .08em; position:relative; top:.03em;
 }
 
 #overlay h2 {
-  font-family:var(--font-display);
-  font-size:clamp(19px,6.5vw,28px); letter-spacing:.12em; font-weight:800;
+  font-size:clamp(12px,4.3vw,19px); letter-spacing:.03em; line-height:1.5;
 }
 
 .best {
@@ -176,11 +187,9 @@ html, body {
   padding:9px 26px;
   border-top:1px solid var(--edge); border-bottom:1px solid var(--edge);
 }
-.best .label { font-size:9px; letter-spacing:.34em; }
+.best .label { font-size:7px; letter-spacing:.2em; }
 .best b {
-  font-family:var(--font-display);
-  font-size:clamp(30px,10vw,44px); font-weight:900; line-height:1.05;
-  letter-spacing:.02em; font-variant-numeric:tabular-nums;
+  font-size:clamp(18px,6.2vw,28px); line-height:1.35; letter-spacing:.01em;
   color:var(--text); text-shadow:0 0 14px var(--accent), 0 0 34px var(--accent);
 }
 
@@ -188,8 +197,7 @@ html, body {
 .best.new .label, .best.new b { color:var(--accent); }
 #overlay h2.record { color:var(--accent); text-shadow:0 0 24px var(--accent), 0 0 56px var(--accent); }
 #overlay p { color:var(--dim); font-size:13px; line-height:1.75; letter-spacing:.05em; }
-#overlay .big { color:var(--text); font-size:clamp(22px,8vw,34px); font-variant-numeric:tabular-nums; }
 #overlay .fine { font-size:11px; opacity:.72; margin-top:-6px; }
-#overlay .cta { color:var(--text); font-size:13px; letter-spacing:.2em; animation:pulse 1.7s ease-in-out infinite; }
+#overlay .cta { color:var(--text); font-size:9px; letter-spacing:.06em; line-height:1.6; animation:pulse 1.7s ease-in-out infinite; }
 
 @keyframes pulse { 0%,100%{opacity:.35} 50%{opacity:1} }
