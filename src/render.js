@@ -146,13 +146,26 @@ export function drawSidePanels() {
   drawMini(nextCtx, nextCv, G.queue.slice(0, 3), 1);
 }
 
+// An empty HOLD slot otherwise reads as dead space rather than somewhere a
+// piece can go.
+function drawEmptySlot(ctx, w, h) {
+  const bw = Math.round(view.previewSize * 2.4), bh = Math.round(view.previewSize * 1.5);
+  ctx.globalAlpha = 0.32;
+  ctx.strokeStyle = theme.dim;
+  ctx.lineWidth = 1;
+  ctx.setLineDash?.([3, 3]);
+  ctx.strokeRect(Math.round((w - bw) / 2) + .5, Math.round((h - bh) / 2) + .5, bw, bh);
+  ctx.setLineDash?.([]);
+  ctx.globalAlpha = 1;
+}
+
 function drawMini(ctx, cv, types, alpha) {
   const { dpr, previewSize: size } = view;
   const w = cv.width / dpr, h = cv.height / dpr;
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  if (!types.length) return;
+  if (!types.length) { drawEmptySlot(ctx, w, h); return; }
   ctx.globalAlpha = alpha;
 
   const slotH = h / types.length;

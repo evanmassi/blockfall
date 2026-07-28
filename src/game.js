@@ -325,11 +325,21 @@ export function togglePause() {
 
 export function showMenu() {
   G.state = 'menu';
+
+  // Phones get the gestures, desktop gets the keys — showing both is clutter
+  // on the screen she'll actually be using.
+  const touch = window.matchMedia?.('(pointer: coarse)')?.matches ?? true;
+  const controls = touch
+    ? `DRAG to move &nbsp;·&nbsp; TAP to rotate<br>
+       FLICK DOWN to drop &nbsp;·&nbsp; SWIPE UP to hold<br>
+       TWO-FINGER TAP to rotate back`
+    : `&larr; &rarr; move &nbsp;·&nbsp; &uarr; rotate &nbsp;·&nbsp; Z rotate back<br>
+       SPACE drop &nbsp;·&nbsp; C hold &nbsp;·&nbsp; P pause`;
+
   showOverlay(`
     <h1>BLOCKFALL</h1>
-    <p>DRAG to move &nbsp;·&nbsp; TAP to rotate<br>
-       FLICK DOWN to drop &nbsp;·&nbsp; SWIPE UP to hold<br>
-       TWO-FINGER TAP to rotate back</p>
+    <p>${controls}</p>
+    <p class="fine">HOLD stashes a piece for later — once per drop</p>
     ${G.stats.best ? `<p>BEST ${G.stats.best.toLocaleString()}</p>` : ''}
     ${themeBar()}
     <p class="cta">TAP TO PLAY</p>

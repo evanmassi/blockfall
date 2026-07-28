@@ -6,13 +6,19 @@
 const noop = () => {};
 const grad = { addColorStop: noop };
 
-const ctxStub = () => ({
-  setTransform: noop, clearRect: noop, fillRect: noop, strokeRect: noop, drawImage: noop,
-  beginPath: noop, moveTo: noop, lineTo: noop, arcTo: noop, closePath: noop,
-  stroke: noop, fill: noop, translate: noop,
-  createLinearGradient: () => grad, createRadialGradient: () => grad,
-  globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1, shadowColor: '', shadowBlur: 0,
-});
+const ctxStub = () => {
+  const ctx = {
+    draws: 0, strokes: 0,
+    setTransform: noop, clearRect: noop, fillRect: noop, setLineDash: noop,
+    strokeRect: () => { ctx.strokes++; },
+    drawImage: () => { ctx.draws++; },
+    beginPath: noop, moveTo: noop, lineTo: noop, arcTo: noop, closePath: noop,
+    stroke: noop, fill: noop, translate: noop,
+    createLinearGradient: () => grad, createRadialGradient: () => grad,
+    globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1, shadowColor: '', shadowBlur: 0,
+  };
+  return ctx;
+};
 
 const docHandlers = {}, handlers = {}, els = {};
 const IDS = ['board','holdCanvas','nextCanvas','overlay','toast','stage','railLeft',
@@ -20,11 +26,13 @@ const IDS = ['board','holdCanvas','nextCanvas','overlay','toast','stage','railLe
 
 for (const id of IDS) {
   const listeners = handlers[id] = {};
+  const ctx = ctxStub(); // stable per element, so draw counts are observable
   els[id] = {
     id, style: {}, textContent: '', innerHTML: '', width: 10, height: 10,
     clientWidth: 400, clientHeight: 700,
     classList: { add: noop, remove: noop },
-    getContext: ctxStub,
+    ctx,
+    getContext: () => ctx,
     getBoundingClientRect: () => ({ width: 60, height: 600, top: 0, left: 0 }),
     addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); },
     animate: () => ({}),
@@ -258,6 +266,30 @@ console.log('\nHold');
   const afterFirst = G.active.type;
   game.holdPiece();
   check('second hold is a no-op (no infinite stall)', G.active.type === afterFirst && G.hold === first);
+}
+
+console.log('\nHold slot rendering');
+{
+  fresh();
+  els.holdCanvas.ctx.draws = 0;
+  els.holdCanvas.ctx.strokes = 0;
+  els.nextCanvas.ctx.draws = 0;
+  game.spawn();
+  check('empty hold slot draws no piece', els.holdCanvas.ctx.draws === 0, String(els.holdCanvas.ctx.draws));
+  check('empty hold slot draws a placeholder', els.holdCanvas.ctx.strokes > 0, String(els.holdCanvas.ctx.strokes));
+  check('next queue paints', els.nextCanvas.ctx.draws > 0, String(els.nextCanvas.ctx.draws));
+
+  game.holdPiece();
+  check('hold slot paints once used', els.holdCanvas.ctx.draws > 0, String(els.holdCanvas.ctx.draws));
+
+  const held = G.hold;
+  const current = G.active.type;
+  game.lockPiece();          // locking re-arms hold
+  pumpMs(CLEAR_TIME + 60);
+  game.holdPiece();
+  check('holding again swaps the stashed piece in', G.active.type === held, `${held} -> ${G.active.type}`);
+  check('previous piece went to the slot', G.hold !== held, `${G.hold} (was ${held})`);
+  check('swap is not the same piece twice', G.hold !== current || held !== current);
 }
 
 console.log('\nLock delay');
