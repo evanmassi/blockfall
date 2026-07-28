@@ -55,6 +55,9 @@ html, body {
   color:var(--text); text-shadow:0 0 16px var(--accent), 0 0 40px var(--accent);
 }
 
+/* Stays lit for the rest of the run once the record falls. */
+#score.record { color:var(--accent); text-shadow:0 0 18px var(--accent), 0 0 48px var(--accent); }
+
 #subStats { display:flex; gap:24px; margin-top:4px; }
 .stat { display:flex; align-items:baseline; gap:6px; }
 .stat b {
@@ -180,6 +183,10 @@ html, body {
   letter-spacing:.02em; font-variant-numeric:tabular-nums;
   color:var(--text); text-shadow:0 0 14px var(--accent), 0 0 34px var(--accent);
 }
+
+.best.new { border-color:var(--accent); }
+.best.new .label, .best.new b { color:var(--accent); }
+#overlay h2.record { color:var(--accent); text-shadow:0 0 24px var(--accent), 0 0 56px var(--accent); }
 #overlay p { color:var(--dim); font-size:13px; line-height:1.75; letter-spacing:.05em; }
 #overlay .big { color:var(--text); font-size:clamp(22px,8vw,34px); font-variant-numeric:tabular-nums; }
 #overlay .fine { font-size:11px; opacity:.72; margin-top:-6px; }

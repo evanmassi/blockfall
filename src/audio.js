@@ -44,5 +44,6 @@ export const Sound = {
   tspin()   { this.arp([392, 587, 880, 1175], 0.05, 'sine', 0.06); },
   levelUp() { this.arp([523, 784, 1047], 0.07, 'triangle', 0.05); },
   curtain(i){ this.tone(Math.max(90, 300 - i * 9), 0.05, 'square', 0.022); },
+  record()  { this.arp([523, 659, 784, 1047, 1319, 1568], 0.06, 'triangle', 0.055); this.tone(84, 0.45, 'sine', 0.07); },
   over()    { this.arp([392, 330, 262, 196], 0.11, 'sawtooth', 0.055); },
 };

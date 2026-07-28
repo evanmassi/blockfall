@@ -27,6 +27,8 @@ export const G = {
 
   state: 'menu',   // menu | playing | clearing | paused | pausedClearing | dying | over
   score: 0, lines: 0, level: 1, combo: -1, backToBack: false,
+  runBest: 0,      // score to beat, captured at the start of the run
+  newBest: false,
   stats: { best: 0, bestLines: 0, bestCombo: 0 },
 
   gravityAcc: 0,

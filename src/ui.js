@@ -62,6 +62,10 @@ export function showToast(text, color) {
   );
 }
 
+export function setRecordStyle(on) {
+  scoreEl.classList.toggle('record', on);
+}
+
 export function updateHud() {
   scoreEl.textContent = G.score.toLocaleString();
   levelEl.textContent = G.level;

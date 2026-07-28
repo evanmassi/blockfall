@@ -9,7 +9,20 @@ import { G, emptyGrid, saveStats } from './state.js';
 import { collides, fillQueue, makePiece } from './board.js';
 import { view, drawSidePanels } from './render.js';
 import { Sound } from './audio.js';
-import { showOverlay, hideOverlay, showToast, updateHud, themeBar, wordmark } from './ui.js';
+import { showOverlay, hideOverlay, showToast, updateHud, setRecordStyle, themeBar, wordmark } from './ui.js';
+
+// Single funnel for score changes so beating the record is caught the instant
+// it happens, mid-run, rather than being noticed on the game-over screen.
+function addScore(n) {
+  G.score += n;
+  if (!G.newBest && G.runBest > 0 && G.score > G.runBest) {
+    G.newBest = true;
+    setRecordStyle(true);
+    showToast('NEW BEST', theme.accent);
+    Sound.record();
+  }
+  updateHud();
+}
 
 // ---------- spawning ----------
 
@@ -90,11 +103,10 @@ export function softDrop() {
   const a = G.active;
   if (!a || collides(a.m, a.x, a.y + 1)) return false;
   a.y++;
-  G.score += 1;
   G.rotatedLast = false;
   G.gravityAcc = 0;
   resetLockState();
-  updateHud();
+  addScore(1);
   return true;
 }
 
@@ -103,7 +115,7 @@ export function hardDrop() {
   if (!a) return;
   let dist = 0;
   while (!collides(a.m, a.x, a.y + 1)) { a.y++; dist++; }
-  G.score += dist * 2;
+  addScore(dist * 2); // also refreshes the HUD, which a hard drop never did
   if (dist > 0) G.rotatedLast = false; // a 0-cell drop must not cancel a T-spin
   // Kept small on purpose: a long drop used to shake as hard as a Tetris,
   // which flattened the whole clear escalation.
@@ -247,11 +259,15 @@ function applyScore(cleared, spin) {
     if (spin) { label = 'T-SPIN'; color = theme.pieces.T; Sound.tspin(); }
   }
 
-  G.score += gain;
-  if (G.level > prevLevel) { Sound.levelUp(); showToast('LEVEL ' + G.level, theme.pieces.S); }
-  else if (label) showToast(label, color);
+  const hadBest = G.newBest;
+  addScore(gain);
 
-  updateHud();
+  if (G.level > prevLevel) Sound.levelUp();
+
+  // Beating the record outranks the clear label — addScore already toasted it.
+  if (!hadBest && G.newBest) { /* keep NEW BEST on screen */ }
+  else if (G.level > prevLevel) showToast('LEVEL ' + G.level, theme.pieces.S);
+  else if (label) showToast(label, color);
 }
 
 function spawnClearParticles(rows, fx) {
@@ -281,6 +297,8 @@ export function startGame() {
   G.grid = emptyGrid();
   G.queue = []; G.bag = null; G.hold = null; G.canHold = true;
   G.score = 0; G.lines = 0; G.level = 1; G.combo = -1; G.backToBack = false;
+  G.runBest = G.stats.best; G.newBest = false;
+  setRecordStyle(false);
   G.gravityAcc = 0; G.particles = []; G.shake = 0;
   G.clearRows = null; G.pendingClear = null;
   G.deathRow = ROWS; G.deathTimer = 0;
@@ -310,12 +328,13 @@ function finishGameOver() {
   saveStats();
 
   showOverlay(`
-    <h2>GAME OVER</h2>
-    <div>
-      <p>SCORE</p>
-      <div class="big">${G.score.toLocaleString()}</div>
+    <h2${G.newBest ? ' class="record"' : ''}>${G.newBest ? 'NEW BEST' : 'GAME OVER'}</h2>
+    <div class="best${G.newBest ? ' new' : ''}">
+      <span class="label">SCORE</span>
+      <b>${G.score.toLocaleString()}</b>
     </div>
-    <p>LINES ${G.lines} &nbsp;·&nbsp; LEVEL ${G.level}<br>BEST ${G.stats.best.toLocaleString()}</p>
+    <p>LINES ${G.lines} &nbsp;·&nbsp; LEVEL ${G.level}${
+      G.newBest ? '' : `<br>BEST ${G.stats.best.toLocaleString()}`}</p>
     ${themeBar()}
     <p class="cta">TAP TO PLAY AGAIN</p>
   `);

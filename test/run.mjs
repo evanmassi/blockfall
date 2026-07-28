@@ -29,10 +29,16 @@ const IDS = ['board','holdCanvas','nextCanvas','overlay','toast','stage','railLe
 for (const id of IDS) {
   const listeners = handlers[id] = {};
   const ctx = ctxStub(); // stable per element, so draw counts are observable
+  const classes = new Set();
   els[id] = {
     id, style: {}, textContent: '', innerHTML: '', width: 10, height: 10,
     clientWidth: 400, clientHeight: 700,
-    classList: { add: noop, remove: noop, toggle: noop },
+    classes,
+    classList: {
+      add: c => classes.add(c),
+      remove: c => classes.delete(c),
+      toggle: (c, v) => { (v ?? !classes.has(c)) ? classes.add(c) : classes.delete(c); },
+    },
     ctx,
     getContext: () => ctx,
     getBoundingClientRect: () => ({ width: 60, height: 600, top: 0, left: 0 }),
@@ -453,6 +459,52 @@ console.log('\nTouch gestures');
   fire('pointerdown', { pointerId: 10, pointerType: 'touch', button: 0, clientX: 200, clientY: 300, timeStamp: ts });
   fire('pointerup', { pointerId: 10, clientX: 201, clientY: 300, timeStamp: ts + 80 });
   check('tap rotates', G.active.rot === 1, 'rot=' + G.active.rot);
+}
+
+console.log('\nNew high score');
+{
+  const clearBottomRow = () => {
+    fillRow(ROWS - 1, 0);
+    put('I', -2, ROWS - 4, 1);
+    game.lockPiece();
+    pumpMs(CLEAR_TIME_MAX + 80);
+  };
+
+  // First ever game: nothing to beat, so scoring at all must not celebrate.
+  G.stats = { best: 0, bestLines: 0, bestCombo: 0 };
+  game.startGame();
+  pumpMs(20);
+  clearGrid();
+  clearBottomRow();
+  check('no fanfare on the first ever game', G.newBest === false, 'score=' + G.score);
+  check('score stays unmarked', !els.score.classes.has('record'));
+
+  // With a real target, it fires exactly when the score passes it.
+  G.stats = { best: 150, bestLines: 0, bestCombo: 0 };
+  game.startGame();
+  pumpMs(20);
+  clearGrid();
+  check('target captured at the start of the run', G.runBest === 150, String(G.runBest));
+
+  clearBottomRow(); // single = 100, still short
+  check('silent below the target', G.newBest === false, 'score=' + G.score);
+  check('score unmarked below the target', !els.score.classes.has('record'));
+
+  clearBottomRow(); // another 100 + combo, now past 150
+  check('fires once past the target', G.newBest === true, 'score=' + G.score);
+  check('score element lit for the rest of the run', els.score.classes.has('record'));
+
+  // Game over should acknowledge it rather than showing a flat BEST line.
+  game.gameOver();
+  pumpMs(DEATH_ROW_MS * 25 + DEATH_HOLD_MS + 150);
+  check('game over celebrates the record', els.overlay.innerHTML.includes('NEW BEST'));
+  check('record persisted as the new best', G.stats.best === G.score, `${G.stats.best} vs ${G.score}`);
+
+  // Starting again clears the marking.
+  game.startGame();
+  pumpMs(20);
+  check('new run resets the flag', G.newBest === false);
+  check('new run clears the score marking', !els.score.classes.has('record'));
 }
 
 console.log('\nDrop gestures');
