@@ -155,12 +155,6 @@ stage.addEventListener('pointercancel', e => { if (gesture && e.pointerId === ge
 
 // ---------- buttons ----------
 
-// These live inside #stage, so swallow pointerdown or a tap on them also
-// registers as a rotate gesture on the board.
-for (const btn of [pauseBtn, muteBtn]) {
-  btn.addEventListener('pointerdown', e => e.stopPropagation());
-}
-
 // WebKit-only pinch-zoom events; touch-action alone doesn't stop these on iOS.
 for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
   document.addEventListener(type, e => e.preventDefault());
