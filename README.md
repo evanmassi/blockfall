@@ -69,11 +69,21 @@ Feel constants are `CTRL` in `src/config.js` — gesture thresholds, DAS/ARR. Ad
 
 ## Themes
 
-`src/themes.js` maps a name to a palette. Adding one is a single object; `setTheme()` pushes it to the CSS custom properties, and `resize()` rebuilds the sprite cache and well. Only `neon` exists so far.
+Four, all unlocked, switchable from the menu, pause and game-over screens. The choice persists in `localStorage`.
+
+| | |
+| --- | --- |
+| **Neon** | Dark, glowing, scanlines. The original. |
+| **Aurora** | Midnight blue well, northern-lights palette. Calmer than Neon. |
+| **Forest** | Earthy greens, terracotta, amber. Low glow. |
+| **Sakura** | Light background, soft pastels. Glow near zero. |
+
+A theme owns every color decision, including how blocks are lit — `block.glow`, `block.light`, `block.shade` and `block.outline` feed the sprite bevel. That is what makes Sakura possible: on a light well, a strong glow reads as grime rather than depth, so it drops to `0.1`.
+
+Adding one is a single object in `src/themes.js`. `setTheme()` pushes the palette to CSS custom properties and the Android status bar; `applyTheme()` also clears the sprite cache and rebuilds the pre-rendered well, both of which bake in theme colors.
 
 ## Not done yet
 
-- Theme picker UI
 - Zen mode (no top-out)
 - Daily seed
 - PWA manifest + service worker for offline / home-screen install (needs real hosting)

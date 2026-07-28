@@ -1,13 +1,17 @@
+import { theme } from './themes.js';
+
 const sprites = new Map();
 
 export function clearSprites() { sprites.clear(); }
 
 // Hard-edged square with a classic raised bevel: lit top/left, shaded bottom/right.
-// The neon glow is baked in here so nothing needs shadowBlur at frame time.
+// Glow is baked in here so nothing needs shadowBlur at frame time; how much of
+// it there is comes from the theme, since it has to go near zero on a light well.
 export function blockSprite(color, size) {
-  const key = color + '@' + size;
+  const key = theme.key + color + '@' + size;
   if (sprites.has(key)) return sprites.get(key);
 
+  const style = theme.block;
   const pad = Math.ceil(size * 0.5);
   const cv = document.createElement('canvas');
   cv.width = cv.height = size + pad * 2;
@@ -18,8 +22,10 @@ export function blockSprite(color, size) {
   const x0 = gap, y0 = gap, s = size - gap * 2;
   const b = Math.max(1, Math.round(s * 0.16));
 
-  g.shadowColor = color;
-  g.shadowBlur = size * 0.42;
+  if (style.glow > 0) {
+    g.shadowColor = color;
+    g.shadowBlur = size * 0.42 * style.glow;
+  }
   g.fillStyle = color;
   g.fillRect(x0, y0, s, s);
   g.fillRect(x0, y0, s, s);
@@ -30,17 +36,17 @@ export function blockSprite(color, size) {
   g.lineTo(x0 + s - b, y0 + b); g.lineTo(x0 + b, y0 + b);
   g.lineTo(x0 + b, y0 + s - b); g.lineTo(x0, y0 + s);
   g.closePath();
-  g.fillStyle = 'rgba(255,255,255,.5)';
+  g.fillStyle = `rgba(255,255,255,${style.light})`;
   g.fill();
 
   g.beginPath();
   g.moveTo(x0 + s, y0); g.lineTo(x0 + s, y0 + s); g.lineTo(x0, y0 + s);
   g.lineTo(x0 + b, y0 + s - b); g.lineTo(x0 + s - b, y0 + s - b); g.lineTo(x0 + s - b, y0 + b);
   g.closePath();
-  g.fillStyle = 'rgba(0,0,0,.42)';
+  g.fillStyle = `rgba(0,0,0,${style.shade})`;
   g.fill();
 
-  g.strokeStyle = 'rgba(255,255,255,.28)';
+  g.strokeStyle = style.outline;
   g.lineWidth = 1;
   g.strokeRect(x0 + .5, y0 + .5, s - 1, s - 1);
 
@@ -50,7 +56,7 @@ export function blockSprite(color, size) {
 }
 
 export function ghostSprite(color, size) {
-  const key = 'ghost' + color + '@' + size;
+  const key = 'ghost' + theme.key + color + '@' + size;
   if (sprites.has(key)) return sprites.get(key);
 
   const cv = document.createElement('canvas');

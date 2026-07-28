@@ -66,6 +66,7 @@ let gesture = null, extraPointers = 0;
 
 overlay.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (e.target.closest?.('[data-theme]')) return; // let the swatch handle it
   Sound.init();
   if (G.state === 'menu' || G.state === 'over') startGame();
   else if (G.state === 'paused' || G.state === 'pausedClearing') togglePause();

@@ -9,7 +9,7 @@ import { G, emptyGrid, saveStats } from './state.js';
 import { collides, fillQueue, makePiece } from './board.js';
 import { view, drawSidePanels } from './render.js';
 import { Sound } from './audio.js';
-import { showOverlay, hideOverlay, showToast, updateHud } from './ui.js';
+import { showOverlay, hideOverlay, showToast, updateHud, themeBar } from './ui.js';
 
 // ---------- spawning ----------
 
@@ -308,6 +308,7 @@ function finishGameOver() {
       <div class="big">${G.score.toLocaleString()}</div>
     </div>
     <p>LINES ${G.lines} &nbsp;·&nbsp; LEVEL ${G.level}<br>BEST ${G.stats.best.toLocaleString()}</p>
+    ${themeBar()}
     <p class="cta">TAP TO PLAY AGAIN</p>
   `);
 }
@@ -315,7 +316,7 @@ function finishGameOver() {
 export function togglePause() {
   if (G.state === 'playing' || G.state === 'clearing') {
     G.state = G.state === 'clearing' ? 'pausedClearing' : 'paused';
-    showOverlay('<h2>PAUSED</h2><p class="cta">TAP TO RESUME</p>');
+    showOverlay(`<h2>PAUSED</h2>${themeBar()}<p class="cta">TAP TO RESUME</p>`);
   } else if (G.state === 'paused' || G.state === 'pausedClearing') {
     G.state = G.state === 'pausedClearing' ? 'clearing' : 'playing';
     hideOverlay();
@@ -330,6 +331,7 @@ export function showMenu() {
        FLICK DOWN to drop &nbsp;·&nbsp; SWIPE UP to hold<br>
        TWO-FINGER TAP to rotate back</p>
     ${G.stats.best ? `<p>BEST ${G.stats.best.toLocaleString()}</p>` : ''}
+    ${themeBar()}
     <p class="cta">TAP TO PLAY</p>
   `);
 }

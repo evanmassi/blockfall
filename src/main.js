@@ -1,5 +1,5 @@
 import { G, loadStats } from './state.js';
-import { setTheme } from './themes.js';
+import { setTheme, savedThemeName } from './themes.js';
 import { resize, render } from './render.js';
 import { update, showMenu, togglePause } from './game.js';
 import { updateKeyRepeat } from './input.js';
@@ -28,7 +28,7 @@ function frame(t) {
 
 G.stats = loadStats();
 muteBtn.textContent = Sound.muted ? '♪̸' : '♪';
-setTheme('neon');
+setTheme(savedThemeName()); // resize() does the sprite/well rebuild that follows
 resize();
 showMenu();
 requestAnimationFrame(t => { lastFrame = t; frame(t); });

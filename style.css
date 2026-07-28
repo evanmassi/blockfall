@@ -8,6 +8,8 @@
   --text:#e8e6ff;
   --dim:#7b74a8;
   --accent:#ff2d95;
+  --overlay:rgba(7,6,15,.9);
+  --board-shadow:0 0 0 1px var(--edge), 0 0 46px -8px var(--accent);
   --scanlines:block;
   --rail:clamp(52px,17vw,88px);
 }
@@ -85,7 +87,7 @@ html, body {
 #board {
   display:block;
   border-radius:2px;
-  box-shadow:0 0 0 1px var(--edge), 0 0 46px -8px var(--accent);
+  box-shadow:var(--board-shadow);
 }
 
 #scanlines {
@@ -107,11 +109,27 @@ html, body {
 #overlay {
   position:absolute; inset:0; z-index:5;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
-  background:rgba(7,6,15,.9);
+  background:var(--overlay);
   backdrop-filter:blur(3px);
   text-align:center; padding:24px;
 }
 #overlay.hidden { display:none; }
+
+.themes { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+
+.swatch {
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  padding:5px 5px 6px; border-radius:8px; cursor:pointer;
+  background:var(--panel); border:1px solid var(--edge);
+  color:var(--dim); font:inherit;
+}
+.swatch .chips {
+  display:grid; grid-template-columns:1fr 1fr; gap:2px;
+  padding:3px; border-radius:4px; width:38px; height:38px;
+}
+.swatch .chips i { border-radius:2px; }
+.swatch em { font-size:8px; letter-spacing:.12em; font-style:normal; text-transform:uppercase; }
+.swatch.on { border-color:var(--accent); color:var(--text); box-shadow:0 0 12px -2px var(--accent); }
 
 #overlay h1 {
   font-size:clamp(30px,11vw,52px); font-weight:800; letter-spacing:.13em;

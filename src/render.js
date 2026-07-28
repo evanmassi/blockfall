@@ -1,6 +1,6 @@
 import { COLS, VIS_ROWS, HIDDEN, ROWS, CLEAR_TIME } from './config.js';
 import { ROTATIONS, forEachCell } from './pieces.js';
-import { theme } from './themes.js';
+import { theme, setTheme } from './themes.js';
 import { G } from './state.js';
 import { collides } from './board.js';
 import { blockSprite, ghostSprite, grayOf, clearSprites } from './sprites.js';
@@ -31,6 +31,15 @@ export function resize() {
   sizeMini(holdCv, holdCtx, view.previewSize * 4 + 2, view.previewSize * 2 + 4);
   sizeMini(nextCv, nextCtx, view.previewSize * 4 + 2, (view.previewSize * 2 + 8) * 3);
 
+  clearSprites();
+  buildWell();
+  drawSidePanels();
+}
+
+// Swaps palette without recomputing layout: the sprite cache and the
+// pre-rendered well both bake in theme colors, so both have to go.
+export function applyTheme(name) {
+  setTheme(name);
   clearSprites();
   buildWell();
   drawSidePanels();
@@ -95,7 +104,7 @@ export function render() {
 
   if (G.clearRows) {
     const flash = Math.max(0, G.clearTimer / CLEAR_TIME);
-    boardCtx.fillStyle = `rgba(255,255,255,${0.15 + flash * 0.75})`;
+    boardCtx.fillStyle = `rgba(${theme.flash},${0.15 + flash * 0.75})`;
     for (const y of G.clearRows) boardCtx.fillRect(0, (y - HIDDEN) * cell, w, cell);
   }
 

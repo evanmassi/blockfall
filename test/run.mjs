@@ -34,6 +34,16 @@ for (const id of IDS) {
 
 const cssVars = {};
 const store = {};
+const metaThemeColor = { content: '', setAttribute: (k, v) => { metaThemeColor.content = v; } };
+
+// Stand-ins for the swatch DOM the theme picker walks.
+const swatchEls = [];
+els.overlay.querySelectorAll = () => swatchEls;
+function fakeSwatch(name) {
+  const el = { dataset: { theme: name }, on: false };
+  el.classList = { toggle: (_cls, v) => { el.on = v; } };
+  return el;
+}
 const rafQueue = [];
 const oscNode = { connect: n => n, start: noop, stop: noop, type: '', frequency: { setValueAtTime: noop } };
 const gainNode = { gain: { setValueAtTime: noop, exponentialRampToValueAtTime: noop }, connect: n => n };
@@ -42,6 +52,7 @@ globalThis.document = {
   hidden: false,
   documentElement: { style: { setProperty: (k, v) => { cssVars[k] = v; } } },
   getElementById: id => els[id],
+  querySelector: () => metaThemeColor,
   createElement: () => ({ width: 10, height: 10, style: {}, getContext: ctxStub }),
   addEventListener: (t, fn) => { (docHandlers[t] = docHandlers[t] || []).push(fn); },
 };
@@ -63,8 +74,11 @@ globalThis.window = {
 const { COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_TIME, DEATH_ROW_MS, DEATH_HOLD_MS } = await import('../src/config.js');
 const { ROTATIONS, TYPES, topRow } = await import('../src/pieces.js');
 const { G } = await import('../src/state.js');
+const { THEMES, theme, savedThemeName } = await import('../src/themes.js');
 const board = await import('../src/board.js');
 const game = await import('../src/game.js');
+const { applyTheme } = await import('../src/render.js');
+const { themeBar } = await import('../src/ui.js');
 await import('../src/main.js'); // boots: theme, resize, menu, loop
 
 let clock = 0;
@@ -101,6 +115,56 @@ console.log('\nBoot');
   check('menu rendered on load', els.overlay.innerHTML.includes('BLOCKFALL'));
   check('theme synced to CSS vars', cssVars['--accent'] === '#ff2d95', JSON.stringify(cssVars['--accent']));
   check('board sized', els.board.width > 0);
+}
+
+console.log('\nThemes');
+{
+  const names = Object.keys(THEMES);
+  check('four themes defined', names.length === 4, names.join(','));
+
+  const required = ['bg','panel','edge','text','dim','accent','well','gridLine','overlay','boardShadow','flash'];
+  const complete = names.every(n =>
+    required.every(k => typeof THEMES[n][k] === 'string') &&
+    'IJLOSTZ'.split('').every(p => /^#[0-9a-f]{6}$/i.test(THEMES[n].pieces[p])) &&
+    ['glow','light','shade'].every(k => typeof THEMES[n].block[k] === 'number') &&
+    typeof THEMES[n].block.outline === 'string');
+  check('every theme has a complete palette', complete);
+
+  const distinct = names.every(n => new Set(Object.values(THEMES[n].pieces)).size === 7);
+  check('no theme reuses a piece color', distinct);
+
+  check('light theme drops the glow', THEMES.sakura.block.glow < 0.2, String(THEMES.sakura.block.glow));
+
+  applyTheme('sakura');
+  check('applyTheme switches the live theme', theme.key === 'sakura', theme.key);
+  check('CSS vars follow', cssVars['--accent'] === THEMES.sakura.accent, cssVars['--accent']);
+  check('scanlines var follows', cssVars['--scanlines'] === 'none', cssVars['--scanlines']);
+  check('status bar color follows', metaThemeColor.content === THEMES.sakura.bg, metaThemeColor.content);
+  check('choice persisted', store['blockfall.theme'] === 'sakura', store['blockfall.theme']);
+  check('savedThemeName reads it back', savedThemeName() === 'sakura');
+
+  store['blockfall.theme'] = 'not-a-theme';
+  check('unknown saved theme falls back to neon', savedThemeName() === 'neon');
+
+  const bar = themeBar();
+  check('theme bar marks the active swatch', bar.includes('data-theme="sakura"') && bar.includes('swatch on'));
+  check('theme bar lists every theme', names.every(n => bar.includes(`data-theme="${n}"`)));
+
+  // A swatch tap must repaint, not start the game.
+  swatchEls.length = 0;
+  swatchEls.push(fakeSwatch('neon'), fakeSwatch('aurora'), fakeSwatch('forest'), fakeSwatch('sakura'));
+  const swatchTarget = { closest: sel => sel === '[data-theme]' ? { dataset: { theme: 'forest' } } : null };
+  for (const fn of handlers.overlay.click || []) fn({ target: swatchTarget });
+  check('clicking a swatch applies that theme', theme.key === 'forest', theme.key);
+  check('selection mark moves', swatchEls.find(s => s.dataset.theme === 'forest').on === true);
+
+  const before = G.state;
+  for (const fn of handlers.overlay.pointerdown || []) {
+    fn({ pointerType: 'touch', button: 0, target: swatchTarget });
+  }
+  check('swatch tap does not start the game', G.state === before, `${before} -> ${G.state}`);
+
+  applyTheme('neon');
 }
 
 console.log('\nPiece data');
@@ -228,7 +292,10 @@ console.log('\nBlock out + death curtain');
 
 console.log('\nOverlay restart');
 {
-  const tap = { pointerId: 3, pointerType: 'touch', button: 0, clientX: 10, clientY: 10, timeStamp: clock };
+  const tap = {
+    pointerId: 3, pointerType: 'touch', button: 0, clientX: 10, clientY: 10, timeStamp: clock,
+    target: { closest: () => null }, // tapped the backdrop, not a swatch
+  };
   for (const fn of handlers.overlay.pointerdown || []) fn(tap);
   check('tapping the overlay restarts', G.state === 'playing', G.state);
   check('score reset', G.score === 0, String(G.score));
