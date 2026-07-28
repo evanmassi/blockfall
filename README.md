@@ -1,6 +1,6 @@
 # Blockfall
 
-A block-stacking game for the phone. Single self-contained `index.html` — no build, no dependencies.
+A block-stacking game for the phone. No build step, no dependencies — plain ES modules.
 
 ## Run
 
@@ -10,7 +10,36 @@ python -m http.server 8123
 
 Then open <http://localhost:8123>.
 
-`file://` works too, but high scores won't persist in Firefox.
+The server is required: ES modules are blocked over `file://`, so opening `index.html` directly won't work.
+
+## Test
+
+```
+node test/run.mjs
+```
+
+Stubs enough DOM to boot the real modules in Node, then drives the game through the same entry points the browser uses — SRS kicks, T-spin scoring, lock delay, the death curtain, touch gestures.
+
+## Layout
+
+```
+index.html        markup
+style.css
+src/config.js     board dims, scoring tables, CTRL tunables, timings
+src/pieces.js     SHAPES, ROTATIONS, KICKS          <- pure, no DOM
+src/themes.js     palettes + setTheme (syncs CSS custom properties)
+src/dom.js        element and canvas-context refs
+src/state.js      G, the shared mutable game state
+src/board.js      bag, queue, collision                <- pure-ish, no DOM
+src/sprites.js    block/ghost sprite cache, grayOf
+src/render.js     board + preview drawing, resize
+src/ui.js         overlay, toast, HUD
+src/game.js       spawn, lock, clear, scoring, flow
+src/input.js      keyboard + gestures
+src/main.js       boot + frame loop
+```
+
+Everything mutable lives on `G` in `state.js`. ES module bindings can't be reassigned across files, so shared state has to be properties on an object rather than module-level `let`s.
 
 ## Controls
 
@@ -36,11 +65,11 @@ Follows the modern Tetris guideline so the feel matches what people expect:
 
 ## Tuning
 
-Feel constants live in `CTRL` near the top of the script — gesture thresholds, DAS/ARR. Adjust after real-hands testing.
+Feel constants are `CTRL` in `src/config.js` — gesture thresholds, DAS/ARR. Adjust after real-hands testing.
 
 ## Themes
 
-`THEMES` maps a theme name to its palette. Adding one is a single object; the sprite cache and well are rebuilt on `resize()`. Only `neon` exists so far.
+`src/themes.js` maps a name to a palette. Adding one is a single object; `setTheme()` pushes it to the CSS custom properties, and `resize()` rebuilds the sprite cache and well. Only `neon` exists so far.
 
 ## Not done yet
 
