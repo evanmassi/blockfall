@@ -143,6 +143,12 @@ console.log('\nBoot');
   check('wordmark L is a drawn tetromino', menu.includes('class="markL"'));
   check('mark has a floor to land on', menu.includes('markFloor'));
   check('menu has drifting debris behind it', menu.includes('bgfall') && menu.includes('--piece-'));
+  // Debris must be real tetrominoes, so each falling piece carries 4 cells.
+  const debris = menu.slice(menu.indexOf('bgfall'), menu.indexOf('markWrap'));
+  const pieceCount = (debris.match(/<i /g) || []).length;
+  const cellCount = (debris.match(/<b /g) || []).length;
+  check('debris are real tetrominoes', pieceCount > 0 && cellCount === pieceCount * 4,
+        `${pieceCount} pieces, ${cellCount} cells`);
   check('theme synced to CSS vars', cssVars['--accent'] === '#ff2d95', JSON.stringify(cssVars['--accent']));
   check('board sized', els.board.width > 0);
 }

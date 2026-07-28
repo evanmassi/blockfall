@@ -1,5 +1,6 @@
 import { G } from './state.js';
 import { THEMES, theme } from './themes.js';
+import { ROTATIONS, forEachCell } from './pieces.js';
 import { applyTheme, drawThemePreview, drawWordmarkL } from './render.js';
 import { overlay, toastEl, scoreEl, levelEl, linesEl } from './dom.js';
 
@@ -20,17 +21,35 @@ export function wordmark() {
     </div>`;
 }
 
-// Debris drifting behind the menu: [left%, w, h, seconds, delay, piece]
+// Debris drifting behind the menu: [left%, type, cell px, seconds, delay]
 const DEBRIS = [
-  [6, 12, 24, 13, 0, 'i'], [22, 24, 12, 17, -6, 'l'], [38, 12, 36, 15, -11, 't'],
-  [55, 24, 24, 19, -3, 's'], [70, 12, 24, 14, -9, 'i'], [86, 36, 12, 21, -15, 'l'],
-  [15, 12, 12, 23, -18, 't'], [63, 12, 12, 16, -13, 's'],
+  [4, 'T', 11, 15, 0], [20, 'I', 9, 19, -7], [36, 'S', 12, 16, -12],
+  [51, 'O', 10, 21, -3], [65, 'L', 11, 17, -10], [79, 'J', 9, 23, -16],
+  [90, 'Z', 12, 14, -5], [28, 'I', 8, 25, -20],
 ];
 
+// Built from the real rotation tables, so the shapes falling past are the
+// actual seven tetrominoes rather than anonymous rectangles.
+function debrisPiece(type) {
+  const m = ROTATIONS[type][0];
+  let minX = 9, maxX = -1, minY = 9, maxY = -1;
+  forEachCell(m, (x, y) => {
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+  });
+  const cells = [];
+  forEachCell(m, (x, y) => cells.push(`<b style="grid-column:${x - minX + 1};grid-row:${y - minY + 1}"></b>`));
+  return { w: maxX - minX + 1, h: maxY - minY + 1, cells: cells.join('') };
+}
+
 export function menuBackdrop() {
-  const bits = DEBRIS.map(([left, w, h, dur, delay, piece]) => `
-    <i style="left:${left}%; width:${w}px; height:${h}px; background:var(--piece-${piece});
-              animation-duration:${dur}s; animation-delay:${delay}s;"></i>`).join('');
+  const bits = DEBRIS.map(([left, type, unit, dur, delay]) => {
+    const p = debrisPiece(type);
+    return `<i style="left:${left}%; --c:var(--piece-${type.toLowerCase()});
+      grid-template-columns:repeat(${p.w},${unit}px);
+      grid-template-rows:repeat(${p.h},${unit}px);
+      animation-duration:${dur}s; animation-delay:${delay}s;">${p.cells}</i>`;
+  }).join('');
   return `<div class="bgfall" aria-hidden="true">${bits}</div>`;
 }
 

@@ -219,40 +219,60 @@ html, body {
 .markFloor {
   width:62%; height:3px; border-radius:1px;
   background:var(--accent); opacity:.22; box-shadow:0 0 14px var(--accent);
-  animation:mark-floor .9s ease-out both;
+  animation:mark-floor 1.5s linear both;
 }
 
-.mark { animation:mark-jolt .9s cubic-bezier(.2,.7,.2,1) both; }
+.mark { animation:mark-jolt 1.5s linear both; }
 .mark .markL {
   transform-origin:bottom center;
-  animation:mark-drop .9s cubic-bezier(.25,.9,.3,1) both;
+  animation:mark-drop 1.5s linear both;
 }
 
-/* The piece lands at 52%, so the jolt and the floor flare key off that. */
+/* Impact is at 55% of 1.5s. The fall accelerates into it via a per-keyframe
+   ease-in, then everything after that frame is the recoil. */
 @keyframes mark-drop {
-  0%   { transform:translateY(-160%); opacity:0; }
-  14%  { opacity:1; }
-  52%  { transform:translateY(0) scaleY(1) scaleX(1); }
-  62%  { transform:translateY(0) scaleY(.8) scaleX(1.12); }
-  76%  { transform:translateY(0) scaleY(1.06) scaleX(.97); }
-  100% { transform:translateY(0) scaleY(1) scaleX(1); }
+  0%   { transform:translateY(-78vh); opacity:0; animation-timing-function:cubic-bezier(.55,.02,.9,.28); }
+  9%   { opacity:1; }
+  55%  { transform:translateY(0) scale(1,1); animation-timing-function:cubic-bezier(.3,0,.2,1); }
+  63%  { transform:translateY(0) scale(1.24,.62); }
+  74%  { transform:translateY(0) scale(.93,1.14); }
+  84%  { transform:translateY(0) scale(1.04,.97); }
+  93%  { transform:translateY(0) scale(.99,1.01); }
+  100% { transform:translateY(0) scale(1,1); }
 }
+
+/* The whole word absorbs the landing, then settles. */
 @keyframes mark-jolt {
-  0%,52% { transform:translateY(0); }
-  60%    { transform:translateY(3px); }
-  74%    { transform:translateY(0); }
+  0%,55% { transform:translateY(0); }
+  62%    { transform:translateY(7px); }
+  71%    { transform:translateY(-3px); }
+  80%    { transform:translateY(1px); }
   100%   { transform:translateY(0); }
 }
+
 @keyframes mark-floor {
-  0%,52% { opacity:0; transform:scaleX(.82); }
-  62%    { opacity:1; transform:scaleX(1.05); }
+  0%,54% { opacity:0; transform:scaleX(.6); }
+  58%    { opacity:1; transform:scaleX(1.18); }
+  68%    { opacity:.9; transform:scaleX(1.06); }
   100%   { opacity:.22; transform:scaleX(1); }
+}
+
+/* Everything below the mark arrives after the impact, so the drop is the
+   event rather than one thing moving in an already-finished screen. */
+#overlay > *:not(.bgfall):not(.markWrap) { animation:menu-in .5s ease-out .95s both; }
+@keyframes menu-in {
+  0%   { opacity:0; transform:translateY(7px); }
+  100% { opacity:1; transform:translateY(0); }
 }
 
 .bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
 .bgfall i {
-  position:absolute; top:0; display:block; opacity:.13;
+  position:absolute; top:0; display:grid; gap:1px; opacity:.15;
   animation-name:bg-fall; animation-timing-function:linear; animation-iteration-count:infinite;
+}
+.bgfall b {
+  background:var(--c);
+  box-shadow:inset 1px 1px 0 rgba(255,255,255,.32), inset -1px -1px 0 rgba(0,0,0,.38);
 }
 @keyframes bg-fall {
   0%   { transform:translateY(-20vh) rotate(0deg); }
@@ -261,6 +281,7 @@ html, body {
 #overlay > *:not(.bgfall) { position:relative; z-index:1; }
 
 @media (prefers-reduced-motion: reduce) {
-  .mark, .mark .markL, .markFloor, #overlay .cta { animation:none; }
+  .mark, .mark .markL, .markFloor, #overlay .cta,
+  #overlay > *:not(.bgfall):not(.markWrap) { animation:none; }
   .bgfall { display:none; }
 }

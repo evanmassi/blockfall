@@ -76,7 +76,7 @@ export function setTheme(name) {
 
   // Exposed so CSS-only decoration (the menu's drifting debris) follows the
   // palette without the markup having to be regenerated on a theme switch.
-  for (const p of ['I', 'L', 'S', 'T']) {
+  for (const p of Object.keys(theme.pieces)) {
     root.setProperty('--piece-' + p.toLowerCase(), theme.pieces[p]);
   }
 
