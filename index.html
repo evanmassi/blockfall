@@ -18,7 +18,7 @@
     --text:#e8e6ff;
     --dim:#7b74a8;
     --accent:#ff2d95;
-    --rail:clamp(46px,14.5vw,76px);
+    --rail:clamp(52px,17vw,88px);
   }
 
   html, body {
@@ -274,7 +274,7 @@ let score, lines, level, combo, backToBack, stats;
 let gravityAcc, lockTimer, lockResets, grounded, lastKick, rotatedLast;
 let clearRows, clearTimer, pendingClear;
 let deathRow, deathTimer;
-let particles, shake, cell, dpr, wellCanvas;
+let particles, shake, cell, dpr, wellCanvas, previewSize;
 let lastFrame = 0;
 
 // ---------- persistence ----------
@@ -423,9 +423,12 @@ function resize() {
   boardCv.height = Math.round(h * dpr);
   boardCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const mini = Math.max(6, Math.floor((railW - 14) / 4.4));
-  sizeMini(holdCv, holdCtx, Math.round(mini * 4.2), Math.round(mini * 2.6));
-  sizeMini(nextCv, nextCtx, Math.round(mini * 4.2), Math.round(mini * 7.8));
+  // Previews are width-bound: every spawn orientation is at most 4 cells wide
+  // and 2 tall, so size off the rail's inner width and let height follow.
+  const inner = railW - 10;
+  previewSize = Math.max(7, Math.floor((inner - 2) / 4));
+  sizeMini(holdCv, holdCtx, previewSize * 4 + 2, previewSize * 2 + 4);
+  sizeMini(nextCv, nextCtx, previewSize * 4 + 2, (previewSize * 2 + 8) * 3);
 
   sprites.clear();
   buildWell();
@@ -967,7 +970,7 @@ function drawMini(ctx, cv, types, alpha) {
   ctx.globalAlpha = alpha;
 
   const slotH = h / types.length;
-  const size = Math.max(5, Math.floor(Math.min(w / 4.6, slotH / 2.6)));
+  const size = previewSize;
 
   types.forEach((type, i) => {
     const m = ROTATIONS[type][0];
