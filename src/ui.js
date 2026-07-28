@@ -74,11 +74,19 @@ overlay.addEventListener('click', e => {
   paintOverlayCanvases(); // the wordmark follows the new palette
 });
 
-export function showOverlay(html, soft = false) {
+export function showOverlay(html, opts = {}) {
   overlay.innerHTML = html;
-  overlay.classList.toggle('soft', soft);
+  overlay.classList.toggle('soft', !!opts.soft);   // board readable behind
+  overlay.classList.toggle('intro', !!opts.intro); // staged reveal after the drop
   overlay.classList.remove('hidden');
   paintOverlayCanvases();
+}
+
+export function actionBar(actions) {
+  const buttons = actions
+    .map(([act, label]) => `<button class="menuBtn" data-act="${act}">${label}</button>`)
+    .join('');
+  return `<div class="menuBtns">${buttons}</div>`;
 }
 
 export function hideOverlay() {

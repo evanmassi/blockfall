@@ -527,6 +527,43 @@ console.log('\nNew high score');
   check('new run clears the score marking', !els.score.classes.has('record'));
 }
 
+console.log('\nOverlay actions');
+{
+  const fireOverlay = (type, ev) => { for (const fn of handlers.overlay[type] || []) fn(ev); };
+  const target = act => ({ closest: sel => (sel === '[data-act]' ? { dataset: { act } } : null) });
+
+  game.startGame();
+  pumpMs(20);
+  game.togglePause();
+  const paused = els.overlay.innerHTML;
+  check('pause offers a restart', paused.includes('data-act="restart"'));
+  check('pause offers a route to the menu', paused.includes('data-act="menu"'));
+  check('pause keeps tap-to-resume', paused.includes('TAP TO RESUME'));
+
+  // Tapping a button must not also fall through to "tap anywhere to resume".
+  fireOverlay('pointerdown', { pointerType: 'touch', button: 0, target: target('menu') });
+  check('button tap does not resume', G.state === 'paused', G.state);
+
+  fireOverlay('click', { target: target('menu') });
+  check('main menu returns to the menu', G.state === 'menu', G.state);
+  check('menu clears the abandoned board', G.grid.every(r => r.every(c => !c)));
+
+  // Abandoning a good run should still keep the score.
+  G.stats = { best: 0, bestLines: 0, bestCombo: 0 };
+  game.startGame();
+  pumpMs(20);
+  G.score = 4321;
+  G.lines = 12;
+  game.showMenu();
+  check('abandoned run still records a best', G.stats.best === 4321, String(G.stats.best));
+
+  game.startGame();
+  pumpMs(20);
+  game.togglePause();
+  fireOverlay('click', { target: target('restart') });
+  check('restart starts a fresh game', G.state === 'playing' && G.score === 0, `${G.state}/${G.score}`);
+}
+
 console.log('\nDrop gestures');
 {
   const fire = (type, ev) => { for (const fn of handlers.stage[type] || []) fn(ev); };

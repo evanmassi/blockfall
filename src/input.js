@@ -5,7 +5,7 @@ import { Sound } from './audio.js';
 import { stage, overlay, pauseBtn, muteBtn } from './dom.js';
 import {
   move, rotate, softDrop, hardDrop, holdPiece,
-  startGame, togglePause,
+  startGame, togglePause, showMenu,
 } from './game.js';
 
 // ---------- keyboard ----------
@@ -64,9 +64,22 @@ document.addEventListener('keyup', e => {
 
 let gesture = null, extraPointers = 0;
 
+// Overlay buttons live inside the tap-anywhere surface, so both the swatches
+// and these have to be excluded from it.
+overlay.addEventListener('click', e => {
+  const btn = e.target.closest?.('[data-act]');
+  if (!btn) return;
+  Sound.init();
+  const act = btn.dataset.act;
+  if (act === 'restart') startGame();
+  else if (act === 'menu') showMenu();
+  else if (act === 'resume') togglePause();
+});
+
 overlay.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   if (e.target.closest?.('[data-theme]')) return; // let the swatch handle it
+  if (e.target.closest?.('[data-act]')) return;   // let the button handle it
   Sound.init();
   if (G.state === 'menu' || G.state === 'over') startGame();
   else if (G.state === 'paused' || G.state === 'pausedClearing') togglePause();

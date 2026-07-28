@@ -11,7 +11,7 @@ import { view, drawSidePanels } from './render.js';
 import { Sound } from './audio.js';
 import {
   showOverlay, hideOverlay, showToast, updateHud, setRecordStyle,
-  themeBar, wordmark, menuBackdrop,
+  themeBar, wordmark, menuBackdrop, actionBar,
 } from './ui.js';
 
 // Single funnel for score changes so beating the record is caught the instant
@@ -323,12 +323,17 @@ export function gameOver() {
   G.deathTimer = 0;
 }
 
-function finishGameOver() {
-  G.state = 'over';
-  Sound.over();
+// Abandoning a run mid-game shouldn't throw away a personal best.
+function commitStats() {
   G.stats.best = Math.max(G.stats.best, G.score);
   G.stats.bestLines = Math.max(G.stats.bestLines, G.lines);
   saveStats();
+}
+
+function finishGameOver() {
+  G.state = 'over';
+  Sound.over();
+  commitStats();
 
   showOverlay(`
     <h2${G.newBest ? ' class="record"' : ''}>${G.newBest ? 'NEW BEST' : 'GAME OVER'}</h2>
@@ -339,6 +344,7 @@ function finishGameOver() {
     <p>LINES ${G.lines} &nbsp;·&nbsp; LEVEL ${G.level}${
       G.newBest ? '' : `<br>BEST ${G.stats.best.toLocaleString()}`}</p>
     ${themeBar()}
+    ${actionBar([['menu', 'MAIN MENU']])}
     <p class="cta">TAP TO PLAY AGAIN</p>
   `);
 }
@@ -346,8 +352,12 @@ function finishGameOver() {
 export function togglePause() {
   if (G.state === 'playing' || G.state === 'clearing') {
     G.state = G.state === 'clearing' ? 'pausedClearing' : 'paused';
-    // soft: the board stays readable behind it
-    showOverlay(`<h2>PAUSED</h2>${themeBar()}<p class="cta">TAP TO RESUME</p>`, true);
+    showOverlay(`
+      <h2>PAUSED</h2>
+      ${themeBar()}
+      ${actionBar([['restart', 'RESTART'], ['menu', 'MAIN MENU']])}
+      <p class="cta">TAP TO RESUME</p>
+    `, { soft: true }); // board stays readable behind it
   } else if (G.state === 'paused' || G.state === 'pausedClearing') {
     G.state = G.state === 'pausedClearing' ? 'clearing' : 'playing';
     hideOverlay();
@@ -355,7 +365,15 @@ export function togglePause() {
 }
 
 export function showMenu() {
+  commitStats(); // may be arriving from an abandoned run
   G.state = 'menu';
+  G.grid = emptyGrid();
+  G.active = null;
+  G.particles = [];
+  G.clearRows = null;
+  G.pendingClear = null;
+  G.deathRow = ROWS;
+  setRecordStyle(false);
 
   // Phones get the gestures, desktop gets the keys — showing both is clutter
   // on the screen she'll actually be using.
@@ -379,7 +397,7 @@ export function showMenu() {
     <p class="fine">HOLD stashes a piece for later — once per drop</p>
     ${themeBar()}
     <p class="cta">TAP TO PLAY</p>
-  `);
+  `, { intro: true });
 }
 
 // ---------- per-frame ----------

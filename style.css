@@ -257,13 +257,25 @@ html, body {
   100%   { opacity:.22; transform:scaleX(1); }
 }
 
-/* Everything below the mark arrives after the impact, so the drop is the
-   event rather than one thing moving in an already-finished screen. */
-#overlay > *:not(.bgfall):not(.markWrap) { animation:menu-in .5s ease-out .95s both; }
+/* Everything below the mark arrives after the impact, so the drop is the event
+   rather than one thing moving in an already-finished screen. Scoped to .intro
+   so pausing stays instant, and .cta is excluded because this shorthand would
+   otherwise replace its pulse outright. */
+#overlay.intro > *:not(.bgfall):not(.markWrap):not(.cta) { animation:menu-in .5s ease-out .95s both; }
+#overlay.intro > .cta { animation:menu-in .5s ease-out .95s both, pulse 1.7s ease-in-out 1.45s infinite; }
 @keyframes menu-in {
   0%   { opacity:0; transform:translateY(7px); }
   100% { opacity:1; transform:translateY(0); }
 }
+
+.menuBtns { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+.menuBtn {
+  font-family:var(--font-display); font-weight:400; font-synthesis:none;
+  font-size:8px; letter-spacing:.06em; line-height:1;
+  padding:10px 12px; border-radius:var(--radius); cursor:pointer;
+  background:var(--panel); border:1px solid var(--edge); color:var(--dim);
+}
+.menuBtn:active { color:var(--text); border-color:var(--accent); }
 
 .bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
 .bgfall i {
@@ -281,7 +293,7 @@ html, body {
 #overlay > *:not(.bgfall) { position:relative; z-index:1; }
 
 @media (prefers-reduced-motion: reduce) {
-  .mark, .mark .markL, .markFloor, #overlay .cta,
-  #overlay > *:not(.bgfall):not(.markWrap) { animation:none; }
+  /* !important because the staged reveal uses a multi-animation shorthand. */
+  #overlay * { animation:none !important; }
   .bgfall { display:none; }
 }
