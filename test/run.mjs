@@ -79,7 +79,7 @@ globalThis.window = {
   },
 };
 
-const { COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_TIME, DEATH_ROW_MS, DEATH_HOLD_MS } = await import('../src/config.js');
+const { COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_TIME_MAX, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS } = await import('../src/config.js');
 const { ROTATIONS, TYPES, topRow } = await import('../src/pieces.js');
 const { G } = await import('../src/state.js');
 const { THEMES, theme, savedThemeName } = await import('../src/themes.js');
@@ -210,7 +210,7 @@ console.log('\nLine clear');
   fillRow(ROWS - 1, 0);
   put('I', -2, 0, 1); // vertical I lined up on column 0
   game.hardDrop();
-  pumpMs(CLEAR_TIME + 60);
+  pumpMs(CLEAR_TIME_MAX + 60);
   check('clears 1 line', G.lines === 1, 'lines=' + G.lines);
   check('awards 100 + drop pts', G.score - before >= 100, 'delta=' + (G.score - before));
   // The 3 leftover I-cells above the cleared row must settle down by exactly one.
@@ -225,10 +225,53 @@ console.log('\nTetris (4 lines)');
   for (let y = ROWS - 4; y < ROWS; y++) fillRow(y, 0);
   put('I', -2, 0, 1);
   game.hardDrop();
-  pumpMs(CLEAR_TIME + 60);
+  pumpMs(CLEAR_TIME_MAX + 60);
   check('clears 4 lines', G.lines === 4, 'lines=' + G.lines);
   check('awards 800 base', G.score - before >= 800, 'delta=' + (G.score - before));
   check('board empty after perfect clear', G.grid.every(r => r.every(c => !c)));
+}
+
+console.log('\nClear escalation');
+{
+  const steps = CLEAR_FX.filter(Boolean);
+  for (const k of ['time', 'shake', 'parts', 'spread', 'beam']) {
+    const vals = steps.map(f => f[k]);
+    check(`${k} rises with every extra line`, vals.every((v, i) => i === 0 || v > vals[i - 1]), vals.join(' < '));
+  }
+
+  // Locks a vertical I into a pre-filled well without hard-dropping, so the
+  // drop's own shake doesn't contaminate the clear's.
+  const measure = rows => {
+    fresh();
+    G.particles.length = 0;
+    G.shake = 0;
+    for (let y = ROWS - rows; y < ROWS; y++) fillRow(y, 0);
+    put('I', -2, ROWS - 4, 1);
+    game.lockPiece();
+    const snap = { count: G.clearCount, time: G.clearTime, shake: G.shake, parts: G.particles.length };
+    pumpMs(CLEAR_TIME_MAX + 80);
+    return snap;
+  };
+
+  const one = measure(1), two = measure(2), three = measure(3), four = measure(4);
+  check('counts recorded', [one, two, three, four].every((s, i) => s.count === i + 1),
+        [one, two, three, four].map(s => s.count).join(','));
+  check('hold time escalates', one.time < two.time && two.time < three.time && three.time < four.time,
+        [one, two, three, four].map(s => s.time).join(' < '));
+  check('shake escalates', one.shake < two.shake && two.shake < three.shake && three.shake < four.shake,
+        [one, two, three, four].map(s => s.shake).join(' < '));
+  check('particles escalate', one.parts < two.parts && two.parts < three.parts && three.parts < four.parts,
+        [one, two, three, four].map(s => s.parts).join(' < '));
+  check('a Tetris is a clear step above a single', four.shake >= one.shake * 3 && four.parts >= one.parts * 4,
+        `shake ${one.shake}->${four.shake}, parts ${one.parts}->${four.parts}`);
+
+  // A long hard drop must not shake as hard as a Tetris, or the ladder flattens.
+  fresh();
+  G.shake = 0;
+  put('I', 3, 0, 0);
+  game.hardDrop();
+  check('hard-drop impact stays below a Tetris', G.shake < CLEAR_FX[4].shake, String(G.shake));
+  pumpMs(CLEAR_TIME_MAX + 60);
 }
 
 console.log('\nT-spin single (rotation must survive a 0-cell hard drop)');
@@ -243,7 +286,7 @@ console.log('\nT-spin single (rotation must survive a 0-cell hard drop)');
   check('T rotated into the notch', G.active.rot === 2 && G.active.y === ROWS - 3);
   check('detected as full T-spin', game.tSpinType() === 'full', String(game.tSpinType()));
   game.hardDrop();
-  pumpMs(CLEAR_TIME + 60);
+  pumpMs(CLEAR_TIME_MAX + 60);
   check('scores 800 (T-spin single), not 100', G.score - before === 800, 'delta=' + (G.score - before));
 }
 
@@ -285,7 +328,7 @@ console.log('\nHold slot rendering');
   const held = G.hold;
   const current = G.active.type;
   game.lockPiece();          // locking re-arms hold
-  pumpMs(CLEAR_TIME + 60);
+  pumpMs(CLEAR_TIME_MAX + 60);
   game.holdPiece();
   check('holding again swaps the stashed piece in', G.active.type === held, `${held} -> ${G.active.type}`);
   check('previous piece went to the slot', G.hold !== held, `${G.hold} (was ${held})`);

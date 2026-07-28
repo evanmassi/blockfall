@@ -33,7 +33,7 @@ export const G = {
   lockTimer: 0, lockResets: 0, grounded: false,
   lastKick: 0, rotatedLast: false,
 
-  clearRows: null, clearTimer: 0, pendingClear: null,
+  clearRows: null, clearTimer: 0, clearTime: 200, clearCount: 0, pendingClear: null,
   deathRow: ROWS, deathTimer: 0,
 
   particles: [], shake: 0,

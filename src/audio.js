@@ -28,7 +28,19 @@ export const Sound = {
   lock()    { this.tone(110, 0.07, 'triangle', 0.05); },
   holdSfx() { this.tone(500, 0.06, 'sine', 0.045); },
   drop()    { this.tone(76, 0.10, 'sawtooth', 0.045); },
-  clear(n)  { this.arp(n >= 4 ? [523, 659, 784, 1047, 1319] : [440, 587, 740].slice(0, n + 1), 0.05, 'square', 0.05); },
+  // Rises in length, pitch and volume with the clear; a Tetris also lands a
+  // low hit underneath so it has weight the smaller clears don't.
+  clear(n) {
+    const runs = {
+      1: [523, 659],
+      2: [523, 659, 784],
+      3: [523, 659, 784, 1047],
+      4: [523, 659, 784, 1047, 1319],
+    };
+    this.arp(runs[n] || runs[1], n >= 4 ? 0.045 : 0.055, 'square', 0.04 + n * 0.006);
+    if (n >= 4) this.tone(62, 0.34, 'sine', 0.09);
+  },
+  combo(n)  { this.tone(Math.min(1400, 340 + n * 70), 0.07, 'triangle', 0.04); },
   tspin()   { this.arp([392, 587, 880, 1175], 0.05, 'sine', 0.06); },
   levelUp() { this.arp([523, 784, 1047], 0.07, 'triangle', 0.05); },
   curtain(i){ this.tone(Math.max(90, 300 - i * 9), 0.05, 'square', 0.022); },

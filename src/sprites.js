@@ -78,6 +78,12 @@ export function ghostSprite(color, size) {
   return sprite;
 }
 
+// "r,g,b" so callers can build rgba() strings with their own alpha.
+export function rgbOf(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+}
+
 const grayCache = new Map();
 
 export function grayOf(hex) {

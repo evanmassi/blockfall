@@ -63,6 +63,8 @@ Follows the modern Tetris guideline so the feel matches what people expect:
 - T-spin detection (3-corner rule + kick-index upgrade), back-to-back, combos, perfect clears
 - Guideline gravity curve, level up every 10 lines
 
+Line clears escalate rather than all looking alike — a single, double, triple and Tetris differ in how long the clear holds, how hard the screen shakes, how many particles fly, and how thick and what color the light bar is. A Tetris also fires columns of light up through the board and lands a low hit under the arpeggio. The ladder is `CLEAR_FX` in `src/config.js`.
+
 ## Tuning
 
 Feel constants are `CTRL` in `src/config.js` — gesture thresholds, DAS/ARR. Adjust after real-hands testing.

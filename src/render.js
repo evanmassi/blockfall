@@ -1,9 +1,9 @@
-import { COLS, VIS_ROWS, HIDDEN, ROWS, CLEAR_TIME } from './config.js';
+import { COLS, VIS_ROWS, HIDDEN, ROWS, CLEAR_FX } from './config.js';
 import { ROTATIONS, forEachCell } from './pieces.js';
 import { theme, setTheme } from './themes.js';
 import { G } from './state.js';
 import { collides } from './board.js';
-import { blockSprite, ghostSprite, grayOf, clearSprites } from './sprites.js';
+import { blockSprite, ghostSprite, grayOf, rgbOf, clearSprites } from './sprites.js';
 import { boardCv, boardCtx, holdCv, holdCtx, nextCv, nextCtx, stage, railLeft } from './dom.js';
 
 export const view = { cell: 24, dpr: 1, previewSize: 12 };
@@ -102,11 +102,7 @@ export function render() {
     }
   }
 
-  if (G.clearRows) {
-    const flash = Math.max(0, G.clearTimer / CLEAR_TIME);
-    boardCtx.fillStyle = `rgba(${theme.flash},${0.15 + flash * 0.75})`;
-    for (const y of G.clearRows) boardCtx.fillRect(0, (y - HIDDEN) * cell, w, cell);
-  }
+  if (G.clearRows) drawClearFx(w, h, cell);
 
   const a = G.active;
   if (a && G.state === 'playing') {
@@ -130,6 +126,58 @@ export function render() {
     boardCtx.fillRect(p.x, p.y, p.size, p.size);
   }
   boardCtx.globalAlpha = 1;
+}
+
+// Escalates with the number of rows: every clear washes out and fires a light
+// bar along each row, but the bar thickens and tints as the clear grows, and a
+// Tetris additionally throws columns of light up through the board.
+function drawClearFx(w, h, cell) {
+  const fx = CLEAR_FX[Math.min(G.clearCount, 4)] || CLEAR_FX[1];
+  const p = Math.min(1, Math.max(0, 1 - G.clearTimer / G.clearTime)); // 0 -> 1
+  const rgb = fx.tint === 'I' ? rgbOf(theme.pieces.I)
+            : fx.tint === 'accent' ? rgbOf(theme.accent)
+            : theme.flash;
+
+  const wash = Math.max(0, 1 - p * 1.35);
+  boardCtx.fillStyle = `rgba(${theme.flash},${0.12 + wash * 0.78})`;
+  for (const y of G.clearRows) boardCtx.fillRect(0, (y - HIDDEN) * cell, w, cell);
+
+  // Bar sweeps out from the middle over the first half, then fades.
+  const grow = Math.min(1, p / 0.5);
+  const barW = w * (1 - Math.pow(1 - grow, 3));
+  const barH = cell * fx.beam;
+  const fade = p < 0.5 ? 1 : Math.max(0, 1 - (p - 0.5) / 0.5);
+
+  if (barW > 1) {
+    const x0 = (w - barW) / 2;
+    const grad = boardCtx.createLinearGradient(x0, 0, x0 + barW, 0);
+    grad.addColorStop(0, `rgba(${rgb},0)`);
+    grad.addColorStop(0.5, `rgba(${rgb},1)`);
+    grad.addColorStop(1, `rgba(${rgb},0)`);
+    boardCtx.globalAlpha = fade;
+    boardCtx.fillStyle = grad;
+    for (const y of G.clearRows) {
+      boardCtx.fillRect(x0, (y - HIDDEN + 0.5) * cell - barH / 2, barW, barH);
+    }
+    boardCtx.globalAlpha = 1;
+  }
+
+  if (G.clearCount >= 4) {
+    const bandCY = (Math.min(...G.clearRows) - HIDDEN + G.clearRows.length / 2) * cell;
+    const rise = h * Math.min(1, p * 1.4);
+    if (rise > 1) {
+      const col = boardCtx.createLinearGradient(0, bandCY, 0, bandCY - rise);
+      col.addColorStop(0, `rgba(${rgb},.55)`);
+      col.addColorStop(1, `rgba(${rgb},0)`);
+      boardCtx.globalAlpha = Math.max(0, 1 - p * 1.1);
+      boardCtx.fillStyle = col;
+      const cw = cell * 0.45;
+      for (let i = 0; i < 6; i++) {
+        boardCtx.fillRect((i + 0.5) / 6 * w - cw / 2, bandCY - rise, cw, rise);
+      }
+      boardCtx.globalAlpha = 1;
+    }
+  }
 }
 
 function drawBlock(ctx, px, py, color, size) {

@@ -1,7 +1,7 @@
 import {
   COLS, ROWS, HIDDEN,
   LINE_SCORES, TSPIN_SCORES, TSPIN_MINI_SCORES, PERFECT_SCORES,
-  LOCK_DELAY, MAX_LOCK_RESETS, CLEAR_TIME, DEATH_ROW_MS, DEATH_HOLD_MS,
+  LOCK_DELAY, MAX_LOCK_RESETS, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS,
 } from './config.js';
 import { ROTATIONS, KICKS, topRow } from './pieces.js';
 import { theme } from './themes.js';
@@ -105,7 +105,9 @@ export function hardDrop() {
   while (!collides(a.m, a.x, a.y + 1)) { a.y++; dist++; }
   G.score += dist * 2;
   if (dist > 0) G.rotatedLast = false; // a 0-cell drop must not cancel a T-spin
-  G.shake = Math.min(9, 2.5 + dist * 0.35);
+  // Kept small on purpose: a long drop used to shake as hard as a Tetris,
+  // which flattened the whole clear escalation.
+  G.shake = Math.max(G.shake, Math.min(4, 1 + dist * 0.18));
   Sound.drop();
   lockPiece();
 }
@@ -164,10 +166,14 @@ export function lockPiece() {
   if (!anyVisible && !full.length) { G.active = null; gameOver(); return; }
 
   if (full.length) {
-    spawnClearParticles(full);
+    const fx = CLEAR_FX[Math.min(full.length, 4)];
+    spawnClearParticles(full, fx);
     G.pendingClear = { rows: full, spin };
     G.clearRows = full;
-    G.clearTimer = CLEAR_TIME;
+    G.clearCount = full.length;
+    G.clearTime = fx.time;
+    G.clearTimer = fx.time;
+    G.shake = Math.max(G.shake, fx.shake);
     G.state = 'clearing';
     G.active = null;
   } else {
@@ -202,7 +208,9 @@ function applyScore(cleared, spin) {
     color = theme.pieces.T;
   } else if (cleared) {
     gain = LINE_SCORES[cleared] * G.level;
-    if (cleared === 4) { label = 'TETRIS'; color = theme.pieces.I; }
+    label = ['', '', 'DOUBLE', 'TRIPLE', 'TETRIS'][cleared]; // a single stays quiet
+    if (cleared === 4) color = theme.pieces.I;
+    else if (cleared === 3) color = theme.accent;
   }
 
   const difficult = cleared > 0 && (spin || cleared === 4);
@@ -229,11 +237,11 @@ function applyScore(cleared, spin) {
       gain += PERFECT_SCORES[cleared] * G.level;
       label = 'PERFECT CLEAR';
       color = '#ffffff';
-      G.shake = Math.max(G.shake, 10);
+      G.shake = Math.max(G.shake, 12);
     }
-    if (cleared >= 4) G.shake = Math.max(G.shake, 8);
 
     if (spin) Sound.tspin(); else Sound.clear(cleared);
+    if (G.combo > 0) Sound.combo(G.combo);
   } else {
     G.combo = -1;
     if (spin) { label = 'T-SPIN'; color = theme.pieces.T; Sound.tspin(); }
@@ -246,25 +254,25 @@ function applyScore(cleared, spin) {
   updateHud();
 }
 
-function spawnClearParticles(rows) {
+function spawnClearParticles(rows, fx) {
   const cell = view.cell;
   for (const y of rows) {
     for (let x = 0; x < COLS; x++) {
       const color = theme.pieces[G.grid[y][x]] || theme.accent;
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < fx.parts; i++) {
         G.particles.push({
           x: (x + Math.random()) * cell,
           y: (y - HIDDEN + Math.random()) * cell,
-          vx: (Math.random() - 0.5) * 0.34,
-          vy: (Math.random() - 0.85) * 0.22,
+          vx: (Math.random() - 0.5) * fx.spread,
+          vy: (Math.random() - 0.85) * fx.spread * 0.62,
           life: 1, decay: 0.0016 + Math.random() * 0.0016,
-          size: cell * (0.12 + Math.random() * 0.16),
+          size: cell * (0.1 + Math.random() * 0.16) * (1 + fx.beam * 0.35),
           color,
         });
       }
     }
   }
-  if (G.particles.length > 700) G.particles.splice(0, G.particles.length - 700);
+  if (G.particles.length > 900) G.particles.splice(0, G.particles.length - 900);
 }
 
 // ---------- flow ----------
