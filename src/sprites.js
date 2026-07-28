@@ -1,17 +1,16 @@
-import { theme } from './themes.js';
-
 const sprites = new Map();
 
 export function clearSprites() { sprites.clear(); }
 
 // Hard-edged square with a classic raised bevel: lit top/left, shaded bottom/right.
-// Glow is baked in here so nothing needs shadowBlur at frame time; how much of
-// it there is comes from the theme, since it has to go near zero on a light well.
-export function blockSprite(color, size) {
-  const key = theme.key + color + '@' + size;
+// Glow is baked in here so nothing needs shadowBlur at frame time. The theme is
+// passed rather than read from the module so the picker can draw a swatch in a
+// palette that isn't the active one.
+export function blockSprite(color, size, th) {
+  const key = th.key + color + '@' + size;
   if (sprites.has(key)) return sprites.get(key);
 
-  const style = theme.block;
+  const style = th.block;
   const pad = Math.ceil(size * 0.5);
   const cv = document.createElement('canvas');
   cv.width = cv.height = size + pad * 2;
@@ -55,8 +54,8 @@ export function blockSprite(color, size) {
   return sprite;
 }
 
-export function ghostSprite(color, size) {
-  const key = 'ghost' + theme.key + color + '@' + size;
+export function ghostSprite(color, size, th) {
+  const key = 'ghost' + th.key + color + '@' + size;
   if (sprites.has(key)) return sprites.get(key);
 
   const cv = document.createElement('canvas');

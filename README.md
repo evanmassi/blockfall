@@ -71,16 +71,17 @@ Feel constants are `CTRL` in `src/config.js` — gesture thresholds, DAS/ARR. Ad
 
 ## Themes
 
-Four, all unlocked, switchable from the menu, pause and game-over screens. The choice persists in `localStorage`.
+Dark wells only — a light theme was built and rejected. All unlocked, switchable from the menu, pause and game-over screens. The choice persists in `localStorage`.
 
 | | |
 | --- | --- |
 | **Neon** | Dark, glowing, scanlines. The original. |
 | **Aurora** | Midnight blue well, northern-lights palette. Calmer than Neon. |
-| **Forest** | Earthy greens, terracotta, amber. Low glow. |
-| **Sakura** | Light background, soft pastels. Glow near zero. |
+| **Forest** | Earthy greens, terracotta, amber. Low glow, no scanlines. |
 
-A theme owns every color decision, including how blocks are lit — `block.glow`, `block.light`, `block.shade` and `block.outline` feed the sprite bevel. That is what makes Sakura possible: on a light well, a strong glow reads as grime rather than depth, so it drops to `0.1`.
+A theme owns every color decision, including how blocks are lit — `block.glow`, `block.light`, `block.shade` and `block.outline` feed the sprite bevel, which is most of what separates Neon from Forest.
+
+Picker swatches are canvases drawn with the real block renderer, so each one shows that theme's actual bevel, glow and scanlines rather than flat color chips.
 
 Adding one is a single object in `src/themes.js`. `setTheme()` pushes the palette to CSS custom properties and the Android status bar; `applyTheme()` also clears the sprite cache and rebuilds the pre-rendered well, both of which bake in theme colors.
 

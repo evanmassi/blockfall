@@ -9,7 +9,7 @@ import { G, emptyGrid, saveStats } from './state.js';
 import { collides, fillQueue, makePiece } from './board.js';
 import { view, drawSidePanels } from './render.js';
 import { Sound } from './audio.js';
-import { showOverlay, hideOverlay, showToast, updateHud, themeBar } from './ui.js';
+import { showOverlay, hideOverlay, showToast, updateHud, themeBar, wordmark } from './ui.js';
 
 // ---------- spawning ----------
 
@@ -324,7 +324,8 @@ function finishGameOver() {
 export function togglePause() {
   if (G.state === 'playing' || G.state === 'clearing') {
     G.state = G.state === 'clearing' ? 'pausedClearing' : 'paused';
-    showOverlay(`<h2>PAUSED</h2>${themeBar()}<p class="cta">TAP TO RESUME</p>`);
+    // soft: the board stays readable behind it
+    showOverlay(`<h2>PAUSED</h2>${themeBar()}<p class="cta">TAP TO RESUME</p>`, true);
   } else if (G.state === 'paused' || G.state === 'pausedClearing') {
     G.state = G.state === 'pausedClearing' ? 'clearing' : 'playing';
     hideOverlay();
@@ -345,10 +346,14 @@ export function showMenu() {
        SPACE drop &nbsp;·&nbsp; C hold &nbsp;·&nbsp; P pause`;
 
   showOverlay(`
-    <h1>BLOCKFALL</h1>
+    ${wordmark()}
+    ${G.stats.best ? `
+      <div class="best">
+        <span class="label">BEST</span>
+        <b>${G.stats.best.toLocaleString()}</b>
+      </div>` : ''}
     <p>${controls}</p>
     <p class="fine">HOLD stashes a piece for later — once per drop</p>
-    ${G.stats.best ? `<p>BEST ${G.stats.best.toLocaleString()}</p>` : ''}
     ${themeBar()}
     <p class="cta">TAP TO PLAY</p>
   `);

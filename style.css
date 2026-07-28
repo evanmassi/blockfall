@@ -9,9 +9,12 @@
   --dim:#7b74a8;
   --accent:#ff2d95;
   --overlay:rgba(7,6,15,.9);
+  --overlay-soft:rgba(7,6,15,.52);
   --board-shadow:0 0 0 1px var(--edge), 0 0 46px -8px var(--accent);
   --scanlines:block;
   --rail:clamp(52px,17vw,88px);
+  --radius:2px;
+  --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
 }
 
 html, body {
@@ -75,7 +78,7 @@ html, body {
   display:flex; flex-direction:column; align-items:center; gap:2px;
   background:var(--panel);
   border:1px solid var(--edge);
-  border-radius:6px;
+  border-radius:var(--radius);
   padding:4px 3px 5px;
 }
 .slot .label { font-size:8px; letter-spacing:.14em; }
@@ -97,7 +100,7 @@ html, body {
 
 #board {
   display:block;
-  border-radius:2px;
+  border-radius:var(--radius);
   box-shadow:var(--board-shadow);
 }
 
@@ -126,27 +129,57 @@ html, body {
 }
 #overlay.hidden { display:none; }
 
-.themes { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+/* Pause keeps the board readable underneath rather than blanking it out. */
+#overlay.soft { background:var(--overlay-soft); backdrop-filter:blur(1px); }
+
+.themes { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
 
 .swatch {
-  display:flex; flex-direction:column; align-items:center; gap:5px;
-  padding:5px 5px 6px; border-radius:8px; cursor:pointer;
+  display:flex; flex-direction:column; align-items:stretch; gap:6px;
+  padding:4px 4px 6px; border-radius:var(--radius); cursor:pointer;
   background:var(--panel); border:1px solid var(--edge);
   color:var(--dim); font:inherit;
 }
-.swatch .chips {
-  display:grid; grid-template-columns:1fr 1fr; gap:2px;
-  padding:3px; border-radius:4px; width:38px; height:38px;
+.swatch .swatchCv {
+  display:block; width:76px; height:62px;
+  border-radius:0; border:1px solid var(--edge);
 }
-.swatch .chips i { border-radius:2px; }
-.swatch em { font-size:8px; letter-spacing:.12em; font-style:normal; text-transform:uppercase; }
-.swatch.on { border-color:var(--accent); color:var(--text); box-shadow:0 0 12px -2px var(--accent); }
+.swatch em {
+  font-size:9px; letter-spacing:.14em; font-style:normal; text-transform:uppercase;
+  text-align:center;
+}
+.swatch.on { border-color:var(--accent); color:var(--text); box-shadow:0 0 14px -3px var(--accent); }
 
 #overlay h1 {
-  font-size:clamp(30px,11vw,52px); font-weight:800; letter-spacing:.13em;
+  font-family:var(--font-display);
+  font-size:clamp(30px,11vw,52px); font-weight:900; letter-spacing:.1em;
   color:var(--accent); text-shadow:0 0 26px var(--accent), 0 0 60px var(--accent);
 }
-#overlay h2 { font-size:clamp(19px,6.5vw,28px); letter-spacing:.12em; font-weight:700; }
+
+/* The first L is the real L tetromino, drawn with the theme's bevel and glow. */
+#overlay h1.mark { display:flex; align-items:center; justify-content:center; }
+#overlay h1.mark .markL {
+  height:.78em; width:auto; aspect-ratio:2 / 3;
+  margin:0 .1em 0 .12em; position:relative; top:.02em;
+}
+
+#overlay h2 {
+  font-family:var(--font-display);
+  font-size:clamp(19px,6.5vw,28px); letter-spacing:.12em; font-weight:800;
+}
+
+.best {
+  display:flex; flex-direction:column; align-items:center; gap:1px;
+  padding:9px 26px;
+  border-top:1px solid var(--edge); border-bottom:1px solid var(--edge);
+}
+.best .label { font-size:9px; letter-spacing:.34em; }
+.best b {
+  font-family:var(--font-display);
+  font-size:clamp(30px,10vw,44px); font-weight:900; line-height:1.05;
+  letter-spacing:.02em; font-variant-numeric:tabular-nums;
+  color:var(--text); text-shadow:0 0 14px var(--accent), 0 0 34px var(--accent);
+}
 #overlay p { color:var(--dim); font-size:13px; line-height:1.75; letter-spacing:.05em; }
 #overlay .big { color:var(--text); font-size:clamp(22px,8vw,34px); font-variant-numeric:tabular-nums; }
 #overlay .fine { font-size:11px; opacity:.72; margin-top:-6px; }

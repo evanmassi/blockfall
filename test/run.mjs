@@ -32,7 +32,7 @@ for (const id of IDS) {
   els[id] = {
     id, style: {}, textContent: '', innerHTML: '', width: 10, height: 10,
     clientWidth: 400, clientHeight: 700,
-    classList: { add: noop, remove: noop },
+    classList: { add: noop, remove: noop, toggle: noop },
     ctx,
     getContext: () => ctx,
     getBoundingClientRect: () => ({ width: 60, height: 600, top: 0, left: 0 }),
@@ -46,11 +46,18 @@ const cssVars = {};
 const store = {};
 const metaThemeColor = { content: '', setAttribute: (k, v) => { metaThemeColor.content = v; } };
 
-// Stand-ins for the swatch DOM the theme picker walks.
+// Stand-ins for the swatch DOM the theme picker walks and paints into.
+const previewCanvas = () => ({
+  clientWidth: 76, clientHeight: 62, width: 0, height: 0, style: {}, getContext: ctxStub,
+});
+const markCv = previewCanvas();
+
 const swatchEls = [];
 els.overlay.querySelectorAll = () => swatchEls;
+els.overlay.querySelector = sel => (sel === '.markL' ? markCv : null);
+
 function fakeSwatch(name) {
-  const el = { dataset: { theme: name }, on: false };
+  const el = { dataset: { theme: name }, on: false, querySelector: () => previewCanvas() };
   el.classList = { toggle: (_cls, v) => { el.on = v; } };
   return el;
 }
@@ -124,7 +131,10 @@ function put(type, x, y, rot) {
 
 console.log('\nBoot');
 {
-  check('menu rendered on load', els.overlay.innerHTML.includes('BLOCKFALL'));
+  // The title's first L is a canvas glyph, so the word isn't one string.
+  const menu = els.overlay.innerHTML;
+  check('menu rendered on load', menu.includes('<span>B</span>') && menu.includes('OCKFALL'));
+  check('wordmark L is a drawn tetromino', menu.includes('class="markL"'));
   check('theme synced to CSS vars', cssVars['--accent'] === '#ff2d95', JSON.stringify(cssVars['--accent']));
   check('board sized', els.board.width > 0);
 }
@@ -163,7 +173,7 @@ console.log('\nOffline packaging');
 console.log('\nThemes');
 {
   const names = Object.keys(THEMES);
-  check('four themes defined', names.length === 4, names.join(','));
+  check('themes defined', names.length >= 3, names.join(','));
 
   const required = ['bg','panel','edge','text','dim','accent','well','gridLine','overlay','boardShadow','flash'];
   const complete = names.every(n =>
@@ -176,26 +186,36 @@ console.log('\nThemes');
   const distinct = names.every(n => new Set(Object.values(THEMES[n].pieces)).size === 7);
   check('no theme reuses a piece color', distinct);
 
-  check('light theme drops the glow', THEMES.sakura.block.glow < 0.2, String(THEMES.sakura.block.glow));
+  // Dark wells only — a light theme was tried and rejected.
+  const lum = hex => {
+    const n = parseInt(hex.slice(1), 16);
+    return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+  };
+  const bright = names.filter(n => lum(THEMES[n].well) > 70 || lum(THEMES[n].bg) > 70);
+  check('every theme is dark', bright.length === 0, bright.join(', '));
 
-  applyTheme('sakura');
-  check('applyTheme switches the live theme', theme.key === 'sakura', theme.key);
-  check('CSS vars follow', cssVars['--accent'] === THEMES.sakura.accent, cssVars['--accent']);
+  check('every theme has a soft overlay for pause', names.every(n => typeof THEMES[n].overlaySoft === 'string'));
+
+  applyTheme('aurora');
+  check('applyTheme switches the live theme', theme.key === 'aurora', theme.key);
+  check('CSS vars follow', cssVars['--accent'] === THEMES.aurora.accent, cssVars['--accent']);
   check('scanlines var follows', cssVars['--scanlines'] === 'none', cssVars['--scanlines']);
-  check('status bar color follows', metaThemeColor.content === THEMES.sakura.bg, metaThemeColor.content);
-  check('choice persisted', store['blockfall.theme'] === 'sakura', store['blockfall.theme']);
-  check('savedThemeName reads it back', savedThemeName() === 'sakura');
+  check('soft overlay var follows', cssVars['--overlay-soft'] === THEMES.aurora.overlaySoft, cssVars['--overlay-soft']);
+  check('status bar color follows', metaThemeColor.content === THEMES.aurora.bg, metaThemeColor.content);
+  check('choice persisted', store['blockfall.theme'] === 'aurora', store['blockfall.theme']);
+  check('savedThemeName reads it back', savedThemeName() === 'aurora');
 
   store['blockfall.theme'] = 'not-a-theme';
   check('unknown saved theme falls back to neon', savedThemeName() === 'neon');
 
   const bar = themeBar();
-  check('theme bar marks the active swatch', bar.includes('data-theme="sakura"') && bar.includes('swatch on'));
+  check('theme bar marks the active swatch', bar.includes('data-theme="aurora"') && bar.includes('swatch on'));
   check('theme bar lists every theme', names.every(n => bar.includes(`data-theme="${n}"`)));
+  check('swatches render a canvas, not colour chips', bar.includes('swatchCv') && !bar.includes('chips'));
 
   // A swatch tap must repaint, not start the game.
   swatchEls.length = 0;
-  swatchEls.push(fakeSwatch('neon'), fakeSwatch('aurora'), fakeSwatch('forest'), fakeSwatch('sakura'));
+  for (const n of names) swatchEls.push(fakeSwatch(n));
   const swatchTarget = { closest: sel => sel === '[data-theme]' ? { dataset: { theme: 'forest' } } : null };
   for (const fn of handlers.overlay.click || []) fn({ target: swatchTarget });
   check('clicking a swatch applies that theme', theme.key === 'forest', theme.key);

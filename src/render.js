@@ -128,7 +128,7 @@ export function render() {
     if (gy !== a.y) {
       forEachCell(a.m, (x, y) => {
         const sy = (gy + y - HIDDEN) * cell;
-        if (sy > -cell) drawSprite(boardCtx, ghostSprite(theme.pieces[a.type], cell), (a.x + x) * cell, sy);
+        if (sy > -cell) drawSprite(boardCtx, ghostSprite(theme.pieces[a.type], cell, theme), (a.x + x) * cell, sy);
       });
     }
     forEachCell(a.m, (x, y) => {
@@ -197,13 +197,65 @@ function drawClearFx(w, h, cell) {
   }
 }
 
-function drawBlock(ctx, px, py, color, size) {
-  drawSprite(ctx, blockSprite(color, size), px, py);
+function drawBlock(ctx, px, py, color, size, th = theme) {
+  drawSprite(ctx, blockSprite(color, size, th), px, py);
 }
 
 function drawSprite(ctx, sprite, px, py) {
   const s = sprite.cv.width;
   ctx.drawImage(sprite.cv, px - sprite.pad, py - sprite.pad, s, s);
+}
+
+// A miniature of the real thing: that theme's well, grid, bevel, glow and
+// scanlines. Colour chips alone don't tell you what a theme actually looks like.
+const PREVIEW_STACK = [
+  [0, 3, 'I'], [1, 3, 'J'], [2, 3, 'L'], [3, 3, 'S'], [4, 3, 'T'],
+  [1, 2, 'Z'], [3, 2, 'O'],
+];
+
+export function drawThemePreview(cv, th) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const w = cv.clientWidth || 64, h = cv.clientHeight || 52;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  g.fillStyle = th.well;
+  g.fillRect(0, 0, w, h);
+
+  const cell = Math.floor(Math.min(w / 5, h / 4));
+  const ox = Math.round((w - cell * 5) / 2), oy = h - cell * 4;
+
+  g.strokeStyle = th.gridLine;
+  g.lineWidth = 1;
+  g.beginPath();
+  for (let x = 1; x < 5; x++) { g.moveTo(ox + x * cell + .5, 0); g.lineTo(ox + x * cell + .5, h); }
+  for (let y = 1; y < 4; y++) { g.moveTo(0, oy + y * cell + .5); g.lineTo(w, oy + y * cell + .5); }
+  g.stroke();
+
+  for (const [x, y, type] of PREVIEW_STACK) {
+    drawBlock(g, ox + x * cell, oy + y * cell, th.pieces[type], cell, th);
+  }
+
+  if (th.scanlines) {
+    g.fillStyle = 'rgba(0,0,0,.22)';
+    for (let y = 0; y < h; y += 4) g.fillRect(0, y + 2, w, 2);
+  }
+}
+
+// The L tetromino in its first rotation is, conveniently, the letter L.
+const WORDMARK_L = [[0, 0], [0, 1], [0, 2], [1, 2]];
+
+export function drawWordmarkL(cv, th = theme) {
+  const cell = 26, pad = 3;
+  cv.width = cell * 2 + pad * 2;
+  cv.height = cell * 3 + pad * 2;
+  const g = cv.getContext('2d');
+  for (const [x, y] of WORDMARK_L) {
+    drawBlock(g, pad + x * cell, pad + y * cell, th.pieces.L, cell, th);
+  }
 }
 
 export function drawSidePanels() {
