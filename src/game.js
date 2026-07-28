@@ -9,7 +9,10 @@ import { G, emptyGrid, saveStats } from './state.js';
 import { collides, fillQueue, makePiece } from './board.js';
 import { view, drawSidePanels } from './render.js';
 import { Sound } from './audio.js';
-import { showOverlay, hideOverlay, showToast, updateHud, setRecordStyle, themeBar, wordmark } from './ui.js';
+import {
+  showOverlay, hideOverlay, showToast, updateHud, setRecordStyle,
+  themeBar, wordmark, menuBackdrop,
+} from './ui.js';
 
 // Single funnel for score changes so beating the record is caught the instant
 // it happens, mid-run, rather than being noticed on the game-over screen.
@@ -365,6 +368,7 @@ export function showMenu() {
        SPACE drop &nbsp;·&nbsp; C hold &nbsp;·&nbsp; P pause`;
 
   showOverlay(`
+    ${menuBackdrop()}
     ${wordmark()}
     ${G.stats.best ? `
       <div class="best">

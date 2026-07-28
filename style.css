@@ -211,3 +211,56 @@ html, body {
 #overlay .cta { color:var(--text); font-size:9px; letter-spacing:.06em; line-height:1.6; animation:pulse 1.7s ease-in-out infinite; }
 
 @keyframes pulse { 0%,100%{opacity:.35} 50%{opacity:1} }
+
+/* ---- menu: the mark drops and locks, debris drifts behind ---- */
+
+.markWrap { display:flex; flex-direction:column; align-items:center; gap:12px; }
+
+.markFloor {
+  width:62%; height:3px; border-radius:1px;
+  background:var(--accent); opacity:.22; box-shadow:0 0 14px var(--accent);
+  animation:mark-floor .9s ease-out both;
+}
+
+.mark { animation:mark-jolt .9s cubic-bezier(.2,.7,.2,1) both; }
+.mark .markL {
+  transform-origin:bottom center;
+  animation:mark-drop .9s cubic-bezier(.25,.9,.3,1) both;
+}
+
+/* The piece lands at 52%, so the jolt and the floor flare key off that. */
+@keyframes mark-drop {
+  0%   { transform:translateY(-160%); opacity:0; }
+  14%  { opacity:1; }
+  52%  { transform:translateY(0) scaleY(1) scaleX(1); }
+  62%  { transform:translateY(0) scaleY(.8) scaleX(1.12); }
+  76%  { transform:translateY(0) scaleY(1.06) scaleX(.97); }
+  100% { transform:translateY(0) scaleY(1) scaleX(1); }
+}
+@keyframes mark-jolt {
+  0%,52% { transform:translateY(0); }
+  60%    { transform:translateY(3px); }
+  74%    { transform:translateY(0); }
+  100%   { transform:translateY(0); }
+}
+@keyframes mark-floor {
+  0%,52% { opacity:0; transform:scaleX(.82); }
+  62%    { opacity:1; transform:scaleX(1.05); }
+  100%   { opacity:.22; transform:scaleX(1); }
+}
+
+.bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
+.bgfall i {
+  position:absolute; top:0; display:block; opacity:.13;
+  animation-name:bg-fall; animation-timing-function:linear; animation-iteration-count:infinite;
+}
+@keyframes bg-fall {
+  0%   { transform:translateY(-20vh) rotate(0deg); }
+  100% { transform:translateY(120vh) rotate(90deg); }
+}
+#overlay > *:not(.bgfall) { position:relative; z-index:1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mark, .mark .markL, .markFloor, #overlay .cta { animation:none; }
+  .bgfall { display:none; }
+}

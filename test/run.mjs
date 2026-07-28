@@ -141,6 +141,8 @@ console.log('\nBoot');
   const menu = els.overlay.innerHTML;
   check('menu rendered on load', menu.includes('<span>B</span>') && menu.includes('OCKFALL'));
   check('wordmark L is a drawn tetromino', menu.includes('class="markL"'));
+  check('mark has a floor to land on', menu.includes('markFloor'));
+  check('menu has drifting debris behind it', menu.includes('bgfall') && menu.includes('--piece-'));
   check('theme synced to CSS vars', cssVars['--accent'] === '#ff2d95', JSON.stringify(cssVars['--accent']));
   check('board sized', els.board.width > 0);
 }
@@ -179,6 +181,11 @@ console.log('\nOffline packaging');
   check('every @font-face file exists', faces.every(f => exists(f)), faces.join(', '));
   check('every font is cached by the worker', faces.every(f => listed.includes(f)), faces.join(', '));
   check('font licence shipped alongside it', exists('fonts/OFL.txt'));
+
+  // Splash motion has to be opt-out, and must never gate starting a game.
+  check('motion respects prefers-reduced-motion',
+        /@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(css) &&
+        /\.bgfall\s*\{\s*display:\s*none/.test(css.replace(/\s+/g, ' ')));
 
   check('worker registration resolves against the module', read('src/main.js').includes("new URL('../sw.js', import.meta.url)"));
 }

@@ -13,7 +13,25 @@ export function themeBar() {
 }
 
 export function wordmark() {
-  return `<h1 class="mark"><span>B</span><canvas class="markL"></canvas><span>OCKFALL</span></h1>`;
+  return `
+    <div class="markWrap">
+      <h1 class="mark"><span>B</span><canvas class="markL"></canvas><span>OCKFALL</span></h1>
+      <div class="markFloor"></div>
+    </div>`;
+}
+
+// Debris drifting behind the menu: [left%, w, h, seconds, delay, piece]
+const DEBRIS = [
+  [6, 12, 24, 13, 0, 'i'], [22, 24, 12, 17, -6, 'l'], [38, 12, 36, 15, -11, 't'],
+  [55, 24, 24, 19, -3, 's'], [70, 12, 24, 14, -9, 'i'], [86, 36, 12, 21, -15, 'l'],
+  [15, 12, 12, 23, -18, 't'], [63, 12, 12, 16, -13, 's'],
+];
+
+export function menuBackdrop() {
+  const bits = DEBRIS.map(([left, w, h, dur, delay, piece]) => `
+    <i style="left:${left}%; width:${w}px; height:${h}px; background:var(--piece-${piece});
+              animation-duration:${dur}s; animation-delay:${delay}s;"></i>`).join('');
+  return `<div class="bgfall" aria-hidden="true">${bits}</div>`;
 }
 
 // Canvases in overlay markup can only be drawn once they're actually in the

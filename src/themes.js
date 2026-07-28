@@ -74,6 +74,12 @@ export function setTheme(name) {
   root.setProperty('--board-shadow', theme.boardShadow);
   root.setProperty('--scanlines', theme.scanlines ? 'block' : 'none');
 
+  // Exposed so CSS-only decoration (the menu's drifting debris) follows the
+  // palette without the markup having to be regenerated on a theme switch.
+  for (const p of ['I', 'L', 'S', 'T']) {
+    root.setProperty('--piece-' + p.toLowerCase(), theme.pieces[p]);
+  }
+
   // Colors the Android status bar to match the board.
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.bg);
 
