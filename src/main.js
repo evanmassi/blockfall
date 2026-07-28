@@ -6,6 +6,14 @@ import { updateKeyRepeat } from './input.js';
 import { Sound } from './audio.js';
 import { muteBtn } from './dom.js';
 
+// Resolved against this module, so it still lands on /sw.js when the app is
+// served from a subpath like /blockfall/. Needs HTTPS or localhost.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(new URL('../sw.js', import.meta.url)).catch(() => {});
+  });
+}
+
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && G.state === 'playing') togglePause();

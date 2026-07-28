@@ -3,6 +3,8 @@
 //
 //   node test/run.mjs
 
+import fs from 'node:fs';
+
 const noop = () => {};
 const grad = { addColorStop: noop };
 
@@ -69,6 +71,8 @@ globalThis.localStorage = {
   setItem: (k, v) => { store[k] = String(v); },
 };
 globalThis.requestAnimationFrame = fn => rafQueue.push(fn);
+// Node supplies a read-only `navigator` with no serviceWorker, so main.js's
+// registration guard short-circuits on its own.
 globalThis.window = {
   devicePixelRatio: 2,
   addEventListener: noop,
@@ -123,6 +127,37 @@ console.log('\nBoot');
   check('menu rendered on load', els.overlay.innerHTML.includes('BLOCKFALL'));
   check('theme synced to CSS vars', cssVars['--accent'] === '#ff2d95', JSON.stringify(cssVars['--accent']));
   check('board sized', els.board.width > 0);
+}
+
+console.log('\nOffline packaging');
+{
+  const root = new URL('../', import.meta.url);
+  const read = p => fs.readFileSync(new URL(p, root), 'utf8');
+  const exists = p => fs.existsSync(new URL(p, root));
+
+  const sw = read('sw.js');
+  const listed = [...new Set([...sw.matchAll(/'\.\/([^']*)'/g)].map(m => m[1]))].filter(Boolean);
+
+  const missing = listed.filter(p => !exists(p));
+  // cache.addAll() is atomic: one bad path and the worker never installs at all.
+  check('every asset the worker caches exists', missing.length === 0, missing.join(', '));
+
+  const modules = fs.readdirSync(new URL('src/', root)).filter(f => f.endsWith('.js'));
+  const unlisted = modules.filter(m => !listed.includes('src/' + m));
+  check('every source module is in the asset list', unlisted.length === 0, unlisted.join(', '));
+
+  const manifest = JSON.parse(read('manifest.json'));
+  const badIcons = manifest.icons.filter(i => !exists(i.src));
+  check('every manifest icon exists', badIcons.length === 0, badIcons.map(i => i.src).join(', '));
+  check('manifest has a maskable icon', manifest.icons.some(i => i.purpose === 'maskable'));
+  check('start_url is relative (works from a subpath)', manifest.start_url.startsWith('./'), manifest.start_url);
+  check('scope is relative', manifest.scope.startsWith('./'), manifest.scope);
+
+  const html = read('index.html');
+  check('index links the manifest', html.includes('rel="manifest"'));
+  check('index links an icon', html.includes('rel="icon"'));
+
+  check('worker registration resolves against the module', read('src/main.js').includes("new URL('../sw.js', import.meta.url)"));
 }
 
 console.log('\nThemes');

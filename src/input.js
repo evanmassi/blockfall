@@ -150,6 +150,12 @@ for (const btn of [pauseBtn, muteBtn]) {
   btn.addEventListener('pointerdown', e => e.stopPropagation());
 }
 
+// WebKit-only pinch-zoom events; touch-action alone doesn't stop these on iOS.
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, e => e.preventDefault());
+}
+document.addEventListener('dblclick', e => e.preventDefault());
+
 pauseBtn.addEventListener('click', () => { Sound.init(); togglePause(); });
 
 muteBtn.addEventListener('click', () => {

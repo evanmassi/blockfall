@@ -26,6 +26,10 @@ html, body {
   touch-action:none;
 }
 
+/* touch-action does not inherit, so html/body alone leaves the board zoomable.
+   iOS Safari ignores user-scalable=no, which is where that showed up. */
+#app, #app * { touch-action:none; }
+
 #app {
   position:fixed; inset:0;
   display:flex; flex-direction:column;
