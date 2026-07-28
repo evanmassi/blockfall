@@ -14,6 +14,40 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Bumped by hand when testing on a device, purely so a stale cache is visible
+// rather than looking like a bug. Shown in the ?debug readout.
+const BUILD = 'b10';
+
+// ?debug — logs the real event sequence for a tap. Capture phase on document,
+// so it sees every event regardless of what any handler does with it.
+if (new URLSearchParams(location.search).has('debug')) {
+  const out = document.createElement('div');
+  out.id = 'debug';
+  document.body.appendChild(out);
+
+  const lines = [`build ${BUILD}`];
+  // Also posted to the dev server, so a phone's log lands in debug.log rather
+  // than having to be read off a tiny green bar and retyped.
+  const log = line => {
+    lines.push(line);
+    if (lines.length > 8) lines.splice(1, 1);
+    out.textContent = lines.join('\n');
+    // An image GET, not fetch/sendBeacon: nothing can quietly drop it.
+    try { new Image().src = '/log?m=' + encodeURIComponent(line) + '&t=' + lines.length; } catch {}
+  };
+  globalThis.__bfLog = log;
+  log(`--- session start, build ${BUILD} ---`);
+  for (const type of ['pointerdown', 'pointerup', 'click']) {
+    document.addEventListener(type, e => {
+      const t = e.target;
+      const cls = typeof t.className === 'string' && t.className
+        ? '.' + t.className.trim().split(/\s+/).join('.') : '';
+      const act = t.closest?.('[data-act]')?.dataset.act ?? '-';
+      log(`${type}/${e.pointerType || 'x'} ${t.tagName}${cls} act=${act} → ${G.state}`);
+    }, true);
+  }
+}
+
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && G.state === 'playing') togglePause();

@@ -5,12 +5,16 @@ A block-stacking game for the phone. No build step, no dependencies — plain ES
 ## Run
 
 ```
-python -m http.server 8123
+python dev-server.py 8123
 ```
 
-Then open <http://localhost:8123>.
+Then open <http://localhost:8123>, or the machine's LAN address from a phone on the same network.
 
 The server is required: ES modules are blocked over `file://`, so opening `index.html` directly won't work.
+
+Use `dev-server.py` rather than `python -m http.server` when testing on a device. Mobile Safari caches ES modules independently, so a plain static server can leave a phone running a mix of old and new files — which looks exactly like an application bug. `dev-server.py` sends `no-store` on everything.
+
+Add `?debug` to the URL for an on-screen log of pointer events and the current build id.
 
 ## Test
 
