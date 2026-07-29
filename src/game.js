@@ -9,10 +9,14 @@ import {
 } from './config.js';
 import { ROTATIONS, KICKS, topRow } from './pieces.js';
 import { theme } from './themes.js';
-import { G, emptyGrid, saveStats } from './state.js';
+import {
+  G, emptyGrid, saveStats,
+  saveRun, loadRun, clearRun, encodeGrid, decodeGrid,
+} from './state.js';
 import { collides, fillQueue, makePiece } from './board.js';
 import { view, drawSidePanels } from './render.js';
 import { Sound } from './audio.js';
+import { Haptics } from './haptics.js';
 import {
   showOverlay, hideOverlay, showToast, updateHud, setRecordStyle,
   themeBar, wordmark, menuBackdrop, actionBar,
@@ -27,6 +31,7 @@ function addScore(n) {
     setRecordStyle(true);
     showToast('NEW HIGH SCORE!', theme.accent);
     Sound.record();
+    Haptics.record();
   }
   updateHud();
 }
@@ -53,6 +58,7 @@ export function spawn() {
   fillQueue();
   if (!enterPiece(piece)) return;
   G.canHold = true;
+  snapshotRun(); // every new piece is a stable point to save at
 }
 
 function resetLockState() {
@@ -133,6 +139,7 @@ export function hardDrop() {
   // which flattened the whole clear escalation.
   G.shake = Math.max(G.shake, Math.min(4, 1 + dist * 0.18));
   Sound.drop();
+  Haptics.drop();
   lockPiece();
 }
 
@@ -151,6 +158,7 @@ export function holdPiece() {
   G.canHold = false; // must follow spawn(), which re-arms the hold
   drawSidePanels();
   Sound.holdSfx();
+  Haptics.hold();
 }
 
 // ---------- locking & clearing ----------
@@ -211,7 +219,7 @@ export function lockPiece() {
     G.active = null;
   } else {
     if (spin) applyScore(0, spin);
-    else { G.combo = -1; Sound.lock(); }
+    else { G.combo = -1; Sound.lock(); Haptics.lock(); }
     G.active = null;
     spawn();
   }
@@ -273,7 +281,7 @@ function applyScore(cleared, spin) {
       G.shake = Math.max(G.shake, 12);
     }
 
-    if (spin) Sound.tspin(); else Sound.clear(cleared);
+    if (spin) { Sound.tspin(); Haptics.tspin(); } else { Sound.clear(cleared); Haptics.clear(cleared); }
     if (G.combo > 0) Sound.combo(G.combo);
   } else {
     G.combo = -1;
@@ -283,7 +291,7 @@ function applyScore(cleared, spin) {
   const hadBest = G.newBest;
   addScore(gain);
 
-  if (G.level > prevLevel) Sound.levelUp();
+  if (G.level > prevLevel) { Sound.levelUp(); Haptics.levelUp(); }
 
   // Beating the record outranks the clear label — addScore already toasted it.
   if (!hadBest && G.newBest) { /* keep the high-score toast on screen */ }
@@ -312,9 +320,70 @@ function spawnClearParticles(rows, fx) {
   if (G.particles.length > 900) G.particles.splice(0, G.particles.length - 900);
 }
 
+// ---------- saving and resuming a run ----------
+
+/**
+ * Writes the run to storage. Called at stable points only — a new piece, a
+ * pause, leaving for the menu, or the page being hidden — never mid-clear or
+ * mid-death, so a restored board is always one a player could be looking at.
+ */
+export function snapshotRun() {
+  if (G.state !== 'playing' && G.state !== 'paused') return;
+  saveRun({
+    grid: encodeGrid(G.grid),
+    // The rotation matrix is rebuilt from ROTATIONS, so only the index is kept.
+    active: G.active ? { type: G.active.type, rot: G.active.rot, x: G.active.x, y: G.active.y } : null,
+    queue: G.queue, bag: G.bag, hold: G.hold, canHold: G.canHold,
+    score: G.score, lines: G.lines, level: G.level,
+    combo: G.combo, backToBack: G.backToBack,
+    runBest: G.runBest, newBest: G.newBest,
+  });
+}
+
+export function hasSavedRun() { return !!loadRun(); }
+
+/** Restores the saved run and leaves it paused, rather than dropping the
+ *  player straight back into live gravity. */
+export function resumeRun() {
+  const saved = loadRun();
+  if (!saved) { startGame(); return; }
+
+  G.grid = decodeGrid(saved.grid);
+  G.queue = Array.isArray(saved.queue) ? [...saved.queue] : [];
+  G.bag = Array.isArray(saved.bag) ? [...saved.bag] : null;
+  G.hold = saved.hold ?? null;
+  G.canHold = saved.canHold !== false;
+
+  G.score = saved.score | 0;
+  G.lines = saved.lines | 0;
+  G.level = Math.max(1, saved.level | 0);
+  G.combo = Number.isInteger(saved.combo) ? saved.combo : -1;
+  G.backToBack = !!saved.backToBack;
+  G.runBest = saved.runBest | 0;
+  G.newBest = !!saved.newBest;
+
+  G.gravityAcc = 0; G.particles = []; G.shake = 0;
+  G.clearRows = null; G.pendingClear = null; G.clearCount = 0;
+  G.deathRow = ROWS; G.deathTimer = 0;
+  G.rotatedLast = false; G.lastKick = 0;
+  resetLockState();
+
+  G.state = 'playing';
+  G.active = saved.active
+    ? { ...saved.active, m: ROTATIONS[saved.active.type][saved.active.rot] }
+    : null;
+  if (!G.active) spawn();
+
+  setRecordStyle(G.newBest);
+  updateHud();
+  drawSidePanels();
+  if (G.state === 'playing') togglePause();
+}
+
 // ---------- flow ----------
 
 export function startGame() {
+  clearRun();
   G.grid = emptyGrid();
   G.queue = []; G.bag = null; G.hold = null; G.canHold = true;
   G.score = 0; G.lines = 0; G.level = 1; G.combo = -1; G.backToBack = false;
@@ -351,7 +420,9 @@ function commitStats() {
 function finishGameOver() {
   G.state = 'over';
   Sound.over();
+  Haptics.over();
   commitStats();
+  clearRun(); // the run is finished; nothing left to resume
 
   showOverlay(`
     <h2${G.newBest ? ' class="record"' : ''}>${G.newBest ? 'NEW HIGH SCORE!' : 'GAME OVER'}</h2>
@@ -367,15 +438,31 @@ function finishGameOver() {
   `);
 }
 
+/**
+ * Renders the pause screen. Separate from togglePause so a control on it can
+ * redraw the screen it lives on without resuming the game.
+ */
+export function showPauseScreen() {
+  // Only offered where vibration exists — on iOS the API is absent entirely,
+  // and a toggle for nothing is worse than no toggle.
+  const actions = [['restart', 'RESTART'], ['menu', 'MAIN MENU']];
+  if (Haptics.supported) {
+    actions.push(['haptics', Haptics.enabled ? 'BUZZ ON' : 'BUZZ OFF']);
+  }
+
+  showOverlay(`
+    <h2>PAUSED</h2>
+    ${themeBar()}
+    ${actionBar(actions)}
+    <p class="cta">TAP TO RESUME</p>
+  `, { soft: true }); // board stays readable behind it
+}
+
 export function togglePause() {
   if (G.state === 'playing' || G.state === 'clearing') {
     G.state = G.state === 'clearing' ? 'pausedClearing' : 'paused';
-    showOverlay(`
-      <h2>PAUSED</h2>
-      ${themeBar()}
-      ${actionBar([['restart', 'RESTART'], ['menu', 'MAIN MENU']])}
-      <p class="cta">TAP TO RESUME</p>
-    `, { soft: true }); // board stays readable behind it
+    snapshotRun();
+    showPauseScreen();
   } else if (G.state === 'paused' || G.state === 'pausedClearing') {
     G.state = G.state === 'pausedClearing' ? 'clearing' : 'playing';
     hideOverlay();
@@ -383,7 +470,8 @@ export function togglePause() {
 }
 
 export function showMenu() {
-  commitStats(); // may be arriving from an abandoned run
+  snapshotRun();  // keep the run resumable before the board is torn down
+  commitStats();  // may be arriving from an abandoned run
   G.state = 'menu';
   G.grid = emptyGrid();
   G.active = null;
@@ -403,6 +491,8 @@ export function showMenu() {
     : `&larr; &rarr; move &nbsp;·&nbsp; &uarr; rotate &nbsp;·&nbsp; Z rotate back<br>
        SPACE drop &nbsp;·&nbsp; C hold &nbsp;·&nbsp; P pause`;
 
+  const saved = hasSavedRun();
+
   showOverlay(`
     ${menuBackdrop()}
     ${wordmark()}
@@ -410,11 +500,16 @@ export function showMenu() {
       <div class="best">
         <span class="label">HIGH SCORE</span>
         <b>${G.stats.best.toLocaleString()}</b>
+      </div>
+      <div class="statRow">
+        <div><span class="label">MOST LINES</span><b>${G.stats.bestLines.toLocaleString()}</b></div>
+        <div><span class="label">BEST COMBO</span><b>${G.stats.bestCombo}&times;</b></div>
       </div>` : ''}
     <p>${controls}</p>
     <p class="fine">HOLD stashes a piece for later — once per drop</p>
     ${themeBar()}
-    <p class="cta">TAP TO PLAY</p>
+    ${saved ? actionBar([['new', 'NEW GAME']]) : ''}
+    <p class="cta">${saved ? 'TAP TO CONTINUE' : 'TAP TO PLAY'}</p>
   `, { intro: true });
 }
 

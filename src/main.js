@@ -4,7 +4,7 @@
 import { G, loadStats } from './state.js';
 import { setTheme, savedThemeName } from './themes.js';
 import { resize, render } from './render.js';
-import { update, showMenu, togglePause } from './game.js';
+import { update, showMenu, togglePause, snapshotRun } from './game.js';
 import { updateKeyRepeat } from './input.js';
 import { Sound } from './audio.js';
 import { muteBtn } from './dom.js';
@@ -52,9 +52,15 @@ if (new URLSearchParams(location.search).has('debug')) {
 }
 
 document.addEventListener('contextmenu', e => e.preventDefault());
+
+// Save before the page can go away. pagehide is the one that actually fires on
+// iOS when an app is swiped away or backgrounded; unload is not reliable there.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && G.state === 'playing') togglePause();
+  if (!document.hidden) return;
+  if (G.state === 'playing') togglePause(); // also snapshots
+  else snapshotRun();
 });
+window.addEventListener('pagehide', snapshotRun);
 window.addEventListener('resize', resize);
 window.visualViewport?.addEventListener('resize', resize);
 

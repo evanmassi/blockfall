@@ -9,8 +9,12 @@ import { stage, overlay, pauseBtn, muteBtn } from './dom.js';
 import { onOverlayAction } from './ui.js';
 import {
   move, rotate, softDrop, hardDrop, holdPiece,
-  startGame, togglePause, showMenu,
+  startGame, togglePause, showMenu, hasSavedRun, resumeRun, showPauseScreen,
 } from './game.js';
+import { Haptics } from './haptics.js';
+
+/** Tapping the menu picks up a saved run if there is one, else starts fresh. */
+const playFromMenu = () => (hasSavedRun() ? resumeRun() : startGame());
 
 // ---------- keyboard ----------
 
@@ -47,7 +51,10 @@ document.addEventListener('keydown', e => {
   if (e.repeat) return;
 
   if (G.state === 'menu' || G.state === 'over') {
-    if (e.key === ' ' || e.key === 'Enter') { Sound.init(); startGame(); }
+    if (e.key === ' ' || e.key === 'Enter') {
+      Sound.init();
+      if (G.state === 'menu') playFromMenu(); else startGame();
+    }
     return;
   }
   if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { togglePause(); return; }
@@ -101,15 +108,22 @@ overlay.addEventListener('pointerdown', e => {
   if (e.target.closest?.('.menuBtns')) return;
 
   Sound.init();
-  if (G.state === 'menu' || G.state === 'over') startGame();
+  if (G.state === 'menu') playFromMenu();
+  else if (G.state === 'over') startGame();
   else if (G.state === 'paused' || G.state === 'pausedClearing') togglePause();
 });
 
 onOverlayAction(act => {
   Sound.init();
-  if (act === 'restart') startGame();
+  if (act === 'restart' || act === 'new') startGame();
+  else if (act === 'continue') resumeRun();
   else if (act === 'menu') showMenu();
   else if (act === 'resume') togglePause();
+  else if (act === 'haptics') {
+    Haptics.setEnabled(!Haptics.enabled);
+    Haptics.lock();          // a sample of what was just switched on
+    showPauseScreen();       // redraw so the label matches, without resuming
+  }
 });
 
 stage.addEventListener('pointerdown', e => {

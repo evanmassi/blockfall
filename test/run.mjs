@@ -23,7 +23,7 @@ const ctxStub = () => {
 };
 
 const docHandlers = {}, handlers = {}, els = {};
-const IDS = ['board','holdCanvas','nextCanvas','overlay','toast','stage','railLeft','railRight',
+const IDS = ['app','hud','board','holdCanvas','nextCanvas','overlay','toast','stage','railLeft','railRight',
              'score','level','lines','pauseBtn','muteBtn'];
 
 for (const id of IDS) {
@@ -42,6 +42,7 @@ for (const id of IDS) {
     ctx,
     getContext: () => ctx,
     getBoundingClientRect: () => ({ width: 60, height: 600, top: 0, left: 0 }),
+    offsetHeight: id === 'hud' ? 95 : 0,
     addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); },
     animate: () => ({}),
     setPointerCapture: noop,
@@ -96,9 +97,11 @@ globalThis.document = {
 globalThis.localStorage = {
   getItem: k => (k in store ? store[k] : null),
   setItem: (k, v) => { store[k] = String(v); },
+  removeItem: k => { delete store[k]; },
 };
 globalThis.requestAnimationFrame = fn => rafQueue.push(fn);
 globalThis.location = { search: '' };
+globalThis.getComputedStyle = () => ({ paddingTop: '0px', paddingBottom: '0px' });
 // Node supplies a read-only `navigator` with no serviceWorker, so main.js's
 // registration guard short-circuits on its own.
 globalThis.window = {
@@ -118,6 +121,8 @@ const { THEMES, theme, savedThemeName } = await import('../src/themes.js');
 const board = await import('../src/board.js');
 const game = await import('../src/game.js');
 const { applyTheme, view } = await import('../src/render.js');
+const { INSET_MARKS, NES_MARKS } = await import('../src/sprites.js');
+const { Haptics, HAPTIC_CLEAR_PATTERNS } = await import('../src/haptics.js');
 const { themeBar } = await import('../src/ui.js');
 await import('../src/main.js'); // boots: theme, resize, menu, loop
 
@@ -230,18 +235,62 @@ console.log('\nThemes');
     typeof THEMES[n].block.outline === 'string');
   check('every theme has a complete palette', complete);
 
-  const distinct = names.every(n => new Set(Object.values(THEMES[n].pieces)).size === 7);
-  check('no theme reuses a piece color', distinct);
+  // Repeating colours is a deliberate hardware trait, not an oversight — but
+  // only where the theme says so. Anywhere else it means two tetrominoes have
+  // silently become the same piece.
+  const badPalette = names.filter(n => {
+    const unique = new Set(Object.values(THEMES[n].pieces)).size;
+    return THEMES[n].sharedPalette ? unique < 2 : unique !== TYPES.length;
+  });
+  check('piece colours are distinct unless the theme shares a palette',
+        badPalette.length === 0, badPalette.join(', '));
+  check('NES uses one level triple, not seven colours',
+        new Set(Object.values(THEMES.nes.pieces)).size === 3,
+        [...new Set(Object.values(THEMES.nes.pieces))].join(' '));
 
-  // Dark wells only — a light theme was tried and rejected.
+  // This replaced a blunt "every theme must be dark" rule. Darkness was only
+  // ever a proxy for the thing that matters — a piece has to read against the
+  // well it sits on — and Game Boy's light LCD panel is a legitimate exception.
   const lum = hex => {
     const n = parseInt(hex.slice(1), 16);
     return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
   };
-  const bright = names.filter(n => lum(THEMES[n].well) > 70 || lum(THEMES[n].bg) > 70);
-  check('every theme is dark', bright.length === 0, bright.join(', '));
+  const faint = [];
+  for (const n of names) {
+    const wellLum = lum(THEMES[n].well);
+    for (const [piece, hex] of Object.entries(THEMES[n].pieces)) {
+      if (Math.abs(lum(hex) - wellLum) < 40) faint.push(`${n}.${piece}`);
+    }
+  }
+  check('every piece reads against its own well', faint.length === 0, faint.join(', '));
 
   check('every theme has a soft overlay for pause', names.every(n => typeof THEMES[n].overlaySoft === 'string'));
+
+  // An unknown style silently falls back to bevel, which would quietly undo
+  // the whole point of a hardware theme.
+  const STYLES = ['bevel', 'inset', 'nes'];
+  const badStyle = names.filter(n => !STYLES.includes(THEMES[n].block.style));
+  check('every theme declares a known block style', badStyle.length === 0, badStyle.join(', '));
+  check('the hardware themes do not use the bevel',
+        THEMES.gameboy.block.style === 'inset' && THEMES.nes.block.style === 'nes');
+  check('Game Boy has no glow', THEMES.gameboy.block.glow === 0);
+
+  // On a monochrome panel the fill pattern is the piece's identity, so a
+  // missing or duplicated mark makes two tetrominoes the same block.
+  const marks = TYPES.map(t => INSET_MARKS[t]);
+  check('every piece has a Game Boy fill mark', marks.every(Boolean), JSON.stringify(INSET_MARKS));
+  check('no two pieces share a fill mark', new Set(marks).size === TYPES.length, marks.join(','));
+
+  // NES used two tiles per level, so both must actually appear.
+  const nes = TYPES.map(t => NES_MARKS[t]);
+  check('every piece has an NES tile', nes.every(Boolean), JSON.stringify(NES_MARKS));
+  check('both NES tile designs are used', new Set(nes).size === 2, nes.join(','));
+
+  // A white block with a white corner highlight is invisible; the pale pieces
+  // have to be the punched-out ring instead.
+  const pale = TYPES.filter(t => lum(THEMES.nes.pieces[t]) > 190);
+  check('pale NES pieces use the ring tile', pale.every(t => NES_MARKS[t] === 'ring'),
+        pale.map(t => `${t}=${NES_MARKS[t]}`).join(', '));
 
   applyTheme('aurora');
   check('applyTheme switches the live theme', theme.key === 'aurora', theme.key);
@@ -622,6 +671,124 @@ console.log('\nOverlay actions');
   pressButton('restart');
   fireDown('mouse', backdrop);
   check('restart starts a fresh game', G.state === 'playing' && G.score === 0, `${G.state}/${G.score}`);
+}
+
+console.log('\nHaptics');
+{
+  check('vibration support is detected, not assumed', typeof Haptics.supported === 'boolean');
+  check('every clear length has a pattern',
+        [1, 2, 3, 4].every(n => Array.isArray(HAPTIC_CLEAR_PATTERNS[n])),
+        JSON.stringify(HAPTIC_CLEAR_PATTERNS));
+  check('bigger clears get more pulses',
+        [1, 2, 3, 4].map(n => HAPTIC_CLEAR_PATTERNS[n].length).every((v, i, a) => i === 0 || v > a[i - 1]),
+        [1, 2, 3, 4].map(n => HAPTIC_CLEAR_PATTERNS[n].length).join(' < '));
+
+  // Node has no navigator.vibrate, so this also covers the iPhone case.
+  let threw = false;
+  try {
+    Haptics.lock(); Haptics.drop(); Haptics.hold();
+    Haptics.clear(4); Haptics.tspin(); Haptics.levelUp(); Haptics.record(); Haptics.over();
+  } catch { threw = true; }
+  check('calls are inert where vibration is unavailable', !threw);
+
+  // Movement fires several times a second; buzzing there reads as a fault.
+  const src = fs.readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
+  const moveBody = src.slice(src.indexOf('export function move('), src.indexOf('export function rotate('));
+  check('no haptics on move or rotate', !moveBody.includes('Haptics.'));
+
+  // Neither of us owns a device that vibrates, so the off switch has to be
+  // reachable by whoever ends up holding the phone.
+  game.startGame();
+  pumpMs(20);
+  game.togglePause();
+  check('no buzz toggle where vibration is unsupported',
+        !els.overlay.innerHTML.includes('data-act="haptics"'));
+
+  Haptics.supported = true; // pretend we are on an Android device
+  game.showPauseScreen();
+  check('buzz toggle offered where it is supported', els.overlay.innerHTML.includes('data-act="haptics"'));
+  check('toggle label reflects the current state', els.overlay.innerHTML.includes('BUZZ ON'));
+
+  // Buttons carry their own listeners, so press the element rather than the
+  // overlay — going through the overlay would just be "tap anywhere to resume".
+  const wasEnabled = Haptics.enabled;
+  const btn = actionButtons.find(b => b.dataset.act === 'haptics');
+  for (const fn of btn.listeners.pointerdown || []) {
+    fn({
+      pointerType: 'touch', button: 0, target: btn, timeStamp: 9000,
+      stopPropagation: noop, preventDefault: noop,
+    });
+  }
+  check('toggling flips the setting', Haptics.enabled === !wasEnabled);
+  check('toggling does not resume the game', G.state === 'paused', G.state);
+  check('label updates in place', els.overlay.innerHTML.includes('BUZZ OFF'));
+  check('choice is persisted', store['blockfall.haptics'] === '0', store['blockfall.haptics']);
+
+  Haptics.setEnabled(true);
+  Haptics.supported = false;
+  game.togglePause();
+}
+
+console.log('\nRecords on the menu');
+{
+  G.stats = { best: 8400, bestLines: 63, bestCombo: 5 };
+  game.showMenu();
+  const menu = els.overlay.innerHTML;
+  check('high score shown', menu.includes('8,400'));
+  check('most lines shown', menu.includes('MOST LINES') && menu.includes('63'));
+  check('best combo shown', menu.includes('BEST COMBO') && menu.includes('5'));
+
+  // Nothing to boast about before the first game.
+  G.stats = { best: 0, bestLines: 0, bestCombo: 0 };
+  game.showMenu();
+  check('records hidden before the first game', !els.overlay.innerHTML.includes('MOST LINES'));
+}
+
+console.log('\nResuming a run');
+{
+  game.startGame();
+  pumpMs(20);
+  clearGrid();
+  G.grid[ROWS - 1][3] = 'T';
+  G.grid[ROWS - 1][4] = 'S';
+  G.score = 2750; G.lines = 7; G.level = 2; G.hold = 'I';
+  game.snapshotRun();
+
+  check('a run in progress is saved', game.hasSavedRun());
+  check('board stored compactly', JSON.parse(store['blockfall.run']).grid.length === ROWS * COLS);
+
+  // Simulate a relaunch: wipe live state, then resume from storage alone.
+  game.showMenu();
+  check('menu still offers the run', game.hasSavedRun());
+  check('menu shows a new-game escape hatch', els.overlay.innerHTML.includes('data-act="new"'));
+  check('menu prompt reflects the saved run', els.overlay.innerHTML.includes('TAP TO CONTINUE'));
+
+  game.resumeRun();
+  check('resumes paused, not into live gravity', G.state === 'paused', G.state);
+  check('score restored', G.score === 2750, String(G.score));
+  check('lines and level restored', G.lines === 7 && G.level === 2, `${G.lines}/${G.level}`);
+  check('hold restored', G.hold === 'I', String(G.hold));
+  check('board restored', G.grid[ROWS - 1][3] === 'T' && G.grid[ROWS - 1][4] === 'S');
+  check('active piece has a usable rotation matrix', !G.active || Array.isArray(G.active.m));
+
+  // Finishing or abandoning must not leave a stale run behind.
+  game.togglePause();
+  game.gameOver();
+  pumpMs(DEATH_ROW_MS * 25 + DEATH_HOLD_MS + 150);
+  check('game over clears the saved run', !game.hasSavedRun());
+
+  game.startGame();
+  pumpMs(20);
+  game.snapshotRun();
+  check('a fresh run saves again', game.hasSavedRun());
+  game.startGame();
+  pumpMs(20);
+  check('starting a new game discards the old one', JSON.parse(store['blockfall.run']).score === 0);
+
+  // A payload from an older schema must be ignored rather than half-loaded.
+  store['blockfall.run'] = JSON.stringify({ v: 0, score: 999 });
+  check('an incompatible saved run is discarded', !game.hasSavedRun());
+  delete store['blockfall.run'];
 }
 
 console.log('\nDrop gestures');
