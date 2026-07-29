@@ -514,7 +514,7 @@ console.log('\nBlock out + death curtain');
   check('curtain reaches the top', G.deathRow === HIDDEN, String(G.deathRow));
   check('game over shown after the sweep', G.state === 'over', G.state);
   check('overlay rendered', els.overlay.innerHTML.includes('GAME OVER'));
-  check('best score persisted', JSON.parse(store['blockfall.stats']).best >= 0);
+  check('best score persisted', JSON.parse(store['blockfall.stats']).marathon.score >= 0);
 }
 
 console.log('\nOverlay restart');
@@ -563,7 +563,7 @@ console.log('\nNew high score');
   };
 
   // First ever game: nothing to beat, so scoring at all must not celebrate.
-  G.stats = { best: 0, bestLines: 0, bestCombo: 0 };
+  G.stats = { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } };
   game.startGame();
   pumpMs(20);
   clearGrid();
@@ -572,7 +572,7 @@ console.log('\nNew high score');
   check('score stays unmarked', !els.score.classes.has('record'));
 
   // With a real target, it fires exactly when the score passes it.
-  G.stats = { best: 150, bestLines: 0, bestCombo: 0 };
+  G.stats = { marathon: { score: 150, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } };
   game.startGame();
   pumpMs(20);
   clearGrid();
@@ -590,7 +590,8 @@ console.log('\nNew high score');
   game.gameOver();
   pumpMs(DEATH_ROW_MS * 25 + DEATH_HOLD_MS + 150);
   check('game over celebrates the record', els.overlay.innerHTML.includes('NEW HIGH SCORE!'));
-  check('record persisted as the new best', G.stats.best === G.score, `${G.stats.best} vs ${G.score}`);
+  check('record persisted as the new best', G.stats.marathon.score === G.score,
+        `${G.stats.marathon.score} vs ${G.score}`);
 
   // Starting again clears the marking.
   game.startGame();
@@ -657,13 +658,13 @@ console.log('\nOverlay actions');
   check('menu clears the abandoned board', G.grid.every(r => r.every(c => !c)));
 
   // Abandoning a good run should still keep the score.
-  G.stats = { best: 0, bestLines: 0, bestCombo: 0 };
+  G.stats = { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } };
   game.startGame();
   pumpMs(20);
   G.score = 4321;
   G.lines = 12;
   game.showMenu();
-  check('abandoned run still records a best', G.stats.best === 4321, String(G.stats.best));
+  check('abandoned run still records a best', G.stats.marathon.score === 4321, String(G.stats.marathon.score));
 
   game.startGame();
   pumpMs(20);
@@ -672,6 +673,146 @@ console.log('\nOverlay actions');
   pressButton('restart');
   fireDown('mouse', backdrop);
   check('restart starts a fresh game', G.state === 'playing' && G.score === 0, `${G.state}/${G.score}`);
+}
+
+console.log('\nZen mode');
+{
+  const fillFrom = row => {
+    for (let y = row; y < ROWS; y++) for (let x = 0; x < COLS; x++) G.grid[y][x] = 'T';
+  };
+
+  game.startGame('zen');
+  pumpMs(20);
+  check('mode recorded', G.mode === 'zen', G.mode);
+
+  // Speed stops climbing, or "endless" would only mean "later".
+  const at = lvl => { const p = G.level; G.level = lvl; const ms = game.gravityInterval(); G.level = p; return ms; };
+  check('gravity caps for zen', at(5) === at(20), `${Math.round(at(5))}ms vs ${Math.round(at(20))}ms`);
+  const zenCap = at(20);
+  G.mode = 'marathon';
+  check('marathon keeps accelerating', at(20) < zenCap, `${Math.round(at(20))}ms vs ${Math.round(zenCap)}ms`);
+  G.mode = 'zen';
+
+  // Filled to the very top, so the spawn genuinely collides. Filling from just
+  // below the buffer is not enough — a piece still settles in above it.
+  clearGrid();
+  fillFrom(0);
+  const filledBefore = G.grid.flat().filter(Boolean).length;
+  game.spawn();
+  check('topping out does not end a zen run', G.state === 'playing', G.state);
+  check('a piece is still in play', G.active !== null);
+  check('room was cleared', G.grid.flat().filter(Boolean).length < filledBefore,
+        `${filledBefore} -> ${G.grid.flat().filter(Boolean).length}`);
+  check('the top of the well is free', G.grid[HIDDEN].every(c => !c));
+
+  // Zen must not touch the marathon record — an endless run would own it forever.
+  G.stats = { marathon: { score: 5000, lines: 40, combo: 3 }, zen: { score: 0, lines: 0, combo: 0 } };
+  G.score = 999999;
+  G.lines = 250;
+  game.showMenu();
+  check('zen leaves the marathon score alone', G.stats.marathon.score === 5000, String(G.stats.marathon.score));
+  check('zen leaves marathon lines alone', G.stats.marathon.lines === 40, String(G.stats.marathon.lines));
+  check('zen records its own lines', G.stats.zen.lines === 250, String(G.stats.zen.lines));
+  check('zen records its own score', G.stats.zen.score === 999999, String(G.stats.zen.score));
+  check('zen gets its own record card', els.overlay.innerHTML.includes('>ZEN<'));
+  check('menu offers zen', els.overlay.innerHTML.includes('data-act="zen"'));
+
+  // Each mode keeps its own slot: starting one must not discard the other.
+  delete store['blockfall.run.marathon'];
+  delete store['blockfall.run.zen'];
+
+  game.startGame('zen');
+  pumpMs(20);
+  G.lines = 42;
+  game.showMenu();
+  let menu = els.overlay.innerHTML;
+  check('prompt names the mode it will resume', menu.includes('TAP TO RESUME ZEN'), 'no mode in prompt');
+  check('resume button carries its progress', menu.includes('RESUME ZEN &middot; 42 LINES') || menu.includes('RESUME ZEN · 42 LINES'), 'no progress on button');
+  check('zen button reads as starting a new one', menu.includes('NEW ZEN'));
+  check('resuming is still the primary action', menu.includes('TAP TO RESUME'));
+
+  game.startGame('marathon');
+  pumpMs(20);
+  G.score = 3210;
+  game.showMenu();
+  menu = els.overlay.innerHTML;
+  check('starting marathon left the zen run alone', game.hasSavedRun('zen'));
+  check('both runs offered', menu.includes('data-act="continue"') && menu.includes('data-act="continue-zen"'));
+  check('each resume shows its own progress', menu.includes('3,210') && menu.includes('42'));
+  check('marathon resume carries its score', menu.includes('RESUME GAME') && menu.includes('3,210'));
+
+  // One verb throughout — no CONTINUE anywhere alongside RESUME.
+  check('one word for the action, not two', !menu.includes('CONTINUE'), 'mixed CONTINUE and RESUME');
+
+
+  // Tapping the backdrop picks up whichever was played most recently.
+  check('most recent mode is what a plain tap resumes', game.pendingRun() === 'marathon', game.pendingRun());
+  game.resumeRun('zen');
+  check('resuming zen explicitly works', G.mode === 'zen' && G.lines === 42, `${G.mode}/${G.lines}`);
+  game.showMenu();
+  check('and becomes the pending one', game.pendingRun() === 'zen', game.pendingRun());
+
+  // "1 LINES" was on screen. Kept after the checks above, which depend on the
+  // saves those two lines would overwrite.
+  game.startGame('zen');
+  pumpMs(20);
+  G.lines = 1;
+  game.showMenu();
+  check('a single line is not pluralised',
+        els.overlay.innerHTML.includes('1 LINE') && !els.overlay.innerHTML.includes('1 LINES'),
+        'says 1 LINES');
+
+  game.startGame('zen');
+  pumpMs(20);
+  G.lines = 2;
+  game.showMenu();
+  check('two lines are', els.overlay.innerHTML.includes('2 LINES'));
+
+  // A run written under the old single-slot key must not be lost.
+  delete store['blockfall.run.marathon'];
+  delete store['blockfall.run.zen'];
+  store['blockfall.run'] = JSON.stringify({ v: 1, mode: 'zen', lines: 7, score: 10, grid: '.'.repeat(ROWS * COLS) });
+  const { migrateLegacyRun } = await import('../src/state.js');
+  migrateLegacyRun();
+  check('a legacy save is rehomed to its mode', !!game.hasSavedRun('zen'));
+  check('and the old key is cleared', !('blockfall.run' in store));
+
+  // No high-score chase in a mode with no ceiling.
+  game.startGame('zen');
+  pumpMs(20);
+  check('zen now has its own record to chase', G.runBest === G.stats.zen.score,
+        G.runBest + ' vs ' + G.stats.zen.score);
+
+  // Records must stay in their own mode's slot, both ways round.
+  G.stats = { marathon: { score: 100, lines: 5, combo: 2 }, zen: { score: 200, lines: 9, combo: 3 } };
+  game.startGame('marathon');
+  pumpMs(20);
+  G.score = 5000; G.lines = 30;
+  game.showMenu();
+  check('a marathon run cannot touch zen records',
+        G.stats.zen.score === 200 && G.stats.zen.lines === 9,
+        `${G.stats.zen.score}/${G.stats.zen.lines}`);
+  check('and does update its own', G.stats.marathon.score === 5000 && G.stats.marathon.lines === 30);
+  check('both modes appear on the menu',
+        (els.overlay.innerHTML.match(/recordCard/g) || []).length === 2,
+        String((els.overlay.innerHTML.match(/recordCard/g) || []).length));
+
+  // A saved zen run must come back as zen. Self-contained: only a zen save
+  // exists, so a plain resume can't pick anything else regardless of what ran
+  // before this. A relaunch is simulated by resetting the live mode, since
+  // startGame would clear the very slot being tested.
+  delete store['blockfall.run.marathon'];
+  game.startGame('zen');
+  pumpMs(20);
+  G.lines = 13;
+  game.snapshotRun();
+  G.mode = 'marathon';
+  game.resumeRun();
+  check('a resumed zen run is still zen', G.mode === 'zen', G.mode);
+  check('and brings its progress back', G.lines === 13, String(G.lines));
+
+  game.startGame('marathon');
+  pumpMs(20);
 }
 
 console.log('\nHUD polish');
@@ -856,17 +997,17 @@ console.log('\nHaptics');
 
 console.log('\nRecords on the menu');
 {
-  G.stats = { best: 8400, bestLines: 63, bestCombo: 5 };
+  G.stats = { marathon: { score: 8400, lines: 63, combo: 5 }, zen: { score: 0, lines: 0, combo: 0 } };
   game.showMenu();
   const menu = els.overlay.innerHTML;
   check('high score shown', menu.includes('8,400'));
-  check('most lines shown', menu.includes('MOST LINES') && menu.includes('63'));
-  check('best combo shown', menu.includes('BEST COMBO') && menu.includes('5'));
+  check('lines shown', menu.includes('63'));
+  check('combo shown', menu.includes('5&times;') || menu.includes('5×'));
 
   // Nothing to boast about before the first game.
-  G.stats = { best: 0, bestLines: 0, bestCombo: 0 };
+  G.stats = { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } };
   game.showMenu();
-  check('records hidden before the first game', !els.overlay.innerHTML.includes('MOST LINES'));
+  check('records hidden before the first game', !els.overlay.innerHTML.includes('recordCard'));
 }
 
 console.log('\nResuming a run');
@@ -879,14 +1020,15 @@ console.log('\nResuming a run');
   G.score = 2750; G.lines = 7; G.level = 2; G.hold = 'I';
   game.snapshotRun();
 
-  check('a run in progress is saved', game.hasSavedRun());
-  check('board stored compactly', JSON.parse(store['blockfall.run']).grid.length === ROWS * COLS);
+  check('a run in progress is saved', game.hasSavedRun('marathon'));
+  check('board stored compactly',
+        JSON.parse(store['blockfall.run.marathon']).grid.length === ROWS * COLS);
 
   // Simulate a relaunch: wipe live state, then resume from storage alone.
   game.showMenu();
-  check('menu still offers the run', game.hasSavedRun());
+  check('menu still offers the run', game.hasSavedRun('marathon'));
   check('menu shows a new-game escape hatch', els.overlay.innerHTML.includes('data-act="new"'));
-  check('menu prompt reflects the saved run', els.overlay.innerHTML.includes('TAP TO CONTINUE'));
+  check('menu prompt reflects the saved run', els.overlay.innerHTML.includes('TAP TO RESUME'));
 
   game.resumeRun();
   check('resumes paused, not into live gravity', G.state === 'paused', G.state);
@@ -900,19 +1042,23 @@ console.log('\nResuming a run');
   game.togglePause();
   game.gameOver();
   pumpMs(DEATH_ROW_MS * 25 + DEATH_HOLD_MS + 150);
-  check('game over clears the saved run', !game.hasSavedRun());
+  check('game over clears the saved run', !game.hasSavedRun('marathon'));
 
   game.startGame();
   pumpMs(20);
   game.snapshotRun();
-  check('a fresh run saves again', game.hasSavedRun());
+  check('a fresh run saves again', game.hasSavedRun('marathon'));
   game.startGame();
   pumpMs(20);
-  check('starting a new game discards the old one', JSON.parse(store['blockfall.run']).score === 0);
+  // The slot is cleared and then immediately reoccupied by the new run, so the
+  // check is that what's saved is the fresh game, not that nothing is.
+  check('starting a new game replaces its own slot',
+        JSON.parse(store['blockfall.run.marathon']).score === 0,
+        String(JSON.parse(store['blockfall.run.marathon']).score));
 
   // A payload from an older schema must be ignored rather than half-loaded.
-  store['blockfall.run'] = JSON.stringify({ v: 0, score: 999 });
-  check('an incompatible saved run is discarded', !game.hasSavedRun());
+  store['blockfall.run.marathon'] = JSON.stringify({ v: 0, score: 999 });
+  check('an incompatible saved run is discarded', !game.hasSavedRun('marathon'));
   delete store['blockfall.run'];
 }
 

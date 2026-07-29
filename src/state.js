@@ -10,9 +10,30 @@ export function emptyGrid() {
   return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 }
 
+// Records are per mode and identical in shape. Zen's score is unbounded — you
+// cannot lose — but that only makes it a bad *shared* record, and the modes
+// don't share one.
+const blankModeStats = () => ({ score: 0, lines: 0, combo: 0 });
+const blankStats = () => ({ marathon: blankModeStats(), zen: blankModeStats() });
+
 export function loadStats() {
-  try { return { best: 0, bestLines: 0, bestCombo: 0, ...JSON.parse(localStorage.getItem(STORE) || '{}') }; }
-  catch { return { best: 0, bestLines: 0, bestCombo: 0 }; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE) || 'null');
+    if (!raw) return blankStats();
+
+    if (raw.marathon || raw.zen) {
+      return {
+        marathon: { ...blankModeStats(), ...raw.marathon },
+        zen: { ...blankModeStats(), ...raw.zen },
+      };
+    }
+
+    // Flat shape from before the split: everything but zen lines was marathon.
+    return {
+      marathon: { score: raw.best | 0, lines: raw.bestLines | 0, combo: raw.bestCombo | 0 },
+      zen: { score: 0, lines: raw.bestZenLines | 0, combo: 0 },
+    };
+  } catch { return blankStats(); }
 }
 
 export function saveStats() {
@@ -21,23 +42,51 @@ export function saveStats() {
 
 // ---------- in-progress run ----------
 
-const RUN_STORE = 'blockfall.run';
+// One save per mode. Sharing a slot meant starting either mode silently threw
+// away the other, which is a bad surprise for something you left mid-game.
 const RUN_VERSION = 1;
+const LEGACY_RUN_STORE = 'blockfall.run';
+const LAST_MODE_STORE = 'blockfall.lastmode';
+const runKey = mode => `blockfall.run.${mode}`;
 
-export function saveRun(payload) {
-  try { localStorage.setItem(RUN_STORE, JSON.stringify({ v: RUN_VERSION, ...payload })); } catch {}
+export function saveRun(mode, payload) {
+  try { localStorage.setItem(runKey(mode), JSON.stringify({ v: RUN_VERSION, ...payload })); } catch {}
 }
 
 /** Returns null if absent, unreadable, or written by an older schema. */
-export function loadRun() {
+export function loadRun(mode) {
   try {
-    const run = JSON.parse(localStorage.getItem(RUN_STORE) || 'null');
+    const run = JSON.parse(localStorage.getItem(runKey(mode)) || 'null');
     return run && run.v === RUN_VERSION ? run : null;
   } catch { return null; }
 }
 
-export function clearRun() {
-  try { localStorage.removeItem(RUN_STORE); } catch {}
+export function clearRun(mode) {
+  try { localStorage.removeItem(runKey(mode)); } catch {}
+}
+
+/** Which mode tapping the menu should pick up. */
+export function saveLastMode(mode) {
+  try { localStorage.setItem(LAST_MODE_STORE, mode); } catch {}
+}
+
+export function loadLastMode() {
+  try { return localStorage.getItem(LAST_MODE_STORE) === 'zen' ? 'zen' : 'marathon'; }
+  catch { return 'marathon'; }
+}
+
+/** Rehomes a run saved before the slots were split, so nobody loses a game. */
+export function migrateLegacyRun() {
+  try {
+    const raw = localStorage.getItem(LEGACY_RUN_STORE);
+    if (!raw) return;
+    const run = JSON.parse(raw);
+    if (run && run.v === RUN_VERSION) {
+      const mode = run.mode === 'zen' ? 'zen' : 'marathon';
+      if (!localStorage.getItem(runKey(mode))) localStorage.setItem(runKey(mode), raw);
+    }
+    localStorage.removeItem(LEGACY_RUN_STORE);
+  } catch {}
 }
 
 /** The board as one string, '.' for empty — 220 chars rather than nested JSON. */
@@ -68,10 +117,11 @@ export const G = {
   canHold: true,
 
   state: 'menu',   // menu | playing | clearing | paused | pausedClearing | dying | over
+  mode: 'marathon', // marathon | zen
   score: 0, lines: 0, level: 1, combo: -1, backToBack: false,
   runBest: 0,      // score to beat, captured at the start of the run
   newBest: false,
-  stats: { best: 0, bestLines: 0, bestCombo: 0 },
+  stats: { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } },
 
   gravityAcc: 0,
 

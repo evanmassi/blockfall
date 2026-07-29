@@ -26,7 +26,7 @@
 /* Press Start 2P is one weight and renders much larger and wider per px than a
    normal face, so anything using it sets its own size and tight letter-spacing,
    and must never be synthetically bolded. */
-[class*="label"], .stat b, .best b, .statRow b, .swatch em,
+[class*="label"], .stat b, .best b, .recordCard b, .recordCard .sub, .swatch em,
 #score, #toast, #overlay h1, #overlay h2, #overlay .cta {
   font-family:var(--font-display);
   font-weight:400;
@@ -219,11 +219,19 @@ html, body {
   color:var(--text); text-shadow:0 0 14px var(--accent), 0 0 34px var(--accent);
 }
 
-/* Records that were being tracked and saved every game but never displayed. */
-.statRow { display:flex; justify-content:center; gap:30px; margin-top:-4px; }
-.statRow > div { display:flex; flex-direction:column; align-items:center; gap:5px; }
-.statRow .label { font-size:7px; letter-spacing:.14em; }
-.statRow b { font-size:clamp(12px,4vw,16px); color:var(--text); letter-spacing:.01em; }
+/* One card per mode, identical in shape — Zen is not a lesser record. */
+.records { display:flex; flex-wrap:wrap; justify-content:center; gap:14px; }
+.recordCard {
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  padding:8px 16px; min-width:112px;
+  border-top:1px solid var(--edge); border-bottom:1px solid var(--edge);
+}
+.recordCard .label { font-size:7px; letter-spacing:.26em; }
+.recordCard b {
+  font-size:clamp(15px,5vw,22px); line-height:1.3; letter-spacing:.01em;
+  color:var(--text); text-shadow:0 0 12px var(--accent), 0 0 28px var(--accent);
+}
+.recordCard .sub { font-size:7px; letter-spacing:.1em; color:var(--dim); }
 
 .best.new { border-color:var(--accent); }
 .best.new .label, .best.new b { color:var(--accent); }
@@ -303,6 +311,7 @@ html, body {
   background:var(--panel); border:1px solid var(--edge); color:var(--dim);
 }
 .menuBtn:active { color:var(--text); border-color:var(--accent); background:var(--edge); }
+.btnBreak { flex-basis:100%; height:0; margin:0; }
 
 .bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
 .bgfall i {

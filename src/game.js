@@ -7,12 +7,14 @@ import {
   LINE_SCORES, TSPIN_SCORES, TSPIN_MINI_SCORES, PERFECT_SCORES,
   LOCK_DELAY, MAX_LOCK_RESETS, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS,
   FRAME_MS, GRAVITY_FRAMES, GRAVITY_MIN_FRAMES,
+  ZEN_SPEED_CAP_LEVEL, ZEN_RESCUE_ROWS,
 } from './config.js';
 import { ROTATIONS, KICKS, topRow } from './pieces.js';
 import { theme } from './themes.js';
 import {
   G, emptyGrid, saveStats,
   saveRun, loadRun, clearRun, encodeGrid, decodeGrid,
+  saveLastMode, loadLastMode,
 } from './state.js';
 import { collides, fillQueue, makePiece } from './board.js';
 import { view, drawSidePanels, syncLevelPalette } from './render.js';
@@ -42,7 +44,12 @@ function addScore(n) {
 // Settles a new piece into the top of the visible field so it never appears
 // half-cut by the hidden buffer rows.
 function enterPiece(piece) {
-  if (collides(piece.m, piece.x, piece.y)) { gameOver(); return false; }
+  if (collides(piece.m, piece.x, piece.y)) {
+    if (G.mode !== 'zen') { gameOver(); return false; }
+    // Clearing the bottom rows shifts everything down, which frees the spawn.
+    rescue();
+    if (collides(piece.m, piece.x, piece.y)) { gameOver(); return false; }
+  }
   const top = topRow(piece.m);
   while (piece.y + top < HIDDEN && !collides(piece.m, piece.x, piece.y + 1)) piece.y++;
   G.active = piece;
@@ -76,8 +83,30 @@ function resetLockState() {
  * speed and progression silently stopped while the counter kept climbing.
  */
 export function gravityInterval() {
-  const frames = GRAVITY_FRAMES[G.level - 1] ?? GRAVITY_MIN_FRAMES;
+  // Zen is endless, so it stops accelerating somewhere it stays comfortable.
+  const level = G.mode === 'zen' ? Math.min(G.level, ZEN_SPEED_CAP_LEVEL) : G.level;
+  const frames = GRAVITY_FRAMES[level - 1] ?? GRAVITY_MIN_FRAMES;
   return frames * FRAME_MS;
+}
+
+/**
+ * Zen's answer to topping out: drop the bottom rows and let the stack fall into
+ * the space. The board gets easier, the run continues, and nothing is lost.
+ */
+function rescue() {
+  const rows = [];
+  for (let y = ROWS - ZEN_RESCUE_ROWS; y < ROWS; y++) rows.push(y);
+  spawnClearParticles(rows, CLEAR_FX[4]); // read the colours before dropping them
+
+  const kept = G.grid.slice(0, ROWS - ZEN_RESCUE_ROWS);
+  while (kept.length < ROWS) kept.unshift(Array(COLS).fill(null));
+  G.grid = kept;
+
+  G.combo = -1;
+  G.shake = Math.max(G.shake, 7);
+  Sound.clear(4);
+  Haptics.clear(4);
+  showToast('BREATHE', theme.accent);
 }
 
 function touchLock() {
@@ -212,7 +241,13 @@ export function lockPiece() {
   const full = [];
   for (let y = 0; y < ROWS; y++) if (G.grid[y].every(Boolean)) full.push(y);
 
-  if (!anyVisible && !full.length) { G.active = null; gameOver(); return; }
+  // Locked entirely in the hidden buffer: a top-out everywhere but Zen.
+  if (!anyVisible && !full.length) {
+    G.active = null;
+    if (G.mode === 'zen') { rescue(); spawn(); return; }
+    gameOver();
+    return;
+  }
 
   if (full.length) {
     const fx = CLEAR_FX[Math.min(full.length, 4)];
@@ -277,7 +312,7 @@ function applyScore(cleared, spin) {
       if (!label) label = G.combo + 1 + '× COMBO';
       else label += '  ' + (G.combo + 1) + '×';
     }
-    G.stats.bestCombo = Math.max(G.stats.bestCombo, G.combo + 1);
+    G.stats[G.mode].combo = Math.max(G.stats[G.mode].combo, G.combo + 1);
 
     G.lines += cleared;
     G.level = Math.floor(G.lines / 10) + 1;
@@ -338,7 +373,8 @@ function spawnClearParticles(rows, fx) {
  */
 export function snapshotRun() {
   if (G.state !== 'playing' && G.state !== 'paused') return;
-  saveRun({
+  saveRun(G.mode, {
+    mode: G.mode,
     grid: encodeGrid(G.grid),
     // The rotation matrix is rebuilt from ROTATIONS, so only the index is kept.
     active: G.active ? { type: G.active.type, rot: G.active.rot, x: G.active.x, y: G.active.y } : null,
@@ -349,14 +385,28 @@ export function snapshotRun() {
   });
 }
 
-export function hasSavedRun() { return !!loadRun(); }
+export function hasSavedRun(mode) { return !!loadRun(mode); }
 
-/** Restores the saved run and leaves it paused, rather than dropping the
- *  player straight back into live gravity. */
-export function resumeRun() {
-  const saved = loadRun();
+/**
+ * Which mode a plain tap on the menu should pick up: whichever was played last
+ * if it has a save, else whichever does, else none.
+ */
+export function pendingRun() {
+  const last = loadLastMode();
+  if (loadRun(last)) return last;
+  if (loadRun('marathon')) return 'marathon';
+  if (loadRun('zen')) return 'zen';
+  return null;
+}
+
+/** Restores a saved run and leaves it paused, rather than dropping the player
+ *  straight back into live gravity. */
+export function resumeRun(mode = pendingRun()) {
+  const saved = mode && loadRun(mode);
   if (!saved) { startGame(); return; }
+  saveLastMode(mode);
 
+  G.mode = saved.mode === 'zen' ? 'zen' : 'marathon';
   G.grid = decodeGrid(saved.grid);
   G.queue = Array.isArray(saved.queue) ? [...saved.queue] : [];
   G.bag = Array.isArray(saved.bag) ? [...saved.bag] : null;
@@ -392,12 +442,15 @@ export function resumeRun() {
 
 // ---------- flow ----------
 
-export function startGame() {
-  clearRun();
+export function startGame(mode = 'marathon') {
+  clearRun(mode); // only this mode's slot — the other run stays waiting
+  saveLastMode(mode);
+  G.mode = mode;
   G.grid = emptyGrid();
   G.queue = []; G.bag = null; G.hold = null; G.canHold = true;
   G.score = 0; G.lines = 0; G.level = 1; G.combo = -1; G.backToBack = false;
-  G.runBest = G.stats.best; G.newBest = false;
+  G.runBest = G.stats[mode].score; // each mode has its own record to beat
+  G.newBest = false;
   setRecordStyle(false);
   G.gravityAcc = 0; G.particles = []; G.shake = 0;
   G.clearRows = null; G.pendingClear = null;
@@ -421,10 +474,12 @@ export function gameOver() {
   G.deathTimer = 0;
 }
 
-// Abandoning a run mid-game shouldn't throw away a personal best.
+// Abandoning a run mid-game shouldn't throw away a personal best. Each mode
+// keeps its own set, so Zen's unbounded score can never flatter Marathon's.
 function commitStats() {
-  G.stats.best = Math.max(G.stats.best, G.score);
-  G.stats.bestLines = Math.max(G.stats.bestLines, G.lines);
+  const best = G.stats[G.mode];
+  best.score = Math.max(best.score, G.score);
+  best.lines = Math.max(best.lines, G.lines);
   saveStats();
 }
 
@@ -433,7 +488,7 @@ function finishGameOver() {
   Sound.over();
   Haptics.over();
   commitStats();
-  clearRun(); // the run is finished; nothing left to resume
+  clearRun(G.mode); // this run is finished; the other mode's is untouched
 
   showOverlay(`
     <h2${G.newBest ? ' class="record"' : ''}>${G.newBest ? 'NEW HIGH SCORE!' : 'GAME OVER'}</h2>
@@ -442,7 +497,7 @@ function finishGameOver() {
       <b>${G.score.toLocaleString()}</b>
     </div>
     <p>LINES ${G.lines} &nbsp;·&nbsp; LEVEL ${G.level}${
-      G.newBest ? '' : `<br>HIGH SCORE ${G.stats.best.toLocaleString()}`}</p>
+      G.newBest ? '' : `<br>HIGH SCORE ${G.stats[G.mode].score.toLocaleString()}`}</p>
     ${themeBar()}
     ${actionBar([['menu', 'MAIN MENU']])}
     <p class="cta">TAP TO PLAY AGAIN</p>
@@ -480,6 +535,23 @@ export function togglePause() {
   }
 }
 
+/** One card per mode that has anything to show, each with the same three stats. */
+function recordCards() {
+  const card = (mode, name) => {
+    const s = G.stats[mode];
+    if (!s.score && !s.lines) return '';
+    return `
+      <div class="recordCard">
+        <span class="label">${name}</span>
+        <b>${s.score.toLocaleString()}</b>
+        <span class="sub">${s.lines.toLocaleString()} ${s.lines === 1 ? 'LINE' : 'LINES'} &nbsp;·&nbsp; ${s.combo}&times;</span>
+      </div>`;
+  };
+
+  const cards = card('marathon', 'GAME') + card('zen', 'ZEN');
+  return cards ? `<div class="records">${cards}</div>` : '';
+}
+
 export function showMenu() {
   snapshotRun();  // keep the run resumable before the board is torn down
   commitStats();  // may be arriving from an abandoned run
@@ -502,25 +574,44 @@ export function showMenu() {
     : `&larr; &rarr; move &nbsp;·&nbsp; &uarr; rotate &nbsp;·&nbsp; Z rotate back<br>
        SPACE drop &nbsp;·&nbsp; C hold &nbsp;·&nbsp; P pause`;
 
-  const saved = hasSavedRun();
+  const savedMarathon = loadRun('marathon');
+  const savedZen = loadRun('zen');
+  const pending = pendingRun();
+  const saved = savedMarathon || savedZen;
+
+  // "New" on the first row, "resume" on the second. One verb throughout: the
+  // buttons and the prompt both say RESUME, and both modes are named the same
+  // way wherever they appear.
+  const lines = n => `${n.toLocaleString()} ${n === 1 ? 'LINE' : 'LINES'}`;
+  const actions = [];
+
+  if (saved) {
+    actions.push(['new', 'NEW GAME'], ['zen', 'NEW ZEN'], null);
+    if (savedMarathon) {
+      actions.push(['continue', `RESUME GAME · ${(savedMarathon.score | 0).toLocaleString()}`]);
+    }
+    if (savedZen) {
+      actions.push(['continue-zen', `RESUME ZEN · ${lines(savedZen.lines | 0)}`]);
+    }
+  } else {
+    actions.push(['zen', 'ZEN MODE']);
+  }
+
+  // Naming the mode here is what the separate caption line used to do, without
+  // repeating the whole thing underneath the buttons.
+  const cta = pending
+    ? `TAP TO RESUME ${pending === 'zen' ? 'ZEN' : 'GAME'}`
+    : 'TAP TO PLAY';
 
   showOverlay(`
     ${menuBackdrop()}
     ${wordmark()}
-    ${G.stats.best ? `
-      <div class="best">
-        <span class="label">HIGH SCORE</span>
-        <b>${G.stats.best.toLocaleString()}</b>
-      </div>
-      <div class="statRow">
-        <div><span class="label">MOST LINES</span><b>${G.stats.bestLines.toLocaleString()}</b></div>
-        <div><span class="label">BEST COMBO</span><b>${G.stats.bestCombo}&times;</b></div>
-      </div>` : ''}
+    ${recordCards()}
     <p>${controls}</p>
     <p class="fine">HOLD stashes a piece for later — once per drop</p>
     ${themeBar()}
-    ${saved ? actionBar([['new', 'NEW GAME']]) : ''}
-    <p class="cta">${saved ? 'TAP TO CONTINUE' : 'TAP TO PLAY'}</p>
+    ${actionBar(actions)}
+    <p class="cta">${cta}</p>
   `, { intro: true });
 }
 

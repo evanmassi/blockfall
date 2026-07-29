@@ -1,7 +1,7 @@
 // Entry point: boot order, the frame loop, and the window-level listeners that
 // belong to no single subsystem.
 
-import { G, loadStats } from './state.js';
+import { G, loadStats, migrateLegacyRun } from './state.js';
 import { setTheme, savedThemeName } from './themes.js';
 import { resize, render, tickQueue } from './render.js';
 import { tickScore } from './ui.js';
@@ -87,6 +87,7 @@ function frame(t) {
   requestAnimationFrame(frame);
 }
 
+migrateLegacyRun(); // rehome a run saved before the slots were split by mode
 G.stats = loadStats();
 muteBtn.textContent = Sound.muted ? '♪̸' : '♪';
 setTheme(savedThemeName()); // resize() does the sprite/well rebuild that follows

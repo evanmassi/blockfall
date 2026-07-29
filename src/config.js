@@ -29,6 +29,11 @@ export const GRAVITY_FRAMES = [
 ];
 export const GRAVITY_MIN_FRAMES = 1;    // 30+, the console's kill screen
 
+// Zen: endless, so gravity has to stop somewhere it stays playable, and topping
+// out clears room instead of ending the run.
+export const ZEN_SPEED_CAP_LEVEL = 5;
+export const ZEN_RESCUE_ROWS = 4;
+
 export const LOCK_DELAY = 500, MAX_LOCK_RESETS = 15;
 export const DEATH_ROW_MS = 34, DEATH_HOLD_MS = 280;
 

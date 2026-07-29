@@ -9,12 +9,12 @@ import { stage, overlay, pauseBtn, muteBtn } from './dom.js';
 import { onOverlayAction } from './ui.js';
 import {
   move, rotate, softDrop, hardDrop, holdPiece,
-  startGame, togglePause, showMenu, hasSavedRun, resumeRun, showPauseScreen,
+  startGame, togglePause, showMenu, pendingRun, resumeRun, showPauseScreen,
 } from './game.js';
 import { Haptics } from './haptics.js';
 
-/** Tapping the menu picks up a saved run if there is one, else starts fresh. */
-const playFromMenu = () => (hasSavedRun() ? resumeRun() : startGame());
+/** Tapping the menu picks up the most recently played saved run, else starts fresh. */
+const playFromMenu = () => (pendingRun() ? resumeRun() : startGame());
 
 // ---------- keyboard ----------
 
@@ -115,8 +115,11 @@ overlay.addEventListener('pointerdown', e => {
 
 onOverlayAction(act => {
   Sound.init();
-  if (act === 'restart' || act === 'new') startGame();
-  else if (act === 'continue') resumeRun();
+  if (act === 'zen') startGame('zen');
+  else if (act === 'restart') startGame(G.mode); // restart stays in the mode you were in
+  else if (act === 'new') startGame();
+  else if (act === 'continue') resumeRun('marathon');
+  else if (act === 'continue-zen') resumeRun('zen');
   else if (act === 'menu') showMenu();
   else if (act === 'resume') togglePause();
   else if (act === 'haptics') {

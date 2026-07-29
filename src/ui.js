@@ -130,7 +130,9 @@ export function showOverlay(html, opts = {}) {
  */
 export function actionBar(actions) {
   const buttons = actions
-    .map(([act, label]) => `<button class="menuBtn" data-act="${act}">${label}</button>`)
+    .map(entry => (entry === null
+      ? '<span class="btnBreak"></span>' // forces the following buttons onto a new row
+      : `<button class="menuBtn" data-act="${entry[0]}">${entry[1]}</button>`))
     .join('');
   return `<div class="menuBtns">${buttons}</div>`;
 }
