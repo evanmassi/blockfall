@@ -3,7 +3,8 @@
 
 import { G, loadStats } from './state.js';
 import { setTheme, savedThemeName } from './themes.js';
-import { resize, render } from './render.js';
+import { resize, render, tickQueue } from './render.js';
+import { tickScore } from './ui.js';
 import { update, showMenu, togglePause, snapshotRun } from './game.js';
 import { updateKeyRepeat } from './input.js';
 import { Sound } from './audio.js';
@@ -77,6 +78,11 @@ function frame(t) {
   if (G.state === 'playing' && G.active) updateKeyRepeat(dt);
   update(dt);
   render();
+
+  // Presentation-only easing: neither affects the game, so both are safe to
+  // run every frame regardless of state.
+  tickScore();
+  tickQueue(dt);
 
   requestAnimationFrame(frame);
 }

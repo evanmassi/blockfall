@@ -85,6 +85,11 @@ html, body {
 #subStats { display:flex; gap:22px; margin-top:6px; }
 .stat { display:flex; align-items:baseline; gap:6px; }
 .stat b { font-size:clamp(10px,3.2vw,14px); letter-spacing:.01em; }
+.stat[hidden] { display:none; }
+
+/* Only on screen while a chain is alive, so it should read as live. */
+#comboStat .label, #comboStat b { color:var(--accent); }
+#comboStat b { text-shadow:0 0 10px var(--accent); }
 
 /* Sized by its contents, not by the leftover height — #app centres the column,
    so the stage must not stretch or there would be nothing left to centre. */

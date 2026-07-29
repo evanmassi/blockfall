@@ -61,8 +61,9 @@ export function resize() {
   // Previews are width-bound: every spawn orientation is at most 4 cells wide
   // and 2 tall, so size off the rail's inner width and let height follow.
   view.previewSize = Math.max(6, Math.floor((railW - 12) / 4));
+  view.nextTail = Math.max(5, Math.round(view.previewSize * NEXT_TAIL));
   sizeMini(holdCv, holdCtx, view.previewSize * 4 + 2, view.previewSize * 2 + 4);
-  sizeMini(nextCv, nextCtx, view.previewSize * 4 + 2, (view.previewSize * 2 + 8) * 3);
+  sizeMini(nextCv, nextCtx, view.previewSize * 4 + 2, nextSlotTop(NEXT_SHOWN));
 
   clearSprites();
   buildWell();
@@ -291,9 +292,95 @@ export function drawWordmarkL(cv, th = theme) {
   }
 }
 
+// ---------- next queue ----------
+
+const NEXT_SHOWN = 3;
+const NEXT_TAIL = 0.68;   // the two behind the lead are drawn smaller
+const NEXT_SLIDE_MS = 190;
+
+let nextShown = [];       // what the canvas currently depicts
+let slideFrom = null;     // the pre-shift queue, while animating
+let slideT = 1;           // 0 -> 1 progress; 1 means settled
+
+/** Top edge of the slot at a fractional index, so a piece can sit between two. */
+function nextSlotTop(f) {
+  const lead = view.previewSize * 2 + 12;
+  const tail = view.nextTail * 2 + 10;
+  return f <= 1 ? lead * f : lead + tail * (f - 1);
+}
+
+function nextSlotHeight(f) {
+  return f < 1 ? view.previewSize * 2 + 12 : view.nextTail * 2 + 10;
+}
+
+/** Full size in the lead slot, tapering to NEXT_TAIL for everything behind it. */
+function nextScale(f) {
+  if (f <= 0) return 1;
+  if (f >= 1) return NEXT_TAIL;
+  return 1 - (1 - NEXT_TAIL) * f;
+}
+
+function drawQueuePiece(ctx, type, w, top, slotH, size, alpha) {
+  const m = ROTATIONS[type][0];
+  let minX = 9, maxX = -1, minY = 9, maxY = -1;
+  forEachCell(m, (x, y) => {
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+  });
+  const pw = (maxX - minX + 1) * size, ph = (maxY - minY + 1) * size;
+  const ox = (w - pw) / 2 - minX * size;
+  const oy = top + (slotH - ph) / 2 - minY * size;
+
+  ctx.globalAlpha = alpha;
+  forEachCell(m, (x, y) => drawBlock(ctx, ox + x * size, oy + y * size, theme.pieces[type], size, type));
+  ctx.globalAlpha = 1;
+}
+
+function drawNext() {
+  const { dpr } = view;
+  const w = nextCv.width / dpr, h = nextCv.height / dpr;
+  nextCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  nextCtx.clearRect(0, 0, w, h);
+
+  const sliding = slideT < 1 && slideFrom;
+  const list = sliding ? slideFrom : nextShown;
+  // Eased so it settles rather than stopping dead.
+  const shift = sliding ? 1 - Math.pow(1 - slideT, 3) : 0;
+
+  list.forEach((type, i) => {
+    const f = i - shift;
+    if (f < -1 || f > NEXT_SHOWN) return;
+    // Fades out past the top, and in as the fourth piece rises into view.
+    const alpha = f < 0 ? Math.max(0, 1 + f)
+                : f > NEXT_SHOWN - 1 ? Math.max(0, NEXT_SHOWN - f)
+                : 1;
+    const size = Math.max(4, Math.round(view.previewSize * nextScale(f)));
+    drawQueuePiece(nextCtx, type, w, nextSlotTop(f), nextSlotHeight(f), size, alpha);
+  });
+}
+
 export function drawSidePanels() {
   drawMini(holdCtx, holdCv, G.hold ? [G.hold] : [], G.canHold ? 1 : 0.35);
-  drawMini(nextCtx, nextCv, G.queue.slice(0, 3), 1);
+
+  // One extra is held so the piece rising into the last slot has something to
+  // be. A queue that shifted by exactly one animates; anything else snaps.
+  const now = G.queue.slice(0, NEXT_SHOWN + 1);
+  if (nextShown.length > 1 && now[0] === nextShown[1]) {
+    slideFrom = nextShown;
+    slideT = 0;
+  } else {
+    slideFrom = null;
+    slideT = 1;
+  }
+  nextShown = now;
+  drawNext();
+}
+
+/** Advances the slide. Called from the frame loop, not on queue changes. */
+export function tickQueue(dt) {
+  if (slideT >= 1) return;
+  slideT = Math.min(1, slideT + dt / NEXT_SLIDE_MS);
+  drawNext();
 }
 
 // An empty HOLD slot otherwise reads as dead space rather than somewhere a

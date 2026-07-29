@@ -24,7 +24,7 @@ const ctxStub = () => {
 
 const docHandlers = {}, handlers = {}, els = {};
 const IDS = ['app','hud','board','holdCanvas','nextCanvas','overlay','toast','stage','railLeft','railRight',
-             'score','level','lines','pauseBtn','muteBtn'];
+             'score','level','lines','comboStat','combo','pauseBtn','muteBtn'];
 
 for (const id of IDS) {
   const listeners = handlers[id] = {};
@@ -123,6 +123,7 @@ const game = await import('../src/game.js');
 const { applyTheme, view, syncLevelPalette } = await import('../src/render.js');
 const { INSET_MARKS, NES_MARKS } = await import('../src/sprites.js');
 const { Haptics, HAPTIC_CLEAR_PATTERNS } = await import('../src/haptics.js');
+const { updateHud: updateHudFromTest } = await import('../src/ui.js');
 const { themeBar } = await import('../src/ui.js');
 await import('../src/main.js'); // boots: theme, resize, menu, loop
 
@@ -671,6 +672,63 @@ console.log('\nOverlay actions');
   pressButton('restart');
   fireDown('mouse', backdrop);
   check('restart starts a fresh game', G.state === 'playing' && G.score === 0, `${G.state}/${G.score}`);
+}
+
+console.log('\nHUD polish');
+{
+  const shown = () => Number(String(els.score.textContent).replace(/,/g, '')) || 0;
+
+  game.startGame();
+  pumpMs(20);
+  check('score display starts at zero', shown() === 0, String(shown()));
+
+  // A big gain should be visibly counting, not already landed.
+  G.score = 0;
+  game.startGame();
+  pumpMs(20);
+  G.score = 1200;
+  pumpMs(17);
+  const midway = shown();
+  check('a big gain counts up rather than snapping', midway > 0 && midway < 1200, String(midway));
+  pumpMs(1200);
+  check('and arrives at the real score', shown() === 1200, String(shown()));
+
+  // Soft-drop points are tiny and must not lag behind the play.
+  G.score = 1201;
+  pumpMs(17);
+  check('small gains land immediately', shown() === 1201, String(shown()));
+
+  // Resetting must not count downward.
+  game.startGame();
+  pumpMs(17);
+  check('a new game zeroes the display at once', shown() === 0, String(shown()));
+
+  G.combo = -1; updateHudFromTest();
+  check('combo hidden outside a chain', els.comboStat.hidden === true);
+  G.combo = 2; updateHudFromTest();
+  check('combo shown during a chain', els.comboStat.hidden === false);
+  check('combo counts clears, not the internal index', els.combo.textContent === '3×', els.combo.textContent);
+  G.combo = -1; updateHudFromTest();
+}
+
+console.log('\nNext queue');
+{
+  game.startGame();
+  pumpMs(20);
+  els.nextCanvas.ctx.draws = 0;
+  game.spawn();
+  check('taking a piece redraws the queue', els.nextCanvas.ctx.draws > 0, String(els.nextCanvas.ctx.draws));
+
+  // Mid-slide the canvas keeps being repainted; once settled it stops.
+  els.nextCanvas.ctx.draws = 0;
+  pumpMs(60);
+  const during = els.nextCanvas.ctx.draws;
+  check('the slide animates over several frames', during > 1, String(during));
+
+  pumpMs(400);
+  els.nextCanvas.ctx.draws = 0;
+  pumpMs(120);
+  check('a settled queue stops repainting', els.nextCanvas.ctx.draws === 0, String(els.nextCanvas.ctx.draws));
 }
 
 console.log('\nNES level palettes');

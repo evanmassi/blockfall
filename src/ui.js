@@ -6,7 +6,7 @@ import { G } from './state.js';
 import { THEMES, theme } from './themes.js';
 import { ROTATIONS, forEachCell } from './pieces.js';
 import { applyTheme, drawThemePreview, drawWordmarkL } from './render.js';
-import { overlay, toastEl, scoreEl, levelEl, linesEl } from './dom.js';
+import { overlay, toastEl, scoreEl, levelEl, linesEl, comboStat, comboEl } from './dom.js';
 
 // The hardware recreations sit on their own row, so the break is forced rather
 // than left to whatever the viewport width happens to wrap at.
@@ -157,8 +157,32 @@ export function setRecordStyle(on) {
   scoreEl.classList.toggle('record', on);
 }
 
+let shownScore = 0;
+
 export function updateHud() {
-  scoreEl.textContent = G.score.toLocaleString();
   levelEl.textContent = G.level;
   linesEl.textContent = G.lines;
+
+  // Score is eased by tickScore rather than written here, but a reset has to
+  // land immediately — counting *down* to zero on a new game would be absurd.
+  if (G.score < shownScore) {
+    shownScore = G.score;
+    scoreEl.textContent = shownScore.toLocaleString();
+  }
+
+  // G.combo counts chained clears from 0, so a chain of two reads as 1.
+  const chained = G.combo > 0;
+  comboStat.hidden = !chained;
+  if (chained) comboEl.textContent = (G.combo + 1) + '×';
+}
+
+/**
+ * Eases the displayed score toward the real one, a fixed fraction of the gap
+ * per frame. Soft-drop points land the same frame; a Tetris visibly counts up.
+ */
+export function tickScore() {
+  if (shownScore === G.score) return;
+  const gap = G.score - shownScore;
+  shownScore = gap > 0 ? Math.min(G.score, shownScore + Math.max(1, Math.ceil(gap * 0.2))) : G.score;
+  scoreEl.textContent = shownScore.toLocaleString();
 }
