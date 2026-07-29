@@ -112,10 +112,16 @@ html, body {
 }
 .slot .label { font-size:6px; letter-spacing:.02em; }
 
-/* Offsets are from #app's padding box, so the safe-area insets are already
-   accounted for. Below #overlay's z-index so pausing can't trap you. */
+/* The insets have to be added to the offsets here, not inherited from #app's
+   padding. An absolutely positioned element's containing block *is* the padding
+   box, so top:6px measures from inside the border and lands within the padding —
+   which put these under the status bar once installed, where nothing could
+   reach them. Invisible in a browser tab, where the inset is 0.
+   Below #overlay's z-index so pausing can't trap you. */
 #sysBtns {
-  position:absolute; top:6px; right:10px; z-index:4;
+  position:absolute; z-index:4;
+  top:calc(env(safe-area-inset-top) + 6px);
+  right:calc(env(safe-area-inset-right) + 10px);
   display:flex; gap:6px;
 }
 .sysBtn {
@@ -156,7 +162,12 @@ html, body {
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
   background:var(--overlay);
   backdrop-filter:blur(3px);
-  text-align:center; padding:24px;
+  text-align:center;
+  /* Same trap as #sysBtns: inset:0 spans #app's padding box, so overlay content
+     needs its own safe-area allowance or a tall screen can run under the status
+     bar and the home indicator. */
+  padding:calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + 24px)
+          calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 24px);
   overflow-y:auto;
 }
 /* Column flex items shrink by default — without this the swatch canvases get
@@ -329,7 +340,8 @@ html, body {
 #overlay > *:not(.bgfall) { position:relative; z-index:1; }
 
 #debug {
-  position:fixed; left:0; right:0; bottom:0; z-index:99;
+  position:fixed; left:0; right:0; z-index:99;
+  bottom:env(safe-area-inset-bottom);
   padding:6px 8px; background:#000; color:#0f0;
   font:10px/1.35 ui-monospace,monospace; text-align:left;
   pointer-events:none; word-break:break-all; white-space:pre-wrap;

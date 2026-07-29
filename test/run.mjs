@@ -211,6 +211,19 @@ console.log('\nOffline packaging');
   check('every font is cached by the worker', faces.every(f => listed.includes(f)), faces.join(', '));
   check('font licence shipped alongside it', exists('fonts/OFL.txt'));
 
+  // Anything absolutely positioned inside #app must add the safe-area inset to
+  // its own offsets. #app's padding does not push it down, because that padding
+  // box *is* its containing block — which hid the pause and mute buttons behind
+  // the status bar once installed, invisible in a browser tab where insets are 0.
+  const sysBtnsRule = /#sysBtns\s*\{[^}]*\}/.exec(css)?.[0] ?? '';
+  check('corner buttons clear the status bar when installed',
+        /top:\s*calc\(env\(safe-area-inset-top\)/.test(sysBtnsRule),
+        sysBtnsRule.replace(/\s+/g, ' '));
+  const overlayRule = /#overlay\s*\{[^}]*\}/.exec(css)?.[0] ?? '';
+  check('overlay content clears the safe areas',
+        /padding:\s*calc\(env\(safe-area-inset-top\)/.test(overlayRule),
+        'overlay padding ignores insets');
+
   // `#app *` sets touch-action:none and carries an id, so the override for
   // tappable controls has to be id-qualified or it silently loses.
   const flat = css.replace(/\s+/g, ' ');
