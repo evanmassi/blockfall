@@ -15,7 +15,7 @@ import {
   saveRun, loadRun, clearRun, encodeGrid, decodeGrid,
 } from './state.js';
 import { collides, fillQueue, makePiece } from './board.js';
-import { view, drawSidePanels } from './render.js';
+import { view, drawSidePanels, syncLevelPalette } from './render.js';
 import { Sound } from './audio.js';
 import { Haptics } from './haptics.js';
 import {
@@ -281,6 +281,7 @@ function applyScore(cleared, spin) {
 
     G.lines += cleared;
     G.level = Math.floor(G.lines / 10) + 1;
+    if (G.level !== prevLevel) syncLevelPalette();
 
     if (G.grid.every(row => row.every(c => !c))) {
       gain += PERFECT_SCORES[cleared] * G.level;
@@ -383,6 +384,7 @@ export function resumeRun() {
   if (!G.active) spawn();
 
   setRecordStyle(G.newBest);
+  syncLevelPalette(); // restore the palette the run was at
   updateHud();
   drawSidePanels();
   if (G.state === 'playing') togglePause();
@@ -403,6 +405,7 @@ export function startGame() {
   G.state = 'playing';
 
   hideOverlay();
+  syncLevelPalette(); // back to the level-1 palette after a high-level run
   fillQueue();
   spawn();
   updateHud();

@@ -120,7 +120,7 @@ const { G } = await import('../src/state.js');
 const { THEMES, theme, savedThemeName } = await import('../src/themes.js');
 const board = await import('../src/board.js');
 const game = await import('../src/game.js');
-const { applyTheme, view } = await import('../src/render.js');
+const { applyTheme, view, syncLevelPalette } = await import('../src/render.js');
 const { INSET_MARKS, NES_MARKS } = await import('../src/sprites.js');
 const { Haptics, HAPTIC_CLEAR_PATTERNS } = await import('../src/haptics.js');
 const { themeBar } = await import('../src/ui.js');
@@ -671,6 +671,46 @@ console.log('\nOverlay actions');
   pressButton('restart');
   fireDown('mouse', backdrop);
   check('restart starts a fresh game', G.state === 'playing' && G.score === 0, `${G.state}/${G.score}`);
+}
+
+console.log('\nNES level palettes');
+{
+  const pals = THEMES.nes.levelPalettes;
+  check('ten palettes, one per level in the cycle', pals.length === 10, String(pals.length));
+  check('every palette has three slots of valid hex',
+        pals.every(p => p.length === 3 && p.every(c => /^#[0-9a-f]{6}$/i.test(c))));
+  check('every slot mapping points at a real slot',
+        Object.values(THEMES.nes.paletteSlots).every(s => s >= 0 && s <= 2));
+
+  applyTheme('nes');
+  const before = G.level;
+
+  G.level = 1;
+  syncLevelPalette();
+  check('level 1 uses the first palette', theme.pieces.I === pals[0][0], theme.pieces.I);
+
+  G.level = 3;
+  syncLevelPalette();
+  check('levelling repaints the pieces', theme.pieces.I === pals[2][0], theme.pieces.I);
+  check('slot mates move together', theme.pieces.S === theme.pieces.I && theme.pieces.L === theme.pieces.I);
+  check('the white slot stays white', theme.pieces.O === '#fcfcfc' && theme.pieces.T === '#fcfcfc');
+
+  G.level = 11;
+  syncLevelPalette();
+  check('the cycle repeats every ten levels', theme.pieces.I === pals[0][0], theme.pieces.I);
+
+  // theme.pieces is mutated in place, so a shallow copy in setTheme would have
+  // let a played game permanently rewrite the source palette.
+  check('playing does not corrupt the theme definition',
+        THEMES.nes.pieces.I === '#3cbcfc', THEMES.nes.pieces.I);
+
+  G.level = 5;
+  applyTheme('neon');
+  syncLevelPalette();
+  check('themes without level palettes are untouched', theme.pieces.I === THEMES.neon.pieces.I);
+
+  G.level = before;
+  applyTheme('neon');
 }
 
 console.log('\nGravity curve');

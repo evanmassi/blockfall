@@ -88,10 +88,33 @@ export const THEMES = {
     sharedPalette: true, // colours repeat across pieces, as on the console
     block: { style: 'nes', glow: 0.22, light: 0.55, shade: 0.3, outline: 'rgba(0,0,0,.5)' },
     pieces: {
-      I: '#3cbcfc', S: '#3cbcfc', L: '#3cbcfc', // cyan
-      J: '#0058f8', Z: '#0058f8',               // blue
-      O: '#fcfcfc', T: '#fcfcfc',               // white, drawn as rings
+      I: '#3cbcfc', S: '#3cbcfc', L: '#3cbcfc', // slot 0
+      J: '#0058f8', Z: '#0058f8',               // slot 1
+      O: '#fcfcfc', T: '#fcfcfc',               // slot 2, drawn as rings
     },
+
+    // Which of a level palette's three slots each tetromino draws from. Fixed;
+    // only the colours in the slots change as you climb.
+    paletteSlots: { I: 0, S: 0, L: 0, J: 1, Z: 1, O: 2, T: 2 },
+
+    // The whole reason the console used three colours is that they changed
+    // every level, cycling every ten. Each entry is [slot0, slot1, slot2], all
+    // drawn from the NES system palette.
+    //
+    // The colours are genuine; the order is my arrangement, not the console's
+    // exact table — I couldn't read that off the screenshot.
+    levelPalettes: [
+      ['#3cbcfc', '#0058f8', '#fcfcfc'], // 1  cyan / blue
+      ['#58d854', '#00a800', '#fcfcfc'], // 2  green
+      ['#f878f8', '#d800cc', '#fcfcfc'], // 3  pink / magenta
+      ['#58d854', '#0058f8', '#fcfcfc'], // 4  green / blue
+      ['#58f898', '#e40058', '#fcfcfc'], // 5  mint / crimson
+      ['#6888fc', '#58d854', '#fcfcfc'], // 6  periwinkle / green
+      ['#bcbcbc', '#f83800', '#fcfcfc'], // 7  grey / red
+      ['#a80020', '#6844fc', '#fcfcfc'], // 8  dark red / violet
+      ['#f83800', '#0058f8', '#fcfcfc'], // 9  red / blue
+      ['#fca044', '#f83800', '#fcfcfc'], // 10 orange / red
+    ],
   },
 
   // Dark chrome around a light LCD panel, as on the DMG. The hardware drew
@@ -119,6 +142,35 @@ const STORE = 'blockfall.theme';
 // theme switch has to change its contents, not swap the object.
 export const theme = {};
 
+/**
+ * Points the active theme's pieces at the palette for `level`, cycling every
+ * levelPalettes.length levels. No-op for themes without one.
+ *
+ * @returns {boolean} whether any colour actually changed — the caller uses this
+ *   to decide about throwing away the sprite cache, which is not cheap.
+ */
+export function applyLevelPalette(level) {
+  const palettes = theme.levelPalettes;
+  if (!palettes || !theme.paletteSlots) return false;
+
+  const colors = palettes[(Math.max(1, level) - 1) % palettes.length];
+  let changed = false;
+
+  for (const [piece, slot] of Object.entries(theme.paletteSlots)) {
+    if (theme.pieces[piece] === colors[slot]) continue;
+    theme.pieces[piece] = colors[slot];
+    changed = true;
+  }
+
+  if (changed) {
+    const root = document.documentElement.style;
+    for (const p of Object.keys(theme.pieces)) {
+      root.setProperty('--piece-' + p.toLowerCase(), theme.pieces[p]);
+    }
+  }
+  return changed;
+}
+
 export function savedThemeName() {
   try {
     const name = localStorage.getItem(STORE);
@@ -129,8 +181,16 @@ export function savedThemeName() {
 
 export function setTheme(name) {
   if (!THEMES[name]) name = 'neon';
+
+  // Cleared first, not just assigned over: Object.assign leaves behind any key
+  // the incoming theme doesn't define. That let NES's levelPalettes survive a
+  // switch to Neon, so levelling up would have repainted Neon in NES colours.
+  for (const key of Object.keys(theme)) delete theme[key];
   Object.assign(theme, THEMES[name]);
   theme.key = name;
+  // Object.assign copies `pieces` by reference. Level palettes rewrite it, and
+  // without this clone that would permanently edit the THEMES entry itself.
+  theme.pieces = { ...THEMES[name].pieces };
 
   const root = document.documentElement.style;
   root.setProperty('--bg', theme.bg);

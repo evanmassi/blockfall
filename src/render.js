@@ -4,7 +4,7 @@
 
 import { COLS, VIS_ROWS, HIDDEN, ROWS, CLEAR_FX } from './config.js';
 import { ROTATIONS, forEachCell } from './pieces.js';
-import { theme, setTheme } from './themes.js';
+import { theme, setTheme, applyLevelPalette } from './themes.js';
 import { G } from './state.js';
 import { collides } from './board.js';
 import { blockSprite, ghostSprite, grayOf, rgbOf, clearSprites } from './sprites.js';
@@ -73,8 +73,16 @@ export function resize() {
 // pre-rendered well both bake in theme colors, so both have to go.
 export function applyTheme(name) {
   setTheme(name);
+  applyLevelPalette(G.level); // a theme picked mid-run joins at the right level
   clearSprites();
   buildWell();
+  drawSidePanels();
+}
+
+/** Called on level-up. Repaints only when the palette actually moved. */
+export function syncLevelPalette() {
+  if (!applyLevelPalette(G.level)) return;
+  clearSprites();
   drawSidePanels();
 }
 
