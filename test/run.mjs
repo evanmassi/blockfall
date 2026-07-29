@@ -673,6 +673,33 @@ console.log('\nOverlay actions');
   check('restart starts a fresh game', G.state === 'playing' && G.score === 0, `${G.state}/${G.score}`);
 }
 
+console.log('\nGravity curve');
+{
+  const at = lvl => { const prev = G.level; G.level = lvl; const ms = game.gravityInterval(); G.level = prev; return ms; };
+  const levels = Array.from({ length: 40 }, (_, i) => i + 1);
+  const ms = levels.map(at);
+
+  check('level 1 matches the console, not the guideline', Math.round(at(1)) === 799, String(Math.round(at(1))));
+  check('never speeds up as levels rise', ms.every((v, i) => i === 0 || v <= ms[i - 1]));
+  check('always a positive interval', ms.every(v => v > 0));
+
+  // The bug this replaced: every level from 14 up ran at an identical speed.
+  check('progression continues past level 14', at(20) < at(14), `${Math.round(at(14))}ms -> ${Math.round(at(20))}ms`);
+  check('and past level 20', at(30) < at(20), `${Math.round(at(20))}ms -> ${Math.round(at(30))}ms`);
+
+  // No plateau wider than three levels below 20, where the game is actually played.
+  let flat = 1, worst = 1;
+  for (let i = 1; i < 19; i++) {
+    flat = ms[i] === ms[i - 1] ? flat + 1 : 1;
+    worst = Math.max(worst, flat);
+  }
+  check('no plateau longer than 3 levels below 20', worst <= 3, 'longest run: ' + worst);
+
+  check('gentler than the old curve where it is actually played',
+        at(8) > 200 && at(5) > 400, `lvl5 ${Math.round(at(5))}ms, lvl8 ${Math.round(at(8))}ms`);
+  check('past the table it holds at the floor', Math.round(at(60)) === Math.round(at(35)));
+}
+
 console.log('\nHaptics');
 {
   check('vibration support is detected, not assumed', typeof Haptics.supported === 'boolean');

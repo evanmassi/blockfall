@@ -6,6 +6,7 @@ import {
   COLS, ROWS, HIDDEN,
   LINE_SCORES, TSPIN_SCORES, TSPIN_MINI_SCORES, PERFECT_SCORES,
   LOCK_DELAY, MAX_LOCK_RESETS, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS,
+  FRAME_MS, GRAVITY_FRAMES, GRAVITY_MIN_FRAMES,
 } from './config.js';
 import { ROTATIONS, KICKS, topRow } from './pieces.js';
 import { theme } from './themes.js';
@@ -67,9 +68,16 @@ function resetLockState() {
   G.lockResets = 0;
 }
 
-function gravityInterval() {
-  const l = Math.min(G.level, 20);
-  return Math.max(16, Math.pow(0.8 - (l - 1) * 0.007, l - 1) * 1000);
+/**
+ * Milliseconds a piece takes to fall one row at the current level.
+ *
+ * The previous version clamped this at a 16ms floor, which the guideline curve
+ * reached at level 14 — so every level from 14 upward ran at exactly the same
+ * speed and progression silently stopped while the counter kept climbing.
+ */
+export function gravityInterval() {
+  const frames = GRAVITY_FRAMES[G.level - 1] ?? GRAVITY_MIN_FRAMES;
+  return frames * FRAME_MS;
 }
 
 function touchLock() {

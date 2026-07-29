@@ -11,6 +11,24 @@ export const TSPIN_SCORES = [400, 800, 1200, 1600];
 export const TSPIN_MINI_SCORES = [100, 200, 400, 400];
 export const PERFECT_SCORES = [0, 800, 1200, 1800, 2000];
 
+// Gravity, as NES Tetris measured it: whole frames per row at the NTSC refresh.
+// Levels here are 1-indexed, so index 0 is the console's level 0.
+//
+// This replaced the modern guideline curve, (0.8 - (lvl-1)*0.007)^(lvl-1),
+// which is tuned for competitive play and gets punishing fast — by level 8 it
+// gave 135ms a row against the console's 216ms. The plateaus are real: the
+// hardware could only count whole frames, so speed steps every few levels
+// rather than every one.
+export const FRAME_MS = 1000 / 60.0988;
+export const GRAVITY_FRAMES = [
+  48, 43, 38, 33, 28, 23, 18, 13, 8, 6, // 1–10, a step every level
+  5, 5, 5,                              // 11–13
+  4, 4, 4,                              // 14–16
+  3, 3, 3,                              // 17–19
+  2, 2, 2, 2, 2, 2, 2, 2, 2, 2,         // 20–29
+];
+export const GRAVITY_MIN_FRAMES = 1;    // 30+, the console's kill screen
+
 export const LOCK_DELAY = 500, MAX_LOCK_RESETS = 15;
 export const DEATH_ROW_MS = 34, DEATH_HOLD_MS = 280;
 
