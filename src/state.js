@@ -19,6 +19,44 @@ export function saveStats() {
   try { localStorage.setItem(STORE, JSON.stringify(G.stats)); } catch {}
 }
 
+// ---------- in-progress run ----------
+
+const RUN_STORE = 'blockfall.run';
+const RUN_VERSION = 1;
+
+export function saveRun(payload) {
+  try { localStorage.setItem(RUN_STORE, JSON.stringify({ v: RUN_VERSION, ...payload })); } catch {}
+}
+
+/** Returns null if absent, unreadable, or written by an older schema. */
+export function loadRun() {
+  try {
+    const run = JSON.parse(localStorage.getItem(RUN_STORE) || 'null');
+    return run && run.v === RUN_VERSION ? run : null;
+  } catch { return null; }
+}
+
+export function clearRun() {
+  try { localStorage.removeItem(RUN_STORE); } catch {}
+}
+
+/** The board as one string, '.' for empty — 220 chars rather than nested JSON. */
+export function encodeGrid(grid) {
+  return grid.map(row => row.map(c => c || '.').join('')).join('');
+}
+
+export function decodeGrid(str) {
+  const grid = emptyGrid();
+  if (typeof str !== 'string' || str.length !== ROWS * COLS) return grid;
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const ch = str[y * COLS + x];
+      if (ch !== '.') grid[y][x] = ch;
+    }
+  }
+  return grid;
+}
+
 // Everything mutable lives here. ES module bindings can't be reassigned across
 // files, so shared state has to be properties on an object rather than `let`s.
 export const G = {
