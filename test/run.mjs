@@ -195,6 +195,8 @@ console.log('\nOffline packaging');
   const badIcons = manifest.icons.filter(i => !exists(i.src));
   check('every manifest icon exists', badIcons.length === 0, badIcons.map(i => i.src).join(', '));
   check('manifest has a maskable icon', manifest.icons.some(i => i.purpose === 'maskable'));
+  // fullscreen hides the phone's clock and battery for as long as the app is open.
+  check('installs standalone, not fullscreen', manifest.display === 'standalone', manifest.display);
   check('start_url is relative (works from a subpath)', manifest.start_url.startsWith('./'), manifest.start_url);
   check('scope is relative', manifest.scope.startsWith('./'), manifest.scope);
 
@@ -642,6 +644,19 @@ console.log('\nOverlay actions');
   check('pause offers a restart', paused.includes('data-act="restart"'));
   check('pause offers a route to the menu', paused.includes('data-act="menu"'));
   check('pause keeps tap-to-resume', paused.includes('TAP TO RESUME'));
+
+  // Controls used to appear on the menu only, so once you started playing there
+  // was no way to look them up again — the gestures aren't guessable.
+  check('pause lists the controls', /DRAG|move/.test(paused), 'no control hints on pause');
+  check('the hold gesture is spelled out somewhere reachable',
+        /hold/i.test(paused), 'hold gesture not documented in game');
+
+  // Both screens must render the same list from one source. Checked statically:
+  // rendering the menu here would change the state the checks below rely on.
+  const gameSrc = fs.readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
+  check('menu and pause share one control list',
+        (gameSrc.match(/controlsHint\(\)/g) || []).length >= 3,
+        'controlsHint used ' + (gameSrc.match(/controlsHint\(\)/g) || []).length + ' times');
 
   tap(nearMiss);
   check('missing a button does not resume', G.state === 'paused', G.state);

@@ -505,6 +505,20 @@ function finishGameOver() {
 }
 
 /**
+ * The gesture list, shared by the menu and the pause screen so the two can't
+ * drift. Phones get the gestures, desktop the keys — showing both is clutter on
+ * the screen that matters.
+ */
+function controlsHint() {
+  const touch = window.matchMedia?.('(pointer: coarse)')?.matches ?? true;
+  return touch
+    ? `DRAG move &nbsp;·&nbsp; TAP rotate &nbsp;·&nbsp; FLICK DOWN drop<br>
+       SWIPE UP hold &nbsp;·&nbsp; TWO-FINGER TAP rotate back`
+    : `&larr; &rarr; move &nbsp;·&nbsp; &uarr; rotate &nbsp;·&nbsp; Z rotate back<br>
+       SPACE drop &nbsp;·&nbsp; C hold &nbsp;·&nbsp; P pause`;
+}
+
+/**
  * Renders the pause screen. Separate from togglePause so a control on it can
  * redraw the screen it lives on without resuming the game.
  */
@@ -520,6 +534,7 @@ export function showPauseScreen() {
     <h2>PAUSED</h2>
     ${themeBar()}
     ${actionBar(actions)}
+    <p class="fine">${controlsHint()}</p>
     <p class="cta">TAP TO RESUME</p>
   `, { soft: true }); // board stays readable behind it
 }
@@ -564,16 +579,6 @@ export function showMenu() {
   G.deathRow = ROWS;
   setRecordStyle(false);
 
-  // Phones get the gestures, desktop gets the keys — showing both is clutter
-  // on the screen she'll actually be using.
-  const touch = window.matchMedia?.('(pointer: coarse)')?.matches ?? true;
-  const controls = touch
-    ? `DRAG to move &nbsp;·&nbsp; TAP to rotate<br>
-       FLICK DOWN to drop &nbsp;·&nbsp; SWIPE UP to hold<br>
-       TWO-FINGER TAP to rotate back`
-    : `&larr; &rarr; move &nbsp;·&nbsp; &uarr; rotate &nbsp;·&nbsp; Z rotate back<br>
-       SPACE drop &nbsp;·&nbsp; C hold &nbsp;·&nbsp; P pause`;
-
   const savedMarathon = loadRun('marathon');
   const savedZen = loadRun('zen');
   const pending = pendingRun();
@@ -607,7 +612,7 @@ export function showMenu() {
     ${menuBackdrop()}
     ${wordmark()}
     ${recordCards()}
-    <p>${controls}</p>
+    <p>${controlsHint()}</p>
     <p class="fine">HOLD stashes a piece for later — once per drop</p>
     ${themeBar()}
     ${actionBar(actions)}

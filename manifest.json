@@ -4,7 +4,7 @@
   "description": "A block-stacking game.",
   "start_url": "./",
   "scope": "./",
-  "display": "fullscreen",
+  "display": "standalone",
   "orientation": "portrait",
   "background_color": "#07060f",
   "theme_color": "#07060f",
