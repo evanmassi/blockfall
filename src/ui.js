@@ -8,8 +8,13 @@ import { ROTATIONS, forEachCell } from './pieces.js';
 import { applyTheme, drawThemePreview, drawWordmarkL } from './render.js';
 import { overlay, toastEl, scoreEl, levelEl, linesEl } from './dom.js';
 
+// The hardware recreations sit on their own row, so the break is forced rather
+// than left to whatever the viewport width happens to wrap at.
+const PICKER_ROW_BREAK = 3;
+
 export function themeBar() {
-  const swatches = Object.entries(THEMES).map(([key, t]) => `
+  const swatches = Object.entries(THEMES).map(([key, t], i) => `
+    ${i === PICKER_ROW_BREAK ? '<span class="themeBreak"></span>' : ''}
     <button class="swatch${key === theme.key ? ' on' : ''}" data-theme="${key}" aria-label="${t.name}">
       <canvas class="swatchCv"></canvas>
       <em>${t.name}</em>

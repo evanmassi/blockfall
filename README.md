@@ -81,7 +81,11 @@ Dark wells only — a light theme was built and rejected. All unlocked, switchab
 | --- | --- |
 | **Neon** | Dark, glowing, scanlines. The original. |
 | **Aurora** | Midnight blue well, northern-lights palette. Calmer than Neon. |
+| **Game Boy** | Dark chrome around a light olive LCD panel. No glow. |
+| **NES** | Pure black well, hairline border, NES system-palette pieces. |
 | **Forest** | Earthy greens, terracotta, amber. Low glow, no scanlines. |
+
+Game Boy is the one light well. The hardware drew every piece in a single colour and distinguished them by fill pattern; with no patterns here, its pieces step down one olive ramp instead — monochrome to look at, still separable to play. That ramp is why the palette test checks contrast against the well rather than requiring dark themes.
 
 A theme owns every color decision, including how blocks are lit — `block.glow`, `block.light`, `block.shade` and `block.outline` feed the sprite bevel, which is most of what separates Neon from Forest.
 

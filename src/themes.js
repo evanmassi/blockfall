@@ -8,15 +8,25 @@
 //   flash                          "r,g,b" for the line-clear wash; must read
 //                                  against `well`, so it is not always white
 //   scanlines                      CRT overlay on or off
+//   block.style                    how a cell is constructed, not just tinted:
+//                                  'bevel' raised 3D, 'inset' hard outline with
+//                                  a concentric square (Game Boy), 'nes' flat
+//                                  fill with a corner highlight. Only 'bevel'
+//                                  leaves a gap between cells; the hardware
+//                                  styles butt together so their outlines form
+//                                  the grid.
 //   block.glow                     0–1 multiplier on the baked sprite glow;
 //                                  most of what separates Neon from Forest
-//   block.light/shade              bevel alphas, lit top-left, shaded bottom-right
-//   block.outline                  1px sprite edge, as a full rgba() string
-//   pieces                         one hex per tetromino; all seven must be
-//                                  visually distinct or pieces become
-//                                  indistinguishable mid-game
+//   block.light/shade              lighting alphas; only 'bevel' uses shade
+//   block.outline                  sprite edge, as a full rgba() string
+//   sharedPalette                  optional; set when colours deliberately
+//                                  repeat across pieces, as on hardware that
+//                                  had only a few per level
+//   pieces                         one hex per tetromino; seven distinct values
+//                                  unless sharedPalette says otherwise
 //
-// Dark wells only — a light theme was built and rejected.
+// A pastel light theme was built and rejected; Game Boy's light LCD is the
+// exception, because that panel *is* the reference.
 export const THEMES = {
   neon: {
     name: 'Neon',
@@ -27,7 +37,7 @@ export const THEMES = {
     boardShadow: '0 0 0 1px var(--edge), 0 0 46px -8px var(--accent)',
     flash: '255,255,255',
     scanlines: true,
-    block: { glow: 1, light: 0.5, shade: 0.42, outline: 'rgba(255,255,255,.28)' },
+    block: { style: 'bevel', glow: 1, light: 0.5, shade: 0.42, outline: 'rgba(255,255,255,.28)' },
     pieces: { I:'#22e8ff', J:'#4d6bff', L:'#ff9d24', O:'#ffe14d', S:'#3dff96', T:'#c14dff', Z:'#ff2f68' },
   },
 
@@ -40,7 +50,7 @@ export const THEMES = {
     boardShadow: '0 0 0 1px var(--edge), 0 0 52px -10px var(--accent)',
     flash: '224,255,248',
     scanlines: false,
-    block: { glow: 0.85, light: 0.46, shade: 0.4, outline: 'rgba(255,255,255,.24)' },
+    block: { style: 'bevel', glow: 0.85, light: 0.46, shade: 0.4, outline: 'rgba(255,255,255,.24)' },
     pieces: { I:'#5ce1e6', J:'#4a7fd4', L:'#ffb26b', O:'#ffe9a3', S:'#7ef0a8', T:'#a98cf0', Z:'#f0788f' },
   },
 
@@ -53,8 +63,52 @@ export const THEMES = {
     boardShadow: '0 0 0 1px var(--edge), 0 4px 30px -12px rgba(217,138,61,.8)',
     flash: '248,242,214',
     scanlines: false,
-    block: { glow: 0.3, light: 0.4, shade: 0.38, outline: 'rgba(255,255,255,.18)' },
+    block: { style: 'bevel', glow: 0.3, light: 0.4, shade: 0.38, outline: 'rgba(255,255,255,.18)' },
     pieces: { I:'#63c2c9', J:'#4e6fa8', L:'#d98a3d', O:'#e8c65c', S:'#7fae4b', T:'#a2739f', Z:'#c1583f' },
+  },
+
+  // --- hardware recreations; the picker breaks to a second row here ---
+
+  // Pure black well with a hairline border, on grey console chrome.
+  //
+  // The hardware assigned colours per *level*, not per piece: three at a time,
+  // reused across the seven tetrominoes. Seven distinct colours — which this
+  // theme originally had — is not a look the console ever produced. These are
+  // the level-0 three, straight from the NES system palette, so pieces repeat
+  // colours and are told apart by shape and tile, exactly as they were.
+  nes: {
+    name: 'NES',
+    bg: '#1c1c1c', panel: '#2c2c2c', edge: '#bcbcbc',
+    text: '#fcfcfc', dim: '#9c9c9c', accent: '#3cbcfc',
+    well: '#000000', gridLine: 'rgba(255,255,255,.04)',
+    overlay: 'rgba(0,0,0,.9)', overlaySoft: 'rgba(0,0,0,.55)',
+    boardShadow: '0 0 0 2px #bcbcbc, 0 0 0 7px #000000',
+    flash: '252,252,252',
+    scanlines: true,
+    sharedPalette: true, // colours repeat across pieces, as on the console
+    block: { style: 'nes', glow: 0.22, light: 0.55, shade: 0.3, outline: 'rgba(0,0,0,.5)' },
+    pieces: {
+      I: '#3cbcfc', S: '#3cbcfc', L: '#3cbcfc', // cyan
+      J: '#0058f8', Z: '#0058f8',               // blue
+      O: '#fcfcfc', T: '#fcfcfc',               // white, drawn as rings
+    },
+  },
+
+  // Dark chrome around a light LCD panel, as on the DMG. The hardware drew
+  // every piece in one colour and told them apart by fill pattern; this
+  // renderer has no patterns, so the pieces step down a single olive ramp
+  // instead — monochrome to look at, still separable to play.
+  gameboy: {
+    name: 'Game Boy',
+    bg: '#37392f', panel: '#464a3c', edge: '#6b7052',
+    text: '#c6cfa2', dim: '#8b9470', accent: '#a8bd5e',
+    well: '#c6cfa2', gridLine: 'rgba(55,65,40,.10)',
+    overlay: 'rgba(47,49,40,.93)', overlaySoft: 'rgba(47,49,40,.55)',
+    boardShadow: '0 0 0 3px #6b7052, 0 0 0 6px #2b2d25',
+    flash: '240,246,210',
+    scanlines: true, // reads as the LCD pixel grid rather than a CRT
+    block: { style: 'inset', glow: 0, light: 0.42, shade: 0.32, outline: 'rgba(45,52,33,.9)' },
+    pieces: { I:'#2f3a22', J:'#3f4d2e', L:'#4f603a', O:'#5f7346', S:'#6f8652', T:'#7f995e', Z:'#8fac6a' },
   },
 
 };

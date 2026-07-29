@@ -26,7 +26,7 @@
 /* Press Start 2P is one weight and renders much larger and wider per px than a
    normal face, so anything using it sets its own size and tight letter-spacing,
    and must never be synthetically bolded. */
-[class*="label"], .stat b, .best b, .swatch em,
+[class*="label"], .stat b, .best b, .statRow b, .swatch em,
 #score, #toast, #overlay h1, #overlay h2, #overlay .cta {
   font-family:var(--font-display);
   font-weight:400;
@@ -54,9 +54,12 @@ html, body {
    id, so a bare class selector loses to it. */
 #app .menuBtn, #app .swatch, #app .sysBtn { touch-action:manipulation; }
 
+/* justify-content:center so the HUD and the board are centred together as one
+   block. Centring the board inside a top-anchored column instead would open a
+   gap under the score while leaving the void at the bottom. */
 #app {
   position:fixed; inset:0;
-  display:flex; flex-direction:column;
+  display:flex; flex-direction:column; justify-content:center;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
@@ -83,10 +86,10 @@ html, body {
 .stat { display:flex; align-items:baseline; gap:6px; }
 .stat b { font-size:clamp(10px,3.2vw,14px); letter-spacing:.01em; }
 
-/* flex-start, not center: the leftover vertical space would otherwise be split
-   above and below the board, opening a gap under the score. */
+/* Sized by its contents, not by the leftover height — #app centres the column,
+   so the stage must not stretch or there would be nothing left to centre. */
 #stage {
-  flex:1; display:flex; align-items:flex-start; justify-content:center; gap:8px;
+  flex:0 0 auto; display:flex; align-items:flex-start; justify-content:center; gap:8px;
   min-height:0; padding:0 10px 10px;
 }
 
@@ -160,6 +163,7 @@ html, body {
 #overlay.soft { background:var(--overlay-soft); backdrop-filter:blur(1px); }
 
 .themes { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
+.themeBreak { flex-basis:100%; height:0; margin:0; }
 
 .swatch {
   flex:0 0 auto;
@@ -209,6 +213,12 @@ html, body {
   font-size:clamp(18px,6.2vw,28px); line-height:1.35; letter-spacing:.01em;
   color:var(--text); text-shadow:0 0 14px var(--accent), 0 0 34px var(--accent);
 }
+
+/* Records that were being tracked and saved every game but never displayed. */
+.statRow { display:flex; justify-content:center; gap:30px; margin-top:-4px; }
+.statRow > div { display:flex; flex-direction:column; align-items:center; gap:5px; }
+.statRow .label { font-size:7px; letter-spacing:.14em; }
+.statRow b { font-size:clamp(12px,4vw,16px); color:var(--text); letter-spacing:.01em; }
 
 .best.new { border-color:var(--accent); }
 .best.new .label, .best.new b { color:var(--accent); }

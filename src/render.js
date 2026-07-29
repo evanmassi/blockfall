@@ -8,7 +8,7 @@ import { theme, setTheme } from './themes.js';
 import { G } from './state.js';
 import { collides } from './board.js';
 import { blockSprite, ghostSprite, grayOf, rgbOf, clearSprites } from './sprites.js';
-import { boardCv, boardCtx, holdCv, holdCtx, nextCv, nextCtx, stage, railLeft, railRight } from './dom.js';
+import { boardCv, boardCtx, holdCv, holdCtx, nextCv, nextCtx, app, hud, stage, railLeft, railRight } from './dom.js';
 // railLeft/railRight are sized directly rather than measured — reading back a
 // width we just wrote would force an extra layout every resize.
 
@@ -26,10 +26,18 @@ const PAD_X = 20, PAD_Y = 10, GAPS = 16;
 export function resize() {
   view.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 
+  // Measured from the app box rather than the stage: the stage is sized by its
+  // contents so the whole column can be centred, which means asking it how tall
+  // it is would just echo back the board we are about to size.
+  const appStyle = getComputedStyle(app);
+  const appInner = app.clientHeight
+    - (parseFloat(appStyle.paddingTop) || 0)
+    - (parseFloat(appStyle.paddingBottom) || 0);
+
   // A 10x20 well on a tall phone is width-bound with height to spare, so the
   // rails get sized last: the board takes every pixel of width its height can
   // actually use, and whatever is left over becomes rail.
-  const availH = stage.clientHeight - PAD_Y;
+  const availH = appInner - hud.offsetHeight - PAD_Y;
   const totalW = stage.clientWidth - PAD_X - GAPS;
   const cellByH = Math.floor(availH / VIS_ROWS);
 
@@ -123,7 +131,7 @@ export function render() {
       const t = G.grid[y][x];
       if (!t) continue;
       const color = theme.pieces[t];
-      drawBlock(boardCtx, x * cell, (y - HIDDEN) * cell, y >= G.deathRow ? grayOf(color) : color, cell);
+      drawBlock(boardCtx, x * cell, (y - HIDDEN) * cell, y >= G.deathRow ? grayOf(color) : color, cell, t);
     }
   }
 
@@ -141,7 +149,7 @@ export function render() {
     }
     forEachCell(a.m, (x, y) => {
       const sy = (a.y + y - HIDDEN) * cell;
-      if (sy > -cell) drawBlock(boardCtx, (a.x + x) * cell, sy, theme.pieces[a.type], cell);
+      if (sy > -cell) drawBlock(boardCtx, (a.x + x) * cell, sy, theme.pieces[a.type], cell, a.type);
     });
   }
 
@@ -205,8 +213,11 @@ function drawClearFx(w, h, cell) {
   }
 }
 
-function drawBlock(ctx, px, py, color, size, th = theme) {
-  drawSprite(ctx, blockSprite(color, size, th), px, py);
+// `type` is the tetromino letter. Colour alone can't stand in for it: the
+// Game Boy style picks a fill pattern per piece, and the death curtain replaces
+// the colour with grey while the piece identity must survive.
+function drawBlock(ctx, px, py, color, size, type, th = theme) {
+  drawSprite(ctx, blockSprite(color, size, th, type), px, py);
 }
 
 function drawSprite(ctx, sprite, px, py) {
@@ -249,7 +260,7 @@ export function drawThemePreview(cv, th) {
   g.stroke();
 
   for (const [x, y, type] of PREVIEW_STACK) {
-    drawBlock(g, ox + x * cell, oy + y * cell, th.pieces[type], cell, th);
+    drawBlock(g, ox + x * cell, oy + y * cell, th.pieces[type], cell, type, th);
   }
 
   if (th.scanlines) {
@@ -268,7 +279,7 @@ export function drawWordmarkL(cv, th = theme) {
   cv.height = cell * 3 + pad * 2;
   const g = cv.getContext('2d');
   for (const [x, y] of WORDMARK_L) {
-    drawBlock(g, pad + x * cell, pad + y * cell, th.pieces.L, cell, th);
+    drawBlock(g, pad + x * cell, pad + y * cell, th.pieces.L, cell, 'L', th);
   }
 }
 
@@ -311,7 +322,7 @@ function drawMini(ctx, cv, types, alpha) {
     const pw = (maxX - minX + 1) * size, ph = (maxY - minY + 1) * size;
     const ox = (w - pw) / 2 - minX * size;
     const oy = i * slotH + (slotH - ph) / 2 - minY * size;
-    forEachCell(m, (x, y) => drawBlock(ctx, ox + x * size, oy + y * size, theme.pieces[type], size));
+    forEachCell(m, (x, y) => drawBlock(ctx, ox + x * size, oy + y * size, theme.pieces[type], size, type));
   });
 
   ctx.globalAlpha = 1;

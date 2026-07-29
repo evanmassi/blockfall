@@ -11,20 +11,22 @@ export function clearSprites() { sprites.clear(); }
 // Glow is baked in here so nothing needs shadowBlur at frame time. The theme is
 // passed rather than read from the module so the picker can draw a swatch in a
 // palette that isn't the active one.
-export function blockSprite(color, size, th) {
-  const key = th.key + color + '@' + size;
+export function blockSprite(color, size, th, type) {
+  const key = th.key + (type || '') + color + '@' + size;
   if (sprites.has(key)) return sprites.get(key);
 
   const style = th.block;
+  const kind = style.style || 'bevel';
   const pad = Math.ceil(size * 0.5);
   const cv = document.createElement('canvas');
   cv.width = cv.height = size + pad * 2;
   const g = cv.getContext('2d');
   g.translate(pad, pad);
 
-  const gap = Math.max(1, Math.round(size * 0.045));
+  // Only the bevel treats cells as separate objects. The two hardware styles
+  // butt together, their outlines forming the grid, as on the originals.
+  const gap = kind === 'bevel' ? Math.max(1, Math.round(size * 0.045)) : 0;
   const x0 = gap, y0 = gap, s = size - gap * 2;
-  const b = Math.max(1, Math.round(s * 0.16));
 
   if (style.glow > 0) {
     g.shadowColor = color;
@@ -34,6 +36,20 @@ export function blockSprite(color, size, th) {
   g.fillRect(x0, y0, s, s);
   g.fillRect(x0, y0, s, s);
   g.shadowBlur = 0;
+
+  if (kind === 'inset') paintInset(g, x0, y0, s, th, type);
+  else if (kind === 'nes') paintNes(g, x0, y0, s, th, type);
+  else paintBevel(g, x0, y0, s, th);
+
+  const sprite = { cv, pad };
+  sprites.set(key, sprite);
+  return sprite;
+}
+
+/** Raised 3D block: lit top-left, shaded bottom-right. */
+function paintBevel(g, x0, y0, s, th) {
+  const style = th.block;
+  const b = Math.max(1, Math.round(s * 0.16));
 
   g.beginPath();
   g.moveTo(x0, y0); g.lineTo(x0 + s, y0);
@@ -53,10 +69,124 @@ export function blockSprite(color, size, th) {
   g.strokeStyle = style.outline;
   g.lineWidth = 1;
   g.strokeRect(x0 + .5, y0 + .5, s - 1, s - 1);
+}
 
-  const sprite = { cv, pad };
-  sprites.set(key, sprite);
-  return sprite;
+// On a monochrome LCD the fill pattern, not the colour, is what identifies a
+// piece — so each tetromino gets its own mark, matching the range visible on
+// the hardware: solid, dots, hollow and filled squares at two sizes, and dither.
+export const INSET_MARKS = {
+  I: 'stipple',
+  J: 'ringLarge',
+  L: 'fillSmall',
+  O: 'fillLarge',
+  S: 'ringSmall',
+  T: 'dot',
+  Z: 'solid',
+};
+
+/** Game Boy: hard outline plus a per-piece inner mark. No lighting — the LCD
+ *  had none, and a bevel here reads as the wrong machine entirely. */
+function paintInset(g, x0, y0, s, th, type) {
+  const style = th.block;
+  const edge = Math.max(1, Math.round(s * 0.1));
+  const ink = style.outline;
+  const light = `rgba(255,255,255,${style.light})`;
+
+  g.strokeStyle = ink;
+  g.lineWidth = edge;
+  g.strokeRect(x0 + edge / 2, y0 + edge / 2, s - edge, s - edge);
+
+  const square = (insetFrac, filled) => {
+    const i = Math.max(edge + 1, Math.round(s * insetFrac));
+    const w = s - i * 2;
+    if (w <= 1) return;
+    if (filled) {
+      g.fillStyle = light;
+      g.fillRect(x0 + i, y0 + i, w, w);
+    }
+    g.strokeStyle = ink;
+    g.lineWidth = Math.max(1, Math.round(s * 0.07));
+    g.strokeRect(x0 + i, y0 + i, w, w);
+  };
+
+  switch (INSET_MARKS[type] || 'fillSmall') {
+    case 'solid':
+      break;
+    case 'ringLarge':
+      square(0.2, false);
+      break;
+    case 'fillLarge':
+      square(0.2, true);
+      break;
+    case 'ringSmall':
+      square(0.32, false);
+      break;
+    case 'fillSmall':
+      square(0.32, true);
+      break;
+    case 'dot': {
+      const d = Math.max(1, Math.round(s * 0.2));
+      g.fillStyle = ink;
+      g.fillRect(x0 + Math.round((s - d) / 2), y0 + Math.round((s - d) / 2), d, d);
+      break;
+    }
+    case 'stipple': {
+      const cells = 4;
+      const step = (s - edge * 2) / cells;
+      const d = Math.max(1, Math.round(step * 0.62));
+      g.fillStyle = light;
+      for (let row = 0; row < cells; row++) {
+        for (let col = 0; col < cells; col++) {
+          if ((row + col) % 2) continue;
+          g.fillRect(
+            x0 + edge + Math.round(col * step + (step - d) / 2),
+            y0 + edge + Math.round(row * step + (step - d) / 2),
+            d, d
+          );
+        }
+      }
+      break;
+    }
+  }
+}
+
+// The hardware drew two tiles per level: a solid square with a corner
+// highlight, and a hollow ring with the background showing through, used for
+// the level's pale piece. Ring is assigned to the near-white pieces here,
+// which also solves a practical problem — a white highlight on a white block
+// is invisible.
+export const NES_MARKS = {
+  I: 'solid', J: 'solid', L: 'solid', S: 'solid', Z: 'solid',
+  O: 'ring', T: 'ring', // the level's white pieces
+};
+
+/** NES: flat fill with either a corner highlight or a punched-out centre. */
+function paintNes(g, x0, y0, s, th, type) {
+  const style = th.block;
+  const lw = Math.max(1, Math.round(s * 0.1));
+
+  if (NES_MARKS[type] === 'ring') {
+    const inset = Math.max(lw + 1, Math.round(s * 0.26));
+    g.fillStyle = th.well;
+    g.fillRect(x0 + inset, y0 + inset, s - inset * 2, s - inset * 2);
+  } else {
+    g.strokeStyle = `rgba(255,255,255,${style.light})`;
+    g.lineWidth = lw;
+    g.strokeRect(x0 + lw / 2, y0 + lw / 2, s - lw, s - lw);
+
+    // Three pixels in a corner, not a 2x2 block — that L is the shape of the
+    // highlight on the original tile.
+    const u = Math.max(1, Math.round(s * 0.15));
+    const hx = x0 + Math.round(lw * 1.5), hy = y0 + Math.round(lw * 1.5);
+    g.fillStyle = `rgba(255,255,255,${Math.min(1, style.light + 0.35)})`;
+    g.fillRect(hx, hy, u, u);
+    g.fillRect(hx + u, hy, u, u);
+    g.fillRect(hx, hy + u, u, u);
+  }
+
+  g.strokeStyle = style.outline;
+  g.lineWidth = 1;
+  g.strokeRect(x0 + .5, y0 + .5, s - 1, s - 1);
 }
 
 export function ghostSprite(color, size, th) {
