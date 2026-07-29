@@ -320,7 +320,12 @@ function nextScale(f) {
   return 1 - (1 - NEXT_TAIL) * f;
 }
 
-function drawQueuePiece(ctx, type, w, top, slotH, size, alpha) {
+/**
+ * Draws a tetromino centred in the box spanning (0, top) to (w, top + slotH).
+ * Centring uses the piece's filled bounding box, not its matrix, so a 4x4 I and
+ * a 3x3 T both sit visually centred. Shared by the HOLD slot and the queue.
+ */
+function drawPieceInBox(ctx, type, w, top, slotH, size, alpha = 1) {
   const m = ROTATIONS[type][0];
   let minX = 9, maxX = -1, minY = 9, maxY = -1;
   forEachCell(m, (x, y) => {
@@ -355,12 +360,24 @@ function drawNext() {
                 : f > NEXT_SHOWN - 1 ? Math.max(0, NEXT_SHOWN - f)
                 : 1;
     const size = Math.max(4, Math.round(view.previewSize * nextScale(f)));
-    drawQueuePiece(nextCtx, type, w, nextSlotTop(f), nextSlotHeight(f), size, alpha);
+    drawPieceInBox(nextCtx, type, w, nextSlotTop(f), nextSlotHeight(f), size, alpha);
   });
 }
 
+function drawHold() {
+  const { dpr, previewSize: size } = view;
+  const w = holdCv.width / dpr, h = holdCv.height / dpr;
+
+  holdCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  holdCtx.clearRect(0, 0, w, h);
+
+  if (!G.hold) { drawEmptySlot(holdCtx, w, h); return; }
+  // Dimmed while the hold is spent, so it reads as unavailable.
+  drawPieceInBox(holdCtx, G.hold, w, 0, h, size, G.canHold ? 1 : 0.35);
+}
+
 export function drawSidePanels() {
-  drawMini(holdCtx, holdCv, G.hold ? [G.hold] : [], G.canHold ? 1 : 0.35);
+  drawHold();
 
   // One extra is held so the piece rising into the last slot has something to
   // be. A queue that shifted by exactly one animates; anything else snaps.
@@ -396,29 +413,3 @@ function drawEmptySlot(ctx, w, h) {
   ctx.globalAlpha = 1;
 }
 
-function drawMini(ctx, cv, types, alpha) {
-  const { dpr, previewSize: size } = view;
-  const w = cv.width / dpr, h = cv.height / dpr;
-
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
-  if (!types.length) { drawEmptySlot(ctx, w, h); return; }
-  ctx.globalAlpha = alpha;
-
-  const slotH = h / types.length;
-
-  types.forEach((type, i) => {
-    const m = ROTATIONS[type][0];
-    let minX = 9, maxX = -1, minY = 9, maxY = -1;
-    forEachCell(m, (x, y) => {
-      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-    });
-    const pw = (maxX - minX + 1) * size, ph = (maxY - minY + 1) * size;
-    const ox = (w - pw) / 2 - minX * size;
-    const oy = i * slotH + (slotH - ph) / 2 - minY * size;
-    forEachCell(m, (x, y) => drawBlock(ctx, ox + x * size, oy + y * size, theme.pieces[type], size, type));
-  });
-
-  ctx.globalAlpha = 1;
-}

@@ -133,7 +133,7 @@ Runs are saved at stable points only — a new piece, a pause, leaving for the m
 
 Display type is **Press Start 2P** (Cody Boisclair, SIL Open Font License) — latin subset only, 12.5 KB, in `fonts/`, cached by the service worker so it renders offline. Licence text ships alongside it.
 
-It's one weight and renders far larger and wider per pixel than a normal face, so everything using it sets its own size and near-zero letter-spacing, and `font-synthesis: none` prevents faux bolding. Body copy stays monospace — the pixel face is unreadable in running text.
+It's one weight and renders far larger and wider per pixel than a normal face, so everything using it sets its own size and near-zero letter-spacing, and `font-synthesis: none` prevents faux bolding. Every piece of on-screen text uses it; there is no running prose left, only short labels and a two-column control list, which the face handles at 7–9px.
 
 The title's first L is the real L tetromino: in its first rotation the piece is already the shape of the letter.
 

@@ -53,7 +53,6 @@ export const CLEAR_FX = [
   { time: 340, shake: 9.0, parts: 12, spread: 0.88, beam: 1.15, tint: 'I' },
 ];
 
-export const CLEAR_TIME_MAX = Math.max(...CLEAR_FX.filter(Boolean).map(f => f.time));
 
 // Tunable feel — adjust after real-hands testing.
 export const CTRL = {

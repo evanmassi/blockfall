@@ -149,6 +149,15 @@ export const theme = {};
  * @returns {boolean} whether any colour actually changed — the caller uses this
  *   to decide about throwing away the sprite cache, which is not cheap.
  */
+// Exposed so CSS-only decoration (the menu's drifting debris) follows the
+// palette without the markup having to be regenerated on a theme switch.
+function pushPieceVars() {
+  const root = document.documentElement.style;
+  for (const p of Object.keys(theme.pieces)) {
+    root.setProperty('--piece-' + p.toLowerCase(), theme.pieces[p]);
+  }
+}
+
 export function applyLevelPalette(level) {
   const palettes = theme.levelPalettes;
   if (!palettes || !theme.paletteSlots) return false;
@@ -162,12 +171,7 @@ export function applyLevelPalette(level) {
     changed = true;
   }
 
-  if (changed) {
-    const root = document.documentElement.style;
-    for (const p of Object.keys(theme.pieces)) {
-      root.setProperty('--piece-' + p.toLowerCase(), theme.pieces[p]);
-    }
-  }
+  if (changed) pushPieceVars();
   return changed;
 }
 
@@ -204,11 +208,7 @@ export function setTheme(name) {
   root.setProperty('--board-shadow', theme.boardShadow);
   root.setProperty('--scanlines', theme.scanlines ? 'block' : 'none');
 
-  // Exposed so CSS-only decoration (the menu's drifting debris) follows the
-  // palette without the markup having to be regenerated on a theme switch.
-  for (const p of Object.keys(theme.pieces)) {
-    root.setProperty('--piece-' + p.toLowerCase(), theme.pieces[p]);
-  }
+  pushPieceVars();
 
   // Colors the Android status bar to match the board.
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.bg);

@@ -114,17 +114,21 @@ globalThis.window = {
   },
 };
 
-const { COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_TIME_MAX, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS } = await import('../src/config.js');
+const { COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS } = await import('../src/config.js');
+// Derived here rather than exported from config: only the tests need it, for
+// pumping past the longest clear animation.
+const CLEAR_TIME_MAX = Math.max(...CLEAR_FX.filter(Boolean).map(f => f.time));
 const { ROTATIONS, TYPES, topRow } = await import('../src/pieces.js');
-const { G } = await import('../src/state.js');
+const { G, loadRun } = await import('../src/state.js');
+// game.js has no need for this predicate, so the tests use the storage API.
+const hasSavedRun = mode => !!loadRun(mode);
 const { THEMES, theme, savedThemeName } = await import('../src/themes.js');
 const board = await import('../src/board.js');
 const game = await import('../src/game.js');
 const { applyTheme, view, syncLevelPalette } = await import('../src/render.js');
 const { INSET_MARKS, NES_MARKS } = await import('../src/sprites.js');
 const { Haptics, HAPTIC_CLEAR_PATTERNS } = await import('../src/haptics.js');
-const { updateHud: updateHudFromTest } = await import('../src/ui.js');
-const { themeBar } = await import('../src/ui.js');
+const { updateHud: updateHudFromTest, themeBar } = await import('../src/ui.js');
 await import('../src/main.js'); // boots: theme, resize, menu, loop
 
 let clock = 0;
@@ -660,7 +664,11 @@ console.log('\nOverlay actions');
 
   // Controls used to appear on the menu only, so once you started playing there
   // was no way to look them up again — the gestures aren't guessable.
-  check('pause lists the controls', /DRAG|move/.test(paused), 'no control hints on pause');
+  check('pause lists the controls', paused.includes('class="controls"'), 'no control list on pause');
+  // Two columns per row, so a gesture can never be orphaned from its action.
+  const dts = (paused.match(/<dt>/g) || []).length;
+  const dds = (paused.match(/<dd>/g) || []).length;
+  check('every control is a key/action pair', dts > 0 && dts === dds, `${dts} keys, ${dds} actions`);
   check('the hold gesture is spelled out somewhere reachable',
         /hold/i.test(paused), 'hold gesture not documented in game');
 
@@ -764,7 +772,7 @@ console.log('\nZen mode');
   G.score = 3210;
   game.showMenu();
   menu = els.overlay.innerHTML;
-  check('starting marathon left the zen run alone', game.hasSavedRun('zen'));
+  check('starting marathon left the zen run alone', hasSavedRun('zen'));
   check('both runs offered', menu.includes('data-act="continue"') && menu.includes('data-act="continue-zen"'));
   check('each resume shows its own progress', menu.includes('3,210') && menu.includes('42'));
   check('marathon resume carries its score', menu.includes('RESUME GAME') && menu.includes('3,210'));
@@ -802,7 +810,7 @@ console.log('\nZen mode');
   store['blockfall.run'] = JSON.stringify({ v: 1, mode: 'zen', lines: 7, score: 10, grid: '.'.repeat(ROWS * COLS) });
   const { migrateLegacyRun } = await import('../src/state.js');
   migrateLegacyRun();
-  check('a legacy save is rehomed to its mode', !!game.hasSavedRun('zen'));
+  check('a legacy save is rehomed to its mode', !!hasSavedRun('zen'));
   check('and the old key is cleared', !('blockfall.run' in store));
 
   // No high-score chase in a mode with no ceiling.
@@ -1048,13 +1056,13 @@ console.log('\nResuming a run');
   G.score = 2750; G.lines = 7; G.level = 2; G.hold = 'I';
   game.snapshotRun();
 
-  check('a run in progress is saved', game.hasSavedRun('marathon'));
+  check('a run in progress is saved', hasSavedRun('marathon'));
   check('board stored compactly',
         JSON.parse(store['blockfall.run.marathon']).grid.length === ROWS * COLS);
 
   // Simulate a relaunch: wipe live state, then resume from storage alone.
   game.showMenu();
-  check('menu still offers the run', game.hasSavedRun('marathon'));
+  check('menu still offers the run', hasSavedRun('marathon'));
   check('menu shows a new-game escape hatch', els.overlay.innerHTML.includes('data-act="new"'));
   check('menu prompt reflects the saved run', els.overlay.innerHTML.includes('TAP TO RESUME'));
 
@@ -1070,12 +1078,12 @@ console.log('\nResuming a run');
   game.togglePause();
   game.gameOver();
   pumpMs(DEATH_ROW_MS * 25 + DEATH_HOLD_MS + 150);
-  check('game over clears the saved run', !game.hasSavedRun('marathon'));
+  check('game over clears the saved run', !hasSavedRun('marathon'));
 
   game.startGame();
   pumpMs(20);
   game.snapshotRun();
-  check('a fresh run saves again', game.hasSavedRun('marathon'));
+  check('a fresh run saves again', hasSavedRun('marathon'));
   game.startGame();
   pumpMs(20);
   // The slot is cleared and then immediately reoccupied by the new run, so the
@@ -1086,7 +1094,7 @@ console.log('\nResuming a run');
 
   // A payload from an older schema must be ignored rather than half-loaded.
   store['blockfall.run.marathon'] = JSON.stringify({ v: 0, score: 999 });
-  check('an incompatible saved run is discarded', !game.hasSavedRun('marathon'));
+  check('an incompatible saved run is discarded', !hasSavedRun('marathon'));
   delete store['blockfall.run'];
 }
 

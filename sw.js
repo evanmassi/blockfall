@@ -11,10 +11,15 @@ const ASSETS = [
   './fonts/press-start-2p.woff2',
 ];
 
+// Assets are cached individually rather than with addAll, which is atomic: one
+// unreachable path there aborts the whole install, and the failure is silent —
+// the app keeps working online and simply never works offline. A stale entry in
+// ASSETS is caught at development time by the test that diffs it against the
+// filesystem, which is where a loud failure is actually useful.
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(ASSETS))
+      .then(cache => Promise.allSettled(ASSETS.map(url => cache.add(url))))
       .then(() => self.skipWaiting())
   );
 });

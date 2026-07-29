@@ -385,8 +385,6 @@ export function snapshotRun() {
   });
 }
 
-export function hasSavedRun(mode) { return !!loadRun(mode); }
-
 /**
  * Which mode a plain tap on the menu should pick up: whichever was played last
  * if it has a save, else whichever does, else none.
@@ -511,11 +509,17 @@ function finishGameOver() {
  */
 function controlsHint() {
   const touch = window.matchMedia?.('(pointer: coarse)')?.matches ?? true;
-  return touch
-    ? `DRAG move &nbsp;·&nbsp; TAP rotate &nbsp;·&nbsp; FLICK DOWN drop<br>
-       SWIPE UP hold &nbsp;·&nbsp; TWO-FINGER TAP rotate back`
-    : `&larr; &rarr; move &nbsp;·&nbsp; &uarr; rotate &nbsp;·&nbsp; Z rotate back<br>
-       SPACE drop &nbsp;·&nbsp; C hold &nbsp;·&nbsp; P pause`;
+
+  // A two-column list, not a run of text. Separating pairs with middots let the
+  // browser wrap at any space, which split "FLICK DOWN" from "drop".
+  const rows = touch
+    ? [['DRAG', 'move'], ['TAP', 'rotate'], ['FLICK DOWN', 'hard drop'],
+       ['SWIPE UP', 'hold'], ['TWO-FINGER TAP', 'rotate back']]
+    : [['&larr; &rarr;', 'move'], ['&uarr; / X', 'rotate'], ['Z', 'rotate back'],
+       ['SPACE', 'hard drop'], ['C', 'hold'], ['P', 'pause']];
+
+  const cells = rows.map(([key, action]) => `<dt>${key}</dt><dd>${action}</dd>`).join('');
+  return `<dl class="controls">${cells}</dl>`;
 }
 
 /**
@@ -534,7 +538,7 @@ export function showPauseScreen() {
     <h2>PAUSED</h2>
     ${themeBar()}
     ${actionBar(actions)}
-    <p class="fine">${controlsHint()}</p>
+    ${controlsHint()}
     <p class="cta">TAP TO RESUME</p>
   `, { soft: true }); // board stays readable behind it
 }
@@ -550,6 +554,8 @@ export function togglePause() {
   }
 }
 
+const lineCount = n => `${n.toLocaleString()} ${n === 1 ? 'LINE' : 'LINES'}`;
+
 /** One card per mode that has anything to show, each with the same three stats. */
 function recordCards() {
   const card = (mode, name) => {
@@ -559,7 +565,7 @@ function recordCards() {
       <div class="recordCard">
         <span class="label">${name}</span>
         <b>${s.score.toLocaleString()}</b>
-        <span class="sub">${s.lines.toLocaleString()} ${s.lines === 1 ? 'LINE' : 'LINES'} &nbsp;·&nbsp; ${s.combo}&times;</span>
+        <span class="sub">${lineCount(s.lines)} &nbsp;·&nbsp; ${s.combo}&times;</span>
       </div>`;
   };
 
@@ -587,7 +593,6 @@ export function showMenu() {
   // "New" on the first row, "resume" on the second. One verb throughout: the
   // buttons and the prompt both say RESUME, and both modes are named the same
   // way wherever they appear.
-  const lines = n => `${n.toLocaleString()} ${n === 1 ? 'LINE' : 'LINES'}`;
   const actions = [];
 
   if (saved) {
@@ -596,7 +601,7 @@ export function showMenu() {
       actions.push(['continue', `RESUME GAME · ${(savedMarathon.score | 0).toLocaleString()}`]);
     }
     if (savedZen) {
-      actions.push(['continue-zen', `RESUME ZEN · ${lines(savedZen.lines | 0)}`]);
+      actions.push(['continue-zen', `RESUME ZEN · ${lineCount(savedZen.lines | 0)}`]);
     }
   } else {
     actions.push(['zen', 'ZEN MODE']);
@@ -612,8 +617,8 @@ export function showMenu() {
     ${menuBackdrop()}
     ${wordmark()}
     ${recordCards()}
-    <p>${controlsHint()}</p>
-    <p class="fine">HOLD stashes a piece for later — once per drop</p>
+    ${controlsHint()}
+    <p class="fine">HOLD SAVES A PIECE &nbsp;·&nbsp; ONCE PER DROP</p>
     ${themeBar()}
     ${actionBar(actions)}
     <p class="cta">${cta}</p>

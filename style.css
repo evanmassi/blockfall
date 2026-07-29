@@ -27,7 +27,8 @@
    normal face, so anything using it sets its own size and tight letter-spacing,
    and must never be synthetically bolded. */
 [class*="label"], .stat b, .best b, .recordCard b, .recordCard .sub, .swatch em,
-#score, #toast, #overlay h1, #overlay h2, #overlay .cta {
+.controls dt, .controls dd,
+#score, #toast, #overlay h1, #overlay h2, #overlay p {
   font-family:var(--font-display);
   font-weight:400;
   font-synthesis:none;
@@ -247,8 +248,21 @@ html, body {
 .best.new { border-color:var(--accent); }
 .best.new .label, .best.new b { color:var(--accent); }
 #overlay h2.record { color:var(--accent); text-shadow:0 0 24px var(--accent), 0 0 56px var(--accent); }
-#overlay p { color:var(--dim); font-size:13px; line-height:1.75; letter-spacing:.05em; }
-#overlay .fine { font-size:11px; opacity:.72; margin-top:-6px; }
+/* Sized to sit with the labels and the control list — 13px in a pixel face read
+   as a different typeface next to 7px labels. */
+#overlay p { color:var(--dim); font-size:clamp(7px,2.3vw,9px); line-height:1.7; letter-spacing:.06em; }
+#overlay .fine { opacity:.72; margin-top:-4px; }
+
+/* Two columns so a gesture can never be split from its action. The key column
+   never wraps; only the description may, and only on a very narrow screen. */
+.controls {
+  display:grid; grid-template-columns:auto auto;
+  justify-content:center; align-items:baseline;
+  gap:6px 14px; margin:0;
+  font-size:clamp(7px,2.3vw,9px); letter-spacing:.08em; line-height:1.4;
+}
+.controls dt { color:var(--dim); text-align:right; white-space:nowrap; }
+.controls dd { color:var(--text); text-align:left; margin:0; }
 #overlay .cta { color:var(--text); font-size:9px; letter-spacing:.06em; line-height:1.6; animation:pulse 1.7s ease-in-out infinite; }
 
 @keyframes pulse { 0%,100%{opacity:.35} 50%{opacity:1} }
