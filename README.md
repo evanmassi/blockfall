@@ -44,7 +44,9 @@ Add `?debug` for an on-screen log of pointer events plus the build id, also POST
 node test/run.mjs
 ```
 
-235 assertions. Stubs enough DOM to boot the real modules in Node, then drives the game through the same entry points the browser uses — SRS kicks, T-spin scoring, lock delay, the death curtain, gestures, persistence, theme integrity, and whether the service worker's asset list matches the filesystem.
+236 assertions across 37 blocks. `test/harness.mjs` stubs enough DOM to boot the real modules in Node and re-exports them with helpers; `test/run.mjs` holds only assertions. Coverage spans SRS kicks, T-spin scoring, lock delay, the death curtain, gestures, persistence, theme integrity, and whether the service worker's asset list matches the filesystem.
+
+Every block opens with `reset()` and sets up what it needs. Blocks must not inherit state from each other — three bugs in this project were masked by assertions that only passed because of what a previous block happened to leave behind.
 
 ## Deploy
 

@@ -1,167 +1,33 @@
-// Headless test harness. Stubs just enough DOM to boot the real modules, then
-// drives the game through the same entry points the browser uses.
+// Assertion blocks. The harness stubs the DOM, boots the real modules and
+// re-exports them along with the helpers used here.
 //
-//   node test/run.mjs
+// Every block opens with reset(), which wipes storage, blanks the records and
+// re-applies the default theme. Blocks must not inherit state from each other:
+// three bugs in this project were masked by assertions that passed only because
+// of what a previous block happened to leave behind.
 
-import fs from 'node:fs';
+import {
+  // harness
+  check, section, report, reset, fresh, pumpMs, pumpPastDeath, now, noop, fs,
+  els, handlers, docHandlers, store, cssVars, metaThemeColor,
+  swatchEls, actionButtons, fakeSwatch, previewCanvas, markCv,
+  // board + input helpers
+  clearGrid, fillRow, fillFrom, put, filledCells, key,
+  tapOverlay, pressAction, dragOnStage, targetMatching, backdropTarget,
+  // modules under test
+  COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, CLEAR_TIME_MAX, DEATH_ROW_MS, DEATH_HOLD_MS,
+  ROTATIONS, TYPES, topRow,
+  G, state, loadRun, hasSavedRun, board, game,
+  THEMES, theme, savedThemeName, applyTheme, view, syncLevelPalette,
+  INSET_MARKS, NES_MARKS, Haptics, HAPTIC_CLEAR_PATTERNS,
+  updateHud as updateHudFromTest, themeBar,
+} from './harness.mjs';
 
-const noop = () => {};
-const grad = { addColorStop: noop };
+const clock = now();
 
-const ctxStub = () => {
-  const ctx = {
-    draws: 0, strokes: 0,
-    setTransform: noop, clearRect: noop, fillRect: noop, setLineDash: noop,
-    strokeRect: () => { ctx.strokes++; },
-    drawImage: () => { ctx.draws++; },
-    beginPath: noop, moveTo: noop, lineTo: noop, arcTo: noop, closePath: noop,
-    stroke: noop, fill: noop, translate: noop,
-    createLinearGradient: () => grad, createRadialGradient: () => grad,
-    globalAlpha: 1, fillStyle: '', strokeStyle: '', lineWidth: 1, shadowColor: '', shadowBlur: 0,
-  };
-  return ctx;
-};
-
-const docHandlers = {}, handlers = {}, els = {};
-const IDS = ['app','hud','board','holdCanvas','nextCanvas','overlay','toast','stage','railLeft','railRight',
-             'score','level','lines','comboStat','combo','pauseBtn','muteBtn'];
-
-for (const id of IDS) {
-  const listeners = handlers[id] = {};
-  const ctx = ctxStub(); // stable per element, so draw counts are observable
-  const classes = new Set();
-  els[id] = {
-    id, style: {}, textContent: '', innerHTML: '', width: 10, height: 10,
-    clientWidth: 400, clientHeight: 700,
-    classes,
-    classList: {
-      add: c => classes.add(c),
-      remove: c => classes.delete(c),
-      toggle: (c, v) => { (v ?? !classes.has(c)) ? classes.add(c) : classes.delete(c); },
-    },
-    ctx,
-    getContext: () => ctx,
-    getBoundingClientRect: () => ({ width: 60, height: 600, top: 0, left: 0 }),
-    offsetHeight: id === 'hud' ? 95 : 0,
-    addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); },
-    animate: () => ({}),
-    setPointerCapture: noop,
-  };
-}
-
-const cssVars = {};
-const store = {};
-const metaThemeColor = { content: '', setAttribute: (k, v) => { metaThemeColor.content = v; } };
-
-// Stand-ins for the swatch DOM the theme picker walks and paints into.
-const previewCanvas = () => ({
-  clientWidth: 76, clientHeight: 62, width: 0, height: 0, style: {}, getContext: ctxStub,
-});
-const markCv = previewCanvas();
-
-const swatchEls = [];
-// showOverlay() binds listeners straight onto the action buttons, so the stub
-// has to hand back real-ish elements parsed from the markup it just rendered.
-let actionButtons = [];
-els.overlay.querySelectorAll = sel => {
-  if (sel !== '[data-act]') return swatchEls;
-  actionButtons = [...els.overlay.innerHTML.matchAll(/data-act="([^"]+)"/g)].map(m => {
-    const listeners = {};
-    return {
-      dataset: { act: m[1] },
-      listeners,
-      addEventListener: (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); },
-    };
-  });
-  return actionButtons;
-};
-els.overlay.querySelector = sel => (sel === '.markL' ? markCv : null);
-
-function fakeSwatch(name) {
-  const el = { dataset: { theme: name }, on: false, querySelector: () => previewCanvas() };
-  el.classList = { toggle: (_cls, v) => { el.on = v; } };
-  return el;
-}
-const rafQueue = [];
-const oscNode = { connect: n => n, start: noop, stop: noop, type: '', frequency: { setValueAtTime: noop } };
-const gainNode = { gain: { setValueAtTime: noop, exponentialRampToValueAtTime: noop }, connect: n => n };
-
-globalThis.document = {
-  hidden: false,
-  documentElement: { style: { setProperty: (k, v) => { cssVars[k] = v; } } },
-  getElementById: id => els[id],
-  querySelector: () => metaThemeColor,
-  createElement: () => ({ width: 10, height: 10, style: {}, getContext: ctxStub }),
-  addEventListener: (t, fn) => { (docHandlers[t] = docHandlers[t] || []).push(fn); },
-};
-globalThis.localStorage = {
-  getItem: k => (k in store ? store[k] : null),
-  setItem: (k, v) => { store[k] = String(v); },
-  removeItem: k => { delete store[k]; },
-};
-globalThis.requestAnimationFrame = fn => rafQueue.push(fn);
-globalThis.location = { search: '' };
-globalThis.getComputedStyle = () => ({ paddingTop: '0px', paddingBottom: '0px' });
-// Node supplies a read-only `navigator` with no serviceWorker, so main.js's
-// registration guard short-circuits on its own.
-globalThis.window = {
-  devicePixelRatio: 2,
-  addEventListener: noop,
-  visualViewport: undefined,
-  AudioContext: function () {
-    return { state: 'running', resume: noop, currentTime: 0, destination: {},
-             createOscillator: () => oscNode, createGain: () => gainNode };
-  },
-};
-
-const { COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS } = await import('../src/config.js');
-// Derived here rather than exported from config: only the tests need it, for
-// pumping past the longest clear animation.
-const CLEAR_TIME_MAX = Math.max(...CLEAR_FX.filter(Boolean).map(f => f.time));
-const { ROTATIONS, TYPES, topRow } = await import('../src/pieces.js');
-const { G, loadRun } = await import('../src/state.js');
-// game.js has no need for this predicate, so the tests use the storage API.
-const hasSavedRun = mode => !!loadRun(mode);
-const { THEMES, theme, savedThemeName } = await import('../src/themes.js');
-const board = await import('../src/board.js');
-const game = await import('../src/game.js');
-const { applyTheme, view, syncLevelPalette } = await import('../src/render.js');
-const { INSET_MARKS, NES_MARKS } = await import('../src/sprites.js');
-const { Haptics, HAPTIC_CLEAR_PATTERNS } = await import('../src/haptics.js');
-const { updateHud: updateHudFromTest, themeBar } = await import('../src/ui.js');
-await import('../src/main.js'); // boots: theme, resize, menu, loop
-
-let clock = 0;
-function pumpMs(ms, step = 16.7) {
-  for (let acc = 0; acc < ms; acc += step) {
-    clock += step;
-    for (const cb of rafQueue.splice(0, rafQueue.length)) cb(clock);
-  }
-}
-function key(k) {
-  for (const fn of docHandlers.keydown || []) fn({ key: k, repeat: false, preventDefault: noop });
-  for (const fn of docHandlers.keyup || []) fn({ key: k });
-}
-
-let pass = 0, fail = 0;
-function check(name, cond, detail = '') {
-  if (cond) { pass++; console.log('  PASS  ' + name); }
-  else { fail++; console.log('  FAIL  ' + name + (detail ? '  -> ' + detail : '')); }
-}
-
-function clearGrid() {
-  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) G.grid[y][x] = null;
-}
-function fresh() { game.startGame(); pumpMs(20); clearGrid(); }
-function fillRow(y, exceptX) {
-  for (let x = 0; x < COLS; x++) G.grid[y][x] = x === exceptX ? null : 'I';
-}
-function put(type, x, y, rot) {
-  G.active = { type, rot, x, y, m: ROTATIONS[type][rot] };
-}
-
-console.log('\nBoot');
+section('Boot');
 {
+  reset();
   // The title's first L is a canvas glyph, so the word isn't one string.
   const menu = els.overlay.innerHTML;
   check('menu rendered on load', menu.includes('<span>B</span>') && menu.includes('OCKFALL'));
@@ -178,8 +44,9 @@ console.log('\nBoot');
   check('board sized', els.board.width > 0);
 }
 
-console.log('\nOffline packaging');
+section('Offline packaging');
 {
+  reset();
   const root = new URL('../', import.meta.url);
   const read = p => fs.readFileSync(new URL(p, root), 'utf8');
   const exists = p => fs.existsSync(new URL(p, root));
@@ -242,8 +109,9 @@ console.log('\nOffline packaging');
   check('worker registration resolves against the module', read('src/main.js').includes("new URL('../sw.js', import.meta.url)"));
 }
 
-console.log('\nThemes');
+section('Themes');
 {
+  reset();
   const names = Object.keys(THEMES);
   check('themes defined', names.length >= 3, names.join(','));
 
@@ -346,8 +214,9 @@ console.log('\nThemes');
   applyTheme('neon');
 }
 
-console.log('\nPiece data');
+section('Piece data');
 {
+  reset();
   check('7 types', TYPES.length === 7);
   const counts = TYPES.map(t => ROTATIONS[t].every(m => m.flat().filter(Boolean).length === 4));
   check('every rotation of every piece has 4 cells', counts.every(Boolean));
@@ -355,16 +224,18 @@ console.log('\nPiece data');
   check('J spawn row is index 0', topRow(ROTATIONS.J[0]) === 0);
 }
 
-console.log('\n7-bag randomizer');
+section('7-bag randomizer');
 {
+  reset();
   const counts = {};
   for (let i = 0; i < 700; i++) { const t = board.nextType(); counts[t] = (counts[t] || 0) + 1; }
   const vals = Object.values(counts);
   check('700 draws yield 100 of each type', vals.length === 7 && vals.every(v => v === 100), JSON.stringify(counts));
 }
 
-console.log('\nSpawn placement');
+section('Spawn placement');
 {
+  reset();
   fresh();
   for (let i = 0; i < 7; i++) {
     clearGrid();
@@ -374,8 +245,9 @@ console.log('\nSpawn placement');
   }
 }
 
-console.log('\nLine clear');
+section('Line clear');
 {
+  reset();
   fresh();
   const before = G.score;
   fillRow(ROWS - 1, 0);
@@ -389,8 +261,9 @@ console.log('\nLine clear');
   check('no floating remnant above', G.grid[ROWS - 4].every(c => !c));
 }
 
-console.log('\nTetris (4 lines)');
+section('Tetris (4 lines)');
 {
+  reset();
   fresh();
   const before = G.score;
   for (let y = ROWS - 4; y < ROWS; y++) fillRow(y, 0);
@@ -402,8 +275,9 @@ console.log('\nTetris (4 lines)');
   check('board empty after perfect clear', G.grid.every(r => r.every(c => !c)));
 }
 
-console.log('\nClear escalation');
+section('Clear escalation');
 {
+  reset();
   const steps = CLEAR_FX.filter(Boolean);
   for (const k of ['time', 'shake', 'parts', 'spread', 'beam']) {
     const vals = steps.map(f => f[k]);
@@ -445,8 +319,9 @@ console.log('\nClear escalation');
   pumpMs(CLEAR_TIME_MAX + 60);
 }
 
-console.log('\nT-spin single (rotation must survive a 0-cell hard drop)');
+section('T-spin single (rotation must survive a 0-cell hard drop)');
 {
+  reset();
   fresh();
   const before = G.score;
   fillRow(ROWS - 1, 4);       // bottom row open at x=4
@@ -461,8 +336,9 @@ console.log('\nT-spin single (rotation must survive a 0-cell hard drop)');
   check('scores 800 (T-spin single), not 100', G.score - before === 800, 'delta=' + (G.score - before));
 }
 
-console.log('\nSRS wall kick');
+section('SRS wall kick');
 {
+  reset();
   fresh();
   G.grid[ROWS - 4][0] = 'I'; // blocks the no-offset rotation
   put('T', 0, ROWS - 5, 0);
@@ -470,8 +346,9 @@ console.log('\nSRS wall kick');
   check('piece kicked right by 1', G.active.x === 1, 'x=' + G.active.x);
 }
 
-console.log('\nHold');
+section('Hold');
 {
+  reset();
   fresh();
   const first = G.active.type;
   game.holdPiece();
@@ -482,8 +359,9 @@ console.log('\nHold');
   check('second hold is a no-op (no infinite stall)', G.active.type === afterFirst && G.hold === first);
 }
 
-console.log('\nHold slot rendering');
+section('Hold slot rendering');
 {
+  reset();
   fresh();
   els.holdCanvas.ctx.draws = 0;
   els.holdCanvas.ctx.strokes = 0;
@@ -506,8 +384,9 @@ console.log('\nHold slot rendering');
   check('swap is not the same piece twice', G.hold !== current || held !== current);
 }
 
-console.log('\nLock delay');
+section('Lock delay');
 {
+  reset();
   fresh();
   put('O', 4, ROWS - 2, 0);
   pumpMs(LOCK_DELAY - 150);
@@ -516,8 +395,9 @@ console.log('\nLock delay');
   check('locked after lock delay', G.grid[ROWS - 1][4] === 'O');
 }
 
-console.log('\nBlock out + death curtain');
+section('Block out + death curtain');
 {
+  reset();
   fresh();
   for (let x = 3; x <= 6; x++) { G.grid[0][x] = 'I'; G.grid[1][x] = 'I'; }
   G.grid[ROWS - 1][0] = 'T';
@@ -536,8 +416,9 @@ console.log('\nBlock out + death curtain');
   check('best score persisted', JSON.parse(store['blockfall.stats']).marathon.score >= 0);
 }
 
-console.log('\nOverlay restart');
+section('Overlay restart');
 {
+  reset();
   const tap = {
     pointerId: 3, pointerType: 'touch', button: 0, clientX: 10, clientY: 10, timeStamp: clock,
     target: { closest: () => null }, // tapped the backdrop, not a swatch
@@ -548,8 +429,9 @@ console.log('\nOverlay restart');
   check('score reset', G.score === 0, String(G.score));
 }
 
-console.log('\nTouch gestures');
+section('Touch gestures');
 {
+  reset();
   fresh();
   const stageH = handlers.stage;
   const fire = (type, ev) => { for (const fn of stageH[type] || []) fn(ev); };
@@ -572,8 +454,9 @@ console.log('\nTouch gestures');
   check('tap rotates', G.active.rot === 1, 'rot=' + G.active.rot);
 }
 
-console.log('\nNew high score');
+section('New high score');
 {
+  reset();
   const clearBottomRow = () => {
     fillRow(ROWS - 1, 0);
     put('I', -2, ROWS - 4, 1);
@@ -619,45 +502,13 @@ console.log('\nNew high score');
   check('new run clears the score marking', !els.score.classes.has('record'));
 }
 
-console.log('\nOverlay actions');
+section('Pause screen contents');
 {
-  // Everything fires pointerdown only. These controls sit under
-  // `touch-action: none`, where a synthesized click is not guaranteed to
-  // arrive, so a test that fires click would pass against broken code.
-  let tapClock = 1000;
-  const fireDown = (pointerType, target) => {
-    for (const fn of handlers.overlay.pointerdown || []) {
-      fn({ pointerType, button: 0, target, timeStamp: tapClock, preventDefault: noop });
-    }
-  };
-  // A real touch tap: the touch event, then the compatibility mouse event the
-  // browser emits ~50ms later at the same coordinates. By then the overlay may
-  // have been replaced, so the ghost lands on whatever is now underneath.
-  const tap = (target, ghostTarget = target) => {
-    tapClock += 400;
-    fireDown('touch', target);
-    tapClock += 50;
-    fireDown('mouse', ghostTarget);
-  };
-  // Buttons are bound directly now, so exercise them the way the DOM would:
-  // fire the listener showOverlay attached to the button element itself.
-  const pressButton = act => {
-    const btn = actionButtons.find(b => b.dataset.act === act);
-    for (const fn of btn.listeners.pointerdown || []) {
-      fn({ pointerType: 'touch', button: 0, target: btn, timeStamp: tapClock, stopPropagation: noop, preventDefault: noop });
-    }
-  };
-  const button = act => ({ closest: sel => (sel === '[data-act]' ? { dataset: { act } } : null) });
-  const backdrop = { closest: () => null };
-  // Landed in the button row, but between the buttons.
-  const nearMiss = { closest: sel => (sel === '.menuBtns' ? {} : null) };
-
-  check('no overlay behaviour depends on click', !(handlers.overlay.click || []).length);
-
-  game.startGame();
-  pumpMs(20);
+  reset();
+  fresh();
   game.togglePause();
   const paused = els.overlay.innerHTML;
+
   check('pause offers a restart', paused.includes('data-act="restart"'));
   check('pause offers a route to the menu', paused.includes('data-act="menu"'));
   check('pause keeps tap-to-resume', paused.includes('TAP TO RESUME'));
@@ -672,53 +523,68 @@ console.log('\nOverlay actions');
   check('the hold gesture is spelled out somewhere reachable',
         /hold/i.test(paused), 'hold gesture not documented in game');
 
-  // Both screens must render the same list from one source. Checked statically:
-  // rendering the menu here would change the state the checks below rely on.
+  // Both screens must render the same list from one source. Checked statically
+  // rather than by rendering the menu, which would move the state under us.
   const gameSrc = fs.readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
-  check('menu and pause share one control list',
-        (gameSrc.match(/controlsHint\(\)/g) || []).length >= 3,
-        'controlsHint used ' + (gameSrc.match(/controlsHint\(\)/g) || []).length + ' times');
+  const uses = (gameSrc.match(/controlsHint\(\)/g) || []).length;
+  check('menu and pause share one control list', uses >= 3, `controlsHint used ${uses} times`);
+}
 
-  tap(nearMiss);
+section('Overlay taps');
+{
+  reset();
+  // Everything fires pointerdown only. These controls sit under
+  // `touch-action: none`, where a synthesized click is not guaranteed to
+  // arrive, so a test that fires click would pass against broken code.
+  check('no overlay behaviour depends on click', !(handlers.overlay.click || []).length);
+
+  // Landed in the button row, but between the buttons.
+  const nearMiss = targetMatching('.menuBtns');
+
+  fresh();
+  game.togglePause();
+  tapOverlay(nearMiss);
   check('missing a button does not resume', G.state === 'paused', G.state);
 
-  tap(backdrop);
+  tapOverlay(backdropTarget);
   check('tapping the backdrop still resumes', G.state === 'playing', G.state);
+}
 
+section('Leaving a run from the pause screen');
+{
+  reset();
+  fresh();
   game.togglePause();
-  pressButton('menu');
-  // The compatibility mouse event lands on the menu that just replaced the
-  // pause screen — the sequence that made MAIN MENU start a game on touch.
-  fireDown('mouse', backdrop);
+  pressAction('menu');
+  // No ghost event is fired here on purpose. The button's own handler calls
+  // preventDefault, which suppresses the compatibility mouse event at source —
+  // that is what stopped MAIN MENU from starting a game on touch. The ghost path
+  // through the overlay itself is covered by tapOverlay in the block above.
   check('main menu goes to the menu, not back into the game', G.state === 'menu', G.state);
   check('menu clears the abandoned board', G.grid.every(r => r.every(c => !c)));
+}
 
+section('Restart and abandoned runs');
+{
+  reset();
   // Abandoning a good run should still keep the score.
-  G.stats = { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } };
-  game.startGame();
-  pumpMs(20);
+  fresh();
   G.score = 4321;
   G.lines = 12;
   game.showMenu();
   check('abandoned run still records a best', G.stats.marathon.score === 4321, String(G.stats.marathon.score));
 
-  game.startGame();
-  pumpMs(20);
+  fresh();
   G.score = 999;
   game.togglePause();
-  pressButton('restart');
-  fireDown('mouse', backdrop);
+  pressAction('restart');
   check('restart starts a fresh game', G.state === 'playing' && G.score === 0, `${G.state}/${G.score}`);
 }
 
-console.log('\nZen mode');
+section('Zen rules');
 {
-  const fillFrom = row => {
-    for (let y = row; y < ROWS; y++) for (let x = 0; x < COLS; x++) G.grid[y][x] = 'T';
-  };
-
-  game.startGame('zen');
-  pumpMs(20);
+  reset();
+  fresh('zen');
   check('mode recorded', G.mode === 'zen', G.mode);
 
   // Speed stops climbing, or "endless" would only mean "later".
@@ -731,18 +597,22 @@ console.log('\nZen mode');
 
   // Filled to the very top, so the spawn genuinely collides. Filling from just
   // below the buffer is not enough — a piece still settles in above it.
-  clearGrid();
   fillFrom(0);
-  const filledBefore = G.grid.flat().filter(Boolean).length;
+  const before = filledCells();
   game.spawn();
   check('topping out does not end a zen run', G.state === 'playing', G.state);
   check('a piece is still in play', G.active !== null);
-  check('room was cleared', G.grid.flat().filter(Boolean).length < filledBefore,
-        `${filledBefore} -> ${G.grid.flat().filter(Boolean).length}`);
+  check('room was cleared', filledCells() < before, `${before} -> ${filledCells()}`);
   check('the top of the well is free', G.grid[HIDDEN].every(c => !c));
+}
 
-  // Zen must not touch the marathon record — an endless run would own it forever.
-  G.stats = { marathon: { score: 5000, lines: 40, combo: 3 }, zen: { score: 0, lines: 0, combo: 0 } };
+section('Records stay in their own mode');
+{
+  reset({ stats: { marathon: { score: 5000, lines: 40, combo: 3 }, zen: { score: 0, lines: 0, combo: 0 } } });
+
+  // An endless run would own a shared record forever, so zen must not write to
+  // marathon's — nor marathon to zen's.
+  fresh('zen');
   G.score = 999999;
   G.lines = 250;
   game.showMenu();
@@ -751,79 +621,11 @@ console.log('\nZen mode');
   check('zen records its own lines', G.stats.zen.lines === 250, String(G.stats.zen.lines));
   check('zen records its own score', G.stats.zen.score === 999999, String(G.stats.zen.score));
   check('zen gets its own record card', els.overlay.innerHTML.includes('>ZEN<'));
-  check('menu offers zen', els.overlay.innerHTML.includes('data-act="zen"'));
 
-  // Each mode keeps its own slot: starting one must not discard the other.
-  delete store['blockfall.run.marathon'];
-  delete store['blockfall.run.zen'];
-
-  game.startGame('zen');
-  pumpMs(20);
-  G.lines = 42;
-  game.showMenu();
-  let menu = els.overlay.innerHTML;
-  check('prompt names the mode it will resume', menu.includes('TAP TO RESUME ZEN'), 'no mode in prompt');
-  check('resume button carries its progress', menu.includes('RESUME ZEN &middot; 42 LINES') || menu.includes('RESUME ZEN · 42 LINES'), 'no progress on button');
-  check('zen button reads as starting a new one', menu.includes('NEW ZEN'));
-  check('resuming is still the primary action', menu.includes('TAP TO RESUME'));
-
-  game.startGame('marathon');
-  pumpMs(20);
-  G.score = 3210;
-  game.showMenu();
-  menu = els.overlay.innerHTML;
-  check('starting marathon left the zen run alone', hasSavedRun('zen'));
-  check('both runs offered', menu.includes('data-act="continue"') && menu.includes('data-act="continue-zen"'));
-  check('each resume shows its own progress', menu.includes('3,210') && menu.includes('42'));
-  check('marathon resume carries its score', menu.includes('RESUME GAME') && menu.includes('3,210'));
-
-  // One verb throughout — no CONTINUE anywhere alongside RESUME.
-  check('one word for the action, not two', !menu.includes('CONTINUE'), 'mixed CONTINUE and RESUME');
-
-
-  // Tapping the backdrop picks up whichever was played most recently.
-  check('most recent mode is what a plain tap resumes', game.pendingRun() === 'marathon', game.pendingRun());
-  game.resumeRun('zen');
-  check('resuming zen explicitly works', G.mode === 'zen' && G.lines === 42, `${G.mode}/${G.lines}`);
-  game.showMenu();
-  check('and becomes the pending one', game.pendingRun() === 'zen', game.pendingRun());
-
-  // "1 LINES" was on screen. Kept after the checks above, which depend on the
-  // saves those two lines would overwrite.
-  game.startGame('zen');
-  pumpMs(20);
-  G.lines = 1;
-  game.showMenu();
-  check('a single line is not pluralised',
-        els.overlay.innerHTML.includes('1 LINE') && !els.overlay.innerHTML.includes('1 LINES'),
-        'says 1 LINES');
-
-  game.startGame('zen');
-  pumpMs(20);
-  G.lines = 2;
-  game.showMenu();
-  check('two lines are', els.overlay.innerHTML.includes('2 LINES'));
-
-  // A run written under the old single-slot key must not be lost.
-  delete store['blockfall.run.marathon'];
-  delete store['blockfall.run.zen'];
-  store['blockfall.run'] = JSON.stringify({ v: 1, mode: 'zen', lines: 7, score: 10, grid: '.'.repeat(ROWS * COLS) });
-  const { migrateLegacyRun } = await import('../src/state.js');
-  migrateLegacyRun();
-  check('a legacy save is rehomed to its mode', !!hasSavedRun('zen'));
-  check('and the old key is cleared', !('blockfall.run' in store));
-
-  // No high-score chase in a mode with no ceiling.
-  game.startGame('zen');
-  pumpMs(20);
-  check('zen now has its own record to chase', G.runBest === G.stats.zen.score,
-        G.runBest + ' vs ' + G.stats.zen.score);
-
-  // Records must stay in their own mode's slot, both ways round.
-  G.stats = { marathon: { score: 100, lines: 5, combo: 2 }, zen: { score: 200, lines: 9, combo: 3 } };
-  game.startGame('marathon');
-  pumpMs(20);
-  G.score = 5000; G.lines = 30;
+  reset({ stats: { marathon: { score: 100, lines: 5, combo: 2 }, zen: { score: 200, lines: 9, combo: 3 } } });
+  fresh('marathon');
+  G.score = 5000;
+  G.lines = 30;
   game.showMenu();
   check('a marathon run cannot touch zen records',
         G.stats.zen.score === 200 && G.stats.zen.lines === 9,
@@ -833,26 +635,99 @@ console.log('\nZen mode');
         (els.overlay.innerHTML.match(/recordCard/g) || []).length === 2,
         String((els.overlay.innerHTML.match(/recordCard/g) || []).length));
 
-  // A saved zen run must come back as zen. Self-contained: only a zen save
-  // exists, so a plain resume can't pick anything else regardless of what ran
-  // before this. A relaunch is simulated by resetting the live mode, since
-  // startGame would clear the very slot being tested.
-  delete store['blockfall.run.marathon'];
-  game.startGame('zen');
-  pumpMs(20);
+  reset({ stats: { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 4200, lines: 90, combo: 4 } } });
+  fresh('zen');
+  check('zen has its own record to chase', G.runBest === 4200, String(G.runBest));
+}
+
+section('Saved runs, one slot per mode');
+{
+  reset();
+
+  fresh('zen');
+  G.lines = 42;
+  game.showMenu();
+
+  fresh('marathon');
+  G.score = 3210;
+  game.showMenu();
+  const menu = els.overlay.innerHTML;
+
+  check('starting marathon left the zen run alone', hasSavedRun('zen'));
+  check('both runs offered', menu.includes('data-act="continue"') && menu.includes('data-act="continue-zen"'));
+  check('each resume shows its own progress', menu.includes('3,210') && menu.includes('42'));
+  check('marathon resume carries its score', menu.includes('RESUME GAME') && menu.includes('3,210'));
+
+  // A plain tap picks up whichever was played most recently.
+  check('most recent mode is what a plain tap resumes', game.pendingRun() === 'marathon', game.pendingRun());
+  game.resumeRun('zen');
+  check('resuming zen explicitly works', G.mode === 'zen' && G.lines === 42, `${G.mode}/${G.lines}`);
+  game.showMenu();
+  check('and becomes the pending one', game.pendingRun() === 'zen', game.pendingRun());
+}
+
+section('A saved zen run comes back as zen');
+{
+  reset();
+  // Only a zen slot is occupied, so a plain resume cannot pick anything else.
+  // A relaunch is simulated by resetting the live mode, since startGame would
+  // clear the very slot under test.
+  fresh('zen');
   G.lines = 13;
   game.snapshotRun();
   G.mode = 'marathon';
   game.resumeRun();
   check('a resumed zen run is still zen', G.mode === 'zen', G.mode);
   check('and brings its progress back', G.lines === 13, String(G.lines));
-
-  game.startGame('marathon');
-  pumpMs(20);
 }
 
-console.log('\nHUD polish');
+section('Menu wording');
 {
+  reset();
+  fresh('zen');
+  G.lines = 42;
+  game.showMenu();
+  const menu = els.overlay.innerHTML;
+
+  check('menu offers zen', menu.includes('data-act="zen"'));
+  check('prompt names the mode it will resume', menu.includes('TAP TO RESUME ZEN'), 'no mode in prompt');
+  check('resume button carries its progress',
+        menu.includes('RESUME ZEN &middot; 42 LINES') || menu.includes('RESUME ZEN · 42 LINES'),
+        'no progress on button');
+  check('zen button reads as starting a new one', menu.includes('NEW ZEN'));
+  check('resuming is still the primary action', menu.includes('TAP TO RESUME'));
+  // One verb throughout — no CONTINUE anywhere alongside RESUME.
+  check('one word for the action, not two', !menu.includes('CONTINUE'), 'mixed CONTINUE and RESUME');
+
+  // "1 LINES" was on screen.
+  fresh('zen');
+  G.lines = 1;
+  game.showMenu();
+  check('a single line is not pluralised',
+        els.overlay.innerHTML.includes('1 LINE') && !els.overlay.innerHTML.includes('1 LINES'),
+        'says 1 LINES');
+
+  fresh('zen');
+  G.lines = 2;
+  game.showMenu();
+  check('two lines are', els.overlay.innerHTML.includes('2 LINES'));
+}
+
+section('Legacy run migration');
+{
+  reset();
+  // A run written before the slots were split by mode must not be lost.
+  store['blockfall.run'] = JSON.stringify({
+    v: 1, mode: 'zen', lines: 7, score: 10, grid: '.'.repeat(ROWS * COLS),
+  });
+  state.migrateLegacyRun();
+  check('a legacy save is rehomed to its mode', hasSavedRun('zen'));
+  check('and the old key is cleared', !('blockfall.run' in store));
+}
+
+section('HUD polish');
+{
+  reset();
   const shown = () => Number(String(els.score.textContent).replace(/,/g, '')) || 0;
 
   game.startGame();
@@ -888,8 +763,9 @@ console.log('\nHUD polish');
   G.combo = -1; updateHudFromTest();
 }
 
-console.log('\nNext queue');
+section('Next queue');
 {
+  reset();
   game.startGame();
   pumpMs(20);
   els.nextCanvas.ctx.draws = 0;
@@ -908,8 +784,9 @@ console.log('\nNext queue');
   check('a settled queue stops repainting', els.nextCanvas.ctx.draws === 0, String(els.nextCanvas.ctx.draws));
 }
 
-console.log('\nNES level palettes');
+section('NES level palettes');
 {
+  reset();
   const pals = THEMES.nes.levelPalettes;
   check('ten palettes, one per level in the cycle', pals.length === 10, String(pals.length));
   check('every palette has three slots of valid hex',
@@ -948,8 +825,9 @@ console.log('\nNES level palettes');
   applyTheme('neon');
 }
 
-console.log('\nGravity curve');
+section('Gravity curve');
 {
+  reset();
   const at = lvl => { const prev = G.level; G.level = lvl; const ms = game.gravityInterval(); G.level = prev; return ms; };
   const levels = Array.from({ length: 40 }, (_, i) => i + 1);
   const ms = levels.map(at);
@@ -975,8 +853,9 @@ console.log('\nGravity curve');
   check('past the table it holds at the floor', Math.round(at(60)) === Math.round(at(35)));
 }
 
-console.log('\nHaptics');
+section('Haptics');
 {
+  reset();
   check('vibration support is detected, not assumed', typeof Haptics.supported === 'boolean');
   check('every clear length has a pattern',
         [1, 2, 3, 4].every(n => Array.isArray(HAPTIC_CLEAR_PATTERNS[n])),
@@ -1031,8 +910,9 @@ console.log('\nHaptics');
   game.togglePause();
 }
 
-console.log('\nRecords on the menu');
+section('Records on the menu');
 {
+  reset();
   G.stats = { marathon: { score: 8400, lines: 63, combo: 5 }, zen: { score: 0, lines: 0, combo: 0 } };
   game.showMenu();
   const menu = els.overlay.innerHTML;
@@ -1046,8 +926,9 @@ console.log('\nRecords on the menu');
   check('records hidden before the first game', !els.overlay.innerHTML.includes('recordCard'));
 }
 
-console.log('\nResuming a run');
+section('Resuming a run');
 {
+  reset();
   game.startGame();
   pumpMs(20);
   clearGrid();
@@ -1098,8 +979,9 @@ console.log('\nResuming a run');
   delete store['blockfall.run'];
 }
 
-console.log('\nDrop gestures');
+section('Drop gestures');
 {
+  reset();
   const fire = (type, ev) => { for (const fn of handlers.stage[type] || []) fn(ev); };
 
   const drag = (id, samples) => {
@@ -1132,8 +1014,9 @@ console.log('\nDrop gestures');
   check('a short fast twitch does not hard drop', !twitch.dropped);
 }
 
-console.log('\nRandom play stress');
+section('Random play stress');
 {
+  reset();
   game.startGame();
   pumpMs(20);
   let games = 1;
@@ -1154,5 +1037,4 @@ console.log('\nRandom play stress');
   console.log(`  (games played: ${games})`);
 }
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+report();
