@@ -20,6 +20,10 @@ export const view = { cell: 24, dpr: 1, previewSize: 12 };
 
 let wellCanvas;
 
+// A repaint also forces the overlay's backdrop-filter to re-blur, so static
+// screens redrawing at 120Hz cost about what playing does.
+let dirty = true, lastState = null;
+
 const MIN_RAIL = 46, MAX_RAIL = 88;
 const PAD_X = 20, PAD_Y = 10, GAPS = 16;
 
@@ -68,6 +72,7 @@ export function resize() {
   clearSprites();
   buildWell();
   drawSidePanels();
+  dirty = true;
 }
 
 // Swaps palette without recomputing layout: the sprite cache and the
@@ -78,6 +83,7 @@ export function applyTheme(name) {
   clearSprites();
   buildWell();
   drawSidePanels();
+  dirty = true;
 }
 
 /** Called on level-up. Repaints only when the palette actually moved. */
@@ -85,6 +91,7 @@ export function syncLevelPalette() {
   if (!applyLevelPalette(G.level)) return;
   clearSprites();
   drawSidePanels();
+  dirty = true;
 }
 
 function sizeMini(cv, ctx, w, h) {
@@ -123,6 +130,12 @@ function buildWell() {
 }
 
 export function render() {
+  const moving = G.state === 'playing' || G.state === 'clearing' || G.state === 'dying'
+    || G.particles.length > 0 || G.shake > 0;
+  if (!moving && !dirty && G.state === lastState) return;
+  lastState = G.state;
+  dirty = false;
+
   const { cell, dpr } = view;
   const w = cell * COLS, h = cell * VIS_ROWS;
 

@@ -161,7 +161,8 @@ stage.addEventListener('pointermove', e => {
   // piece to the floor. Smooth the velocity, and require the finger to stay
   // fast across enough distance to actually mean it.
   gesture.vy += (dy / dt - gesture.vy) * CTRL.flickSmooth;
-  if (gesture.vy < CTRL.flickVel * 0.5) gesture.burstY = 0;
+  const fastDown = gesture.vy >= CTRL.flickVel * 0.5;
+  if (!fastDown) gesture.burstY = 0;
   else if (dy > 0) gesture.burstY += dy;
 
   if (gesture.vy > CTRL.flickVel &&
@@ -172,12 +173,17 @@ stage.addEventListener('pointermove', e => {
     return;
   }
 
-  gesture.accX += dx;
-  const stepX = view.cell * CTRL.moveStep;
-  while (Math.abs(gesture.accX) >= stepX) {
-    const dir = Math.sign(gesture.accX);
-    gesture.accX -= dir * stepX;
-    if (!move(dir)) { gesture.accX = 0; break; }
+  // A thumb arcs as it flicks, and one column is only half a cell of drift.
+  if (fastDown && dy > Math.abs(dx)) {
+    gesture.accX = 0;
+  } else {
+    gesture.accX += dx;
+    const stepX = view.cell * CTRL.moveStep;
+    while (Math.abs(gesture.accX) >= stepX) {
+      const dir = Math.sign(gesture.accX);
+      gesture.accX -= dir * stepX;
+      if (!move(dir)) { gesture.accX = 0; break; }
+    }
   }
 
   if (dy > 0) {

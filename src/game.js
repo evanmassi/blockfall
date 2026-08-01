@@ -441,6 +441,7 @@ export function resumeRun(mode = pendingRun()) {
 // ---------- flow ----------
 
 export function startGame(mode = 'marathon') {
+  commitStats(); // the run being replaced may be holding a record
   clearRun(mode); // only this mode's slot — the other run stays waiting
   saveLastMode(mode);
   G.mode = mode;

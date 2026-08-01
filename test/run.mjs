@@ -579,6 +579,16 @@ section('Restart and abandoned runs');
   game.togglePause();
   pressAction('restart');
   check('restart starts a fresh game', G.state === 'playing' && G.score === 0, `${G.state}/${G.score}`);
+
+  // Restart used to drop the run without recording it, deleting a live best.
+  reset({ stats: { marathon: { score: 500, lines: 5, combo: 2 }, zen: { score: 0, lines: 0, combo: 0 } } });
+  fresh();
+  G.score = 9000;
+  G.lines = 60;
+  game.togglePause();
+  pressAction('restart');
+  check('restart keeps the record it was beating', G.stats.marathon.score === 9000, String(G.stats.marathon.score));
+  check('restart keeps the lines too', G.stats.marathon.lines === 60, String(G.stats.marathon.lines));
 }
 
 section('Zen rules');
@@ -782,6 +792,43 @@ section('Next queue');
   els.nextCanvas.ctx.draws = 0;
   pumpMs(120);
   check('a settled queue stops repainting', els.nextCanvas.ctx.draws === 0, String(els.nextCanvas.ctx.draws));
+}
+
+section('Idle screens stop repainting');
+{
+  reset();
+
+  const drawsOver = ms => {
+    els.board.ctx.draws = 0;
+    pumpMs(ms);
+    return els.board.ctx.draws;
+  };
+
+  game.showMenu();
+  pumpMs(60);
+  const menu = drawsOver(300);
+  check('the menu stops repainting the board', menu === 0, String(menu));
+
+  fresh();
+  clearGrid();
+  pumpMs(100);
+  game.togglePause();
+  pumpMs(60);
+  const paused = drawsOver(300);
+  check('the pause screen stops repainting', paused === 0, String(paused));
+
+  // The picker lives on the pause screen, where the board has stopped drawing.
+  els.board.ctx.draws = 0;
+  applyTheme('gameboy');
+  pumpMs(60);
+  check('a theme picked while paused still repaints', els.board.ctx.draws > 0, String(els.board.ctx.draws));
+
+  applyTheme('neon');
+  fresh();
+  clearGrid();
+  put('T', 4, 4, 0);
+  const playing = drawsOver(300);
+  check('play is never throttled', playing > 100, String(playing));
 }
 
 section('NES level palettes');
@@ -988,14 +1035,16 @@ section('Drop gestures');
     fresh();
     put('T', 4, 4, 0);
     const piece = G.active;
-    let ts = clock, y = 300;
-    fire('pointerdown', { pointerId: id, pointerType: 'touch', button: 0, clientX: 200, clientY: y, timeStamp: ts });
-    for (const [dy, dt] of samples) {
-      y += dy; ts += dt;
-      fire('pointermove', { pointerId: id, clientX: 200, clientY: y, timeStamp: ts });
+    let ts = clock, x = 200, y = 300, landedX = null;
+    fire('pointerdown', { pointerId: id, pointerType: 'touch', button: 0, clientX: x, clientY: y, timeStamp: ts });
+    for (const [dy, dt, dx = 0] of samples) {
+      x += dx; y += dy; ts += dt;
+      const before = G.active;
+      fire('pointermove', { pointerId: id, clientX: x, clientY: y, timeStamp: ts });
+      if (landedX === null && G.active !== before) landedX = before.x;
     }
-    fire('pointerup', { pointerId: id, clientX: 200, clientY: y, timeStamp: ts + 15 });
-    return { piece, dropped: G.active !== piece };
+    fire('pointerup', { pointerId: id, clientX: x, clientY: y, timeStamp: ts + 15 });
+    return { piece, dropped: G.active !== piece, landedX };
   };
 
   // Unhurried drag containing one fast sample — the 120Hz false positive that
@@ -1012,6 +1061,13 @@ section('Drop gestures');
   // A brief fast twitch that stops short must not count either.
   const twitch = drag(22, [[20, 8], [18, 8]]);
   check('a short fast twitch does not hard drop', !twitch.dropped);
+
+  // 45px of thumb arc used to land the piece two columns off target.
+  const steps = Array.from({ length: 9 }, (_, i) => 6 + 4.5 * i); // an accelerating flick
+  const travel = steps.reduce((a, b) => a + b, 0);
+  const arc = drag(23, steps.map(dy => [dy, 16, dy * 45 / travel]));
+  check('an arced flick lands in the column it was aimed at',
+        arc.dropped && arc.landedX === 4, `dropped=${arc.dropped}, column=${arc.landedX}`);
 }
 
 section('Random play stress');
