@@ -1,16 +1,14 @@
-// Pre-rendered block sprites. Glow and bevel are baked in once per
-// (theme, colour, size) so the frame loop only ever calls drawImage —
-// shadowBlur per block per frame is far too slow on a phone.
+// Pre-rendered block sprites, baked once per (theme, colour, size) so the frame
+// loop only calls drawImage. shadowBlur per block per frame is far too slow on
+// a phone.
 
 const sprites = new Map();
 
 /** Must be called whenever the theme or the cell size changes. */
 export function clearSprites() { sprites.clear(); }
 
-// Hard-edged square with a classic raised bevel: lit top/left, shaded bottom/right.
-// Glow is baked in here so nothing needs shadowBlur at frame time. The theme is
-// passed rather than read from the module so the picker can draw a swatch in a
-// palette that isn't the active one.
+// `th` is passed rather than read from the module so the picker can draw a
+// swatch in a palette that isn't the active one.
 export function blockSprite(color, size, th, type) {
   const key = th.key + (type || '') + color + '@' + size;
   if (sprites.has(key)) return sprites.get(key);
@@ -23,8 +21,8 @@ export function blockSprite(color, size, th, type) {
   const g = cv.getContext('2d');
   g.translate(pad, pad);
 
-  // Only the bevel treats cells as separate objects. The two hardware styles
-  // butt together, their outlines forming the grid, as on the originals.
+  // Only the bevel treats cells as separate objects; the hardware styles butt
+  // together, their outlines forming the grid.
   const gap = kind === 'bevel' ? Math.max(1, Math.round(size * 0.045)) : 0;
   const x0 = gap, y0 = gap, s = size - gap * 2;
 
@@ -71,9 +69,7 @@ function paintBevel(g, x0, y0, s, th) {
   g.strokeRect(x0 + .5, y0 + .5, s - 1, s - 1);
 }
 
-// On a monochrome LCD the fill pattern, not the colour, is what identifies a
-// piece — so each tetromino gets its own mark, matching the range visible on
-// the hardware: solid, dots, hollow and filled squares at two sizes, and dither.
+// On a monochrome LCD the fill pattern, not the colour, identifies a piece.
 export const INSET_MARKS = {
   I: 'stipple',
   J: 'ringLarge',
@@ -84,8 +80,7 @@ export const INSET_MARKS = {
   Z: 'solid',
 };
 
-/** Game Boy: hard outline plus a per-piece inner mark. No lighting — the LCD
- *  had none, and a bevel here reads as the wrong machine entirely. */
+// No lighting: the LCD had none, and a bevel reads as the wrong machine.
 function paintInset(g, x0, y0, s, th, type) {
   const style = th.block;
   const edge = Math.max(1, Math.round(s * 0.1));
@@ -150,17 +145,14 @@ function paintInset(g, x0, y0, s, th, type) {
   }
 }
 
-// The hardware drew two tiles per level: a solid square with a corner
-// highlight, and a hollow ring with the background showing through, used for
-// the level's pale piece. Ring is assigned to the near-white pieces here,
-// which also solves a practical problem — a white highlight on a white block
-// is invisible.
+// Two tiles per level on the hardware: a solid square with a corner highlight,
+// and a hollow ring for the pale piece. Ring goes to the near-white pieces,
+// which also fixes a white highlight being invisible on a white block.
 export const NES_MARKS = {
   I: 'solid', J: 'solid', L: 'solid', S: 'solid', Z: 'solid',
   O: 'ring', T: 'ring', // the level's white pieces
 };
 
-/** NES: flat fill with either a corner highlight or a punched-out centre. */
 function paintNes(g, x0, y0, s, th, type) {
   const style = th.block;
   const lw = Math.max(1, Math.round(s * 0.1));
@@ -174,8 +166,7 @@ function paintNes(g, x0, y0, s, th, type) {
     g.lineWidth = lw;
     g.strokeRect(x0 + lw / 2, y0 + lw / 2, s - lw, s - lw);
 
-    // Three pixels in a corner, not a 2x2 block — that L is the shape of the
-    // highlight on the original tile.
+    // Three pixels, not a 2x2 block — that L is the original tile's highlight.
     const u = Math.max(1, Math.round(s * 0.15));
     const hx = x0 + Math.round(lw * 1.5), hy = y0 + Math.round(lw * 1.5);
     g.fillStyle = `rgba(255,255,255,${Math.min(1, style.light + 0.35)})`;

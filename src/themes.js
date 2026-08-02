@@ -1,32 +1,12 @@
-// Every colour decision in the game, including how blocks are lit. Adding a
-// theme is one entry here; nothing else needs to change.
+// Every colour decision in the game. Adding a theme is one entry here.
 //
-//   bg/panel/edge/text/dim/accent  pushed to CSS custom properties by setTheme
-//   well, gridLine                 the playfield behind the blocks
-//   overlay / overlaySoft          menu and game-over backdrop / pause backdrop
-//   boardShadow                    full CSS box-shadow value for the well
-//   flash                          "r,g,b" for the line-clear wash; must read
-//                                  against `well`, so it is not always white
-//   scanlines                      CRT overlay on or off
-//   block.style                    how a cell is constructed, not just tinted:
-//                                  'bevel' raised 3D, 'inset' hard outline with
-//                                  a concentric square (Game Boy), 'nes' flat
-//                                  fill with a corner highlight. Only 'bevel'
-//                                  leaves a gap between cells; the hardware
-//                                  styles butt together so their outlines form
-//                                  the grid.
-//   block.glow                     0–1 multiplier on the baked sprite glow;
-//                                  most of what separates Neon from Forest
-//   block.light/shade              lighting alphas; only 'bevel' uses shade
-//   block.outline                  sprite edge, as a full rgba() string
-//   sharedPalette                  optional; set when colours deliberately
-//                                  repeat across pieces, as on hardware that
-//                                  had only a few per level
-//   pieces                         one hex per tetromino; seven distinct values
-//                                  unless sharedPalette says otherwise
-//
-// A pastel light theme was built and rejected; Game Boy's light LCD is the
-// exception, because that panel *is* the reference.
+//   flash         "r,g,b" for the clear wash; must read against `well`, so it
+//                 is not always white
+//   block.style   how a cell is constructed, not just tinted. Only 'bevel'
+//                 leaves a gap between cells; the hardware styles butt together
+//                 so their outlines form the grid.
+//   block.shade   'bevel' only
+//   sharedPalette colours deliberately repeat across pieces
 export const THEMES = {
   neon: {
     name: 'Neon',
@@ -69,13 +49,9 @@ export const THEMES = {
 
   // --- hardware recreations; the picker breaks to a second row here ---
 
-  // Pure black well with a hairline border, on grey console chrome.
-  //
   // The hardware assigned colours per *level*, not per piece: three at a time,
-  // reused across the seven tetrominoes. Seven distinct colours — which this
-  // theme originally had — is not a look the console ever produced. These are
-  // the level-0 three, straight from the NES system palette, so pieces repeat
-  // colours and are told apart by shape and tile, exactly as they were.
+  // reused across the seven tetrominoes. These are the level-0 three, so pieces
+  // repeat colours and are told apart by shape and tile, as they were.
   nes: {
     name: 'NES',
     bg: '#1c1c1c', panel: '#2c2c2c', edge: '#bcbcbc',
@@ -93,16 +69,11 @@ export const THEMES = {
       O: '#fcfcfc', T: '#fcfcfc',               // slot 2, drawn as rings
     },
 
-    // Which of a level palette's three slots each tetromino draws from. Fixed;
-    // only the colours in the slots change as you climb.
+    // Fixed; only the colours in the slots change as you climb.
     paletteSlots: { I: 0, S: 0, L: 0, J: 1, Z: 1, O: 2, T: 2 },
 
-    // The whole reason the console used three colours is that they changed
-    // every level, cycling every ten. Each entry is [slot0, slot1, slot2], all
-    // drawn from the NES system palette.
-    //
-    // The colours are genuine; the order is my arrangement, not the console's
-    // exact table — I couldn't read that off the screenshot.
+    // [slot0, slot1, slot2] per level, cycling every ten. The colours are
+    // genuine NES; the order is my arrangement, not the console's exact table.
     levelPalettes: [
       ['#3cbcfc', '#0058f8', '#fcfcfc'], // 1  cyan / blue
       ['#58d854', '#00a800', '#fcfcfc'], // 2  green
@@ -117,10 +88,8 @@ export const THEMES = {
     ],
   },
 
-  // Dark chrome around a light LCD panel, as on the DMG. The hardware drew
-  // every piece in one colour and told them apart by fill pattern; this
-  // renderer has no patterns, so the pieces step down a single olive ramp
-  // instead — monochrome to look at, still separable to play.
+  // The DMG drew every piece in one colour and told them apart by fill pattern.
+  // These step down a single olive ramp instead: monochrome, still separable.
   gameboy: {
     name: 'Game Boy',
     bg: '#37392f', panel: '#464a3c', edge: '#6b7052',
@@ -138,19 +107,12 @@ export const THEMES = {
 
 const STORE = 'blockfall.theme';
 
-// Mutated in place rather than reassigned: importers hold this binding, so a
-// theme switch has to change its contents, not swap the object.
+// Mutated in place: importers hold this binding, so a switch has to change its
+// contents rather than swap the object.
 export const theme = {};
 
-/**
- * Points the active theme's pieces at the palette for `level`, cycling every
- * levelPalettes.length levels. No-op for themes without one.
- *
- * @returns {boolean} whether any colour actually changed — the caller uses this
- *   to decide about throwing away the sprite cache, which is not cheap.
- */
-// Exposed so CSS-only decoration (the menu's drifting debris) follows the
-// palette without the markup having to be regenerated on a theme switch.
+// Also drives the menu's CSS-only drifting debris, so it follows the palette
+// without the markup being regenerated.
 function pushPieceVars() {
   const root = document.documentElement.style;
   for (const p of Object.keys(theme.pieces)) {
@@ -158,6 +120,8 @@ function pushPieceVars() {
   }
 }
 
+/** @returns {boolean} whether a colour changed — the caller drops the sprite
+ *  cache on true, which is not cheap. */
 export function applyLevelPalette(level) {
   const palettes = theme.levelPalettes;
   if (!palettes || !theme.paletteSlots) return false;
@@ -186,14 +150,13 @@ export function savedThemeName() {
 export function setTheme(name) {
   if (!THEMES[name]) name = 'neon';
 
-  // Cleared first, not just assigned over: Object.assign leaves behind any key
-  // the incoming theme doesn't define. That let NES's levelPalettes survive a
-  // switch to Neon, so levelling up would have repainted Neon in NES colours.
+  // Cleared first: Object.assign leaves keys the incoming theme doesn't define,
+  // which let NES's levelPalettes survive into Neon and repaint it on level-up.
   for (const key of Object.keys(theme)) delete theme[key];
   Object.assign(theme, THEMES[name]);
   theme.key = name;
-  // Object.assign copies `pieces` by reference. Level palettes rewrite it, and
-  // without this clone that would permanently edit the THEMES entry itself.
+  // Assign copies `pieces` by reference; level palettes rewrite it, which would
+  // permanently edit the THEMES entry.
   theme.pieces = { ...THEMES[name].pieces };
 
   const root = document.documentElement.style;

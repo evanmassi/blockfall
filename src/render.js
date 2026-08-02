@@ -1,6 +1,5 @@
-// All canvas drawing and the layout maths that sizes it. Reads G but never
-// writes it: nothing here changes the game, so a dropped frame can only ever
-// cost a repaint.
+// All canvas drawing and the layout maths that sizes it. Reads G, never writes
+// it, so a dropped frame can only ever cost a repaint.
 
 import { COLS, VIS_ROWS, HIDDEN, ROWS, CLEAR_FX } from './config.js';
 import { ROTATIONS, forEachCell } from './pieces.js';
@@ -12,10 +11,8 @@ import { boardCv, boardCtx, holdCv, holdCtx, nextCv, nextCtx, app, hud, stage, r
 // railLeft/railRight are sized directly rather than measured — reading back a
 // width we just wrote would force an extra layout every resize.
 
-/**
- * Current layout, in CSS pixels. `cell` is also the unit input.js measures
- * gestures against, so a drag covers the same number of cells on any screen.
- */
+// CSS pixels. `cell` is also what input.js measures gestures against, so a drag
+// covers the same number of cells on any screen.
 export const view = { cell: 24, dpr: 1, previewSize: 12 };
 
 let wellCanvas;
@@ -30,17 +27,15 @@ const PAD_X = 20, PAD_Y = 10, GAPS = 16;
 export function resize() {
   view.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 
-  // Measured from the app box rather than the stage: the stage is sized by its
-  // contents so the whole column can be centred, which means asking it how tall
-  // it is would just echo back the board we are about to size.
+  // The app box, not the stage: the stage is sized by its contents, so asking
+  // its height would echo back the board we are about to size.
   const appStyle = getComputedStyle(app);
   const appInner = app.clientHeight
     - (parseFloat(appStyle.paddingTop) || 0)
     - (parseFloat(appStyle.paddingBottom) || 0);
 
-  // A 10x20 well on a tall phone is width-bound with height to spare, so the
-  // rails get sized last: the board takes every pixel of width its height can
-  // actually use, and whatever is left over becomes rail.
+  // A 10x20 well on a tall phone is width-bound, so rails are sized last: the
+  // board takes every pixel its height can use, the remainder becomes rail.
   const availH = appInner - hud.offsetHeight - PAD_Y;
   const totalW = stage.clientWidth - PAD_X - GAPS;
   const cellByH = Math.floor(availH / VIS_ROWS);
@@ -57,13 +52,13 @@ export function resize() {
   boardCv.height = Math.round(h * view.dpr);
   boardCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
 
-  // The board is centred in whatever vertical slack the screen has, so the
-  // rails have to be pinned to its height or their contents float above it.
+  // The board is centred in the screen's vertical slack, so rails have to be
+  // pinned to its height or their contents float above it.
   railLeft.style.height = h + 'px';
   railRight.style.height = h + 'px';
 
-  // Previews are width-bound: every spawn orientation is at most 4 cells wide
-  // and 2 tall, so size off the rail's inner width and let height follow.
+  // Every spawn orientation is at most 4 cells wide and 2 tall, so previews are
+  // width-bound: size off the rail's inner width and let height follow.
   view.previewSize = Math.max(6, Math.floor((railW - 12) / 4));
   view.nextTail = Math.max(5, Math.round(view.previewSize * NEXT_TAIL));
   sizeMini(holdCv, holdCtx, view.previewSize * 4 + 2, view.previewSize * 2 + 4);
@@ -183,9 +178,8 @@ export function render() {
   boardCtx.globalAlpha = 1;
 }
 
-// Escalates with the number of rows: every clear washes out and fires a light
-// bar along each row, but the bar thickens and tints as the clear grows, and a
-// Tetris additionally throws columns of light up through the board.
+// Escalates with the row count: the bar thickens and tints as the clear grows,
+// and a Tetris additionally throws columns of light up through the board.
 function drawClearFx(w, h, cell) {
   const fx = CLEAR_FX[Math.min(G.clearCount, 4)] || CLEAR_FX[1];
   const p = Math.min(1, Math.max(0, 1 - G.clearTimer / G.clearTime)); // 0 -> 1
@@ -235,9 +229,8 @@ function drawClearFx(w, h, cell) {
   }
 }
 
-// `type` is the tetromino letter. Colour alone can't stand in for it: the
-// Game Boy style picks a fill pattern per piece, and the death curtain replaces
-// the colour with grey while the piece identity must survive.
+// `type` cannot be inferred from colour: Game Boy picks a fill pattern per
+// piece, and the death curtain greys the colour while identity must survive.
 function drawBlock(ctx, px, py, color, size, type, th = theme) {
   drawSprite(ctx, blockSprite(color, size, th, type), px, py);
 }
@@ -247,18 +240,15 @@ function drawSprite(ctx, sprite, px, py) {
   ctx.drawImage(sprite.cv, px - sprite.pad, py - sprite.pad, s, s);
 }
 
-// A miniature of the real thing: that theme's well, grid, bevel, glow and
-// scanlines. Colour chips alone don't tell you what a theme actually looks like.
+// A miniature of the real thing — colour chips alone don't tell you what a
+// theme looks like.
 const PREVIEW_STACK = [
   [0, 3, 'I'], [1, 3, 'J'], [2, 3, 'L'], [3, 3, 'S'], [4, 3, 'T'],
   [1, 2, 'Z'], [3, 2, 'O'],
 ];
 
-/**
- * Paints a miniature well into `cv` using `th` — a THEMES entry, not
- * necessarily the active theme. That is the whole point: the picker has to
- * show palettes that are not currently applied.
- */
+/** `th` is any THEMES entry, not necessarily the active one — the picker has to
+ *  show palettes that are not applied. */
 export function drawThemePreview(cv, th) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   const w = cv.clientWidth || 64, h = cv.clientHeight || 52;
@@ -315,7 +305,7 @@ let nextShown = [];       // what the canvas currently depicts
 let slideFrom = null;     // the pre-shift queue, while animating
 let slideT = 1;           // 0 -> 1 progress; 1 means settled
 
-/** Top edge of the slot at a fractional index, so a piece can sit between two. */
+/** Fractional index, so a piece can sit between two slots mid-slide. */
 function nextSlotTop(f) {
   const lead = view.previewSize * 2 + 12;
   const tail = view.nextTail * 2 + 10;
@@ -326,18 +316,14 @@ function nextSlotHeight(f) {
   return f < 1 ? view.previewSize * 2 + 12 : view.nextTail * 2 + 10;
 }
 
-/** Full size in the lead slot, tapering to NEXT_TAIL for everything behind it. */
 function nextScale(f) {
   if (f <= 0) return 1;
   if (f >= 1) return NEXT_TAIL;
   return 1 - (1 - NEXT_TAIL) * f;
 }
 
-/**
- * Draws a tetromino centred in the box spanning (0, top) to (w, top + slotH).
- * Centring uses the piece's filled bounding box, not its matrix, so a 4x4 I and
- * a 3x3 T both sit visually centred. Shared by the HOLD slot and the queue.
- */
+// Centres on the filled bounding box, not the matrix, so a 4x4 I and a 3x3 T
+// both sit visually centred. Shared by the HOLD slot and the queue.
 function drawPieceInBox(ctx, type, w, top, slotH, size, alpha = 1) {
   const m = ROTATIONS[type][0];
   let minX = 9, maxX = -1, minY = 9, maxY = -1;
@@ -362,8 +348,7 @@ function drawNext() {
 
   const sliding = slideT < 1 && slideFrom;
   const list = sliding ? slideFrom : nextShown;
-  // Eased so it settles rather than stopping dead.
-  const shift = sliding ? 1 - Math.pow(1 - slideT, 3) : 0;
+  const shift = sliding ? 1 - Math.pow(1 - slideT, 3) : 0; // eased so it settles
 
   list.forEach((type, i) => {
     const f = i - shift;
@@ -385,15 +370,14 @@ function drawHold() {
   holdCtx.clearRect(0, 0, w, h);
 
   if (!G.hold) { drawEmptySlot(holdCtx, w, h); return; }
-  // Dimmed while the hold is spent, so it reads as unavailable.
-  drawPieceInBox(holdCtx, G.hold, w, 0, h, size, G.canHold ? 1 : 0.35);
+  drawPieceInBox(holdCtx, G.hold, w, 0, h, size, G.canHold ? 1 : 0.35); // dim = spent
 }
 
 export function drawSidePanels() {
   drawHold();
 
-  // One extra is held so the piece rising into the last slot has something to
-  // be. A queue that shifted by exactly one animates; anything else snaps.
+  // One extra, so the piece rising into the last slot has something to be. A
+  // queue that shifted by exactly one animates; anything else snaps.
   const now = G.queue.slice(0, NEXT_SHOWN + 1);
   if (nextShown.length > 1 && now[0] === nextShown[1]) {
     slideFrom = nextShown;
@@ -406,15 +390,14 @@ export function drawSidePanels() {
   drawNext();
 }
 
-/** Advances the slide. Called from the frame loop, not on queue changes. */
+/** From the frame loop, not on queue changes. */
 export function tickQueue(dt) {
   if (slideT >= 1) return;
   slideT = Math.min(1, slideT + dt / NEXT_SLIDE_MS);
   drawNext();
 }
 
-// An empty HOLD slot otherwise reads as dead space rather than somewhere a
-// piece can go.
+// Otherwise an empty HOLD slot reads as dead space rather than a destination.
 function drawEmptySlot(ctx, w, h) {
   const bw = Math.round(view.previewSize * 2.4), bh = Math.round(view.previewSize * 1.5);
   ctx.globalAlpha = 0.32;

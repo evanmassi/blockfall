@@ -25,8 +25,8 @@ import {
   themeBar, wordmark, menuBackdrop, actionBar,
 } from './ui.js';
 
-// Single funnel for score changes so beating the record is caught the instant
-// it happens, mid-run, rather than being noticed on the game-over screen.
+// Single funnel, so beating the record is caught the instant it happens rather
+// than on the game-over screen.
 function addScore(n) {
   G.score += n;
   if (!G.newBest && G.runBest > 0 && G.score > G.runBest) {
@@ -41,12 +41,11 @@ function addScore(n) {
 
 // ---------- spawning ----------
 
-// Settles a new piece into the top of the visible field so it never appears
-// half-cut by the hidden buffer rows.
+// Settles a new piece into the visible field so it never appears half-cut by
+// the hidden buffer rows.
 function enterPiece(piece) {
   if (collides(piece.m, piece.x, piece.y)) {
     if (G.mode !== 'zen') { gameOver(); return false; }
-    // Clearing the bottom rows shifts everything down, which frees the spawn.
     rescue();
     if (collides(piece.m, piece.x, piece.y)) { gameOver(); return false; }
   }
@@ -66,7 +65,7 @@ export function spawn() {
   fillQueue();
   if (!enterPiece(piece)) return;
   G.canHold = true;
-  snapshotRun(); // every new piece is a stable point to save at
+  snapshotRun(); // a new piece is a stable point to save at
 }
 
 function resetLockState() {
@@ -75,24 +74,15 @@ function resetLockState() {
   G.lockResets = 0;
 }
 
-/**
- * Milliseconds a piece takes to fall one row at the current level.
- *
- * The previous version clamped this at a 16ms floor, which the guideline curve
- * reached at level 14 — so every level from 14 upward ran at exactly the same
- * speed and progression silently stopped while the counter kept climbing.
- */
+/** Milliseconds a piece takes to fall one row. Must not be clamped to a floor:
+ *  that silently stopped progression while the level counter kept climbing. */
 export function gravityInterval() {
-  // Zen is endless, so it stops accelerating somewhere it stays comfortable.
   const level = G.mode === 'zen' ? Math.min(G.level, ZEN_SPEED_CAP_LEVEL) : G.level;
   const frames = GRAVITY_FRAMES[level - 1] ?? GRAVITY_MIN_FRAMES;
   return frames * FRAME_MS;
 }
 
-/**
- * Zen's answer to topping out: drop the bottom rows and let the stack fall into
- * the space. The board gets easier, the run continues, and nothing is lost.
- */
+// Zen's answer to topping out: drop the bottom rows and let the stack fall in.
 function rescue() {
   const rows = [];
   for (let y = ROWS - ZEN_RESCUE_ROWS; y < ROWS; y++) rows.push(y);
@@ -127,9 +117,8 @@ export function move(dx) {
 }
 
 /**
- * Rotates the active piece, trying each SRS kick offset in turn.
  * @param {number} dir  positive clockwise, negative anticlockwise.
- * @returns {boolean} false if every kick was blocked, leaving the piece as-is.
+ * @returns {boolean} false if every SRS kick was blocked, piece left as-is.
  */
 export function rotate(dir) {
   const a = G.active;
@@ -170,10 +159,10 @@ export function hardDrop() {
   if (!a) return;
   let dist = 0;
   while (!collides(a.m, a.x, a.y + 1)) { a.y++; dist++; }
-  addScore(dist * 2); // also refreshes the HUD, which a hard drop never did
+  addScore(dist * 2);
   if (dist > 0) G.rotatedLast = false; // a 0-cell drop must not cancel a T-spin
-  // Kept small on purpose: a long drop used to shake as hard as a Tetris,
-  // which flattened the whole clear escalation.
+  // Capped at 4: a long drop shaking as hard as a Tetris flattened the whole
+  // clear escalation.
   G.shake = Math.max(G.shake, Math.min(4, 1 + dist * 0.18));
   Sound.drop();
   Haptics.drop();
@@ -201,12 +190,8 @@ export function holdPiece() {
 // ---------- locking & clearing ----------
 
 /**
- * Classifies the active piece's position as a T-spin, by the three-corner rule.
- *
- * Must be called *before* the piece is written into the grid — it inspects the
- * cells diagonally around the T's centre, and once the piece has settled those
- * corners include the piece itself.
- *
+ * Three-corner rule. Must be called *before* the piece is written into the
+ * grid, or the corners it inspects include the piece itself.
  * @returns {'full'|'mini'|null}
  */
 export function tSpinType() {
@@ -337,8 +322,8 @@ function applyScore(cleared, spin) {
 
   if (G.level > prevLevel) { Sound.levelUp(); Haptics.levelUp(); }
 
-  // Beating the record outranks the clear label — addScore already toasted it.
-  if (!hadBest && G.newBest) { /* keep the high-score toast on screen */ }
+  // A record outranks the clear label; addScore already toasted it.
+  if (!hadBest && G.newBest) { /* leave the high-score toast up */ }
   else if (G.level > prevLevel) showToast('LEVEL ' + G.level, theme.pieces.S);
   else if (label) showToast(label, color);
 }
@@ -366,11 +351,8 @@ function spawnClearParticles(rows, fx) {
 
 // ---------- saving and resuming a run ----------
 
-/**
- * Writes the run to storage. Called at stable points only — a new piece, a
- * pause, leaving for the menu, or the page being hidden — never mid-clear or
- * mid-death, so a restored board is always one a player could be looking at.
- */
+// Stable points only — a new piece, a pause, the menu, the page being hidden —
+// never mid-clear or mid-death, so a restored board is always a playable one.
 export function snapshotRun() {
   if (G.state !== 'playing' && G.state !== 'paused') return;
   saveRun(G.mode, {
@@ -385,10 +367,8 @@ export function snapshotRun() {
   });
 }
 
-/**
- * Which mode a plain tap on the menu should pick up: whichever was played last
- * if it has a save, else whichever does, else none.
- */
+/** Which mode a plain tap on the menu picks up: last played if it has a save,
+ *  else whichever does, else none. */
 export function pendingRun() {
   const last = loadLastMode();
   if (loadRun(last)) return last;
@@ -397,8 +377,7 @@ export function pendingRun() {
   return null;
 }
 
-/** Restores a saved run and leaves it paused, rather than dropping the player
- *  straight back into live gravity. */
+/** Leaves the run paused rather than dropping the player into live gravity. */
 export function resumeRun(mode = pendingRun()) {
   const saved = mode && loadRun(mode);
   if (!saved) { startGame(); return; }
@@ -432,7 +411,7 @@ export function resumeRun(mode = pendingRun()) {
   if (!G.active) spawn();
 
   setRecordStyle(G.newBest);
-  syncLevelPalette(); // restore the palette the run was at
+  syncLevelPalette();
   updateHud();
   drawSidePanels();
   if (G.state === 'playing') togglePause();
@@ -448,7 +427,7 @@ export function startGame(mode = 'marathon') {
   G.grid = emptyGrid();
   G.queue = []; G.bag = null; G.hold = null; G.canHold = true;
   G.score = 0; G.lines = 0; G.level = 1; G.combo = -1; G.backToBack = false;
-  G.runBest = G.stats[mode].score; // each mode has its own record to beat
+  G.runBest = G.stats[mode].score;
   G.newBest = false;
   setRecordStyle(false);
   G.gravityAcc = 0; G.particles = []; G.shake = 0;
@@ -457,14 +436,13 @@ export function startGame(mode = 'marathon') {
   G.state = 'playing';
 
   hideOverlay();
-  syncLevelPalette(); // back to the level-1 palette after a high-level run
+  syncLevelPalette(); // back to level 1 after a high-level run
   fillQueue();
   spawn();
   updateHud();
 }
 
-// Death is a two-beat sequence: a grey curtain sweeps up from the floor,
-// then the summary appears.
+// Two beats: a grey curtain sweeps up from the floor, then the summary.
 export function gameOver() {
   if (G.state === 'dying' || G.state === 'over') return;
   G.state = 'dying';
@@ -473,8 +451,7 @@ export function gameOver() {
   G.deathTimer = 0;
 }
 
-// Abandoning a run mid-game shouldn't throw away a personal best. Each mode
-// keeps its own set, so Zen's unbounded score can never flatter Marathon's.
+// Per mode, so Zen's unbounded score can never flatter Marathon's.
 function commitStats() {
   const best = G.stats[G.mode];
   best.score = Math.max(best.score, G.score);
@@ -487,7 +464,7 @@ function finishGameOver() {
   Sound.over();
   Haptics.over();
   commitStats();
-  clearRun(G.mode); // this run is finished; the other mode's is untouched
+  clearRun(G.mode); // the other mode's save is untouched
 
   showOverlay(`
     <h2${G.newBest ? ' class="record"' : ''}>${G.newBest ? 'NEW HIGH SCORE!' : 'GAME OVER'}</h2>
@@ -503,16 +480,13 @@ function finishGameOver() {
   `);
 }
 
-/**
- * The gesture list, shared by the menu and the pause screen so the two can't
- * drift. Phones get the gestures, desktop the keys — showing both is clutter on
- * the screen that matters.
- */
+// Shared by the menu and the pause screen so the two can't drift. Phones get
+// the gestures, desktop the keys; showing both is clutter.
 function controlsHint() {
   const touch = window.matchMedia?.('(pointer: coarse)')?.matches ?? true;
 
-  // A two-column list, not a run of text. Separating pairs with middots let the
-  // browser wrap at any space, which split "FLICK DOWN" from "drop".
+  // Two columns, not a run of text: middots let the browser wrap at any space,
+  // which split "FLICK DOWN" from "drop".
   const rows = touch
     ? [['DRAG', 'move'], ['TAP', 'rotate'], ['FLICK DOWN', 'hard drop'],
        ['SWIPE UP', 'hold'], ['TWO-FINGER TAP', 'rotate back']]
@@ -523,13 +497,10 @@ function controlsHint() {
   return `<dl class="controls">${cells}</dl>`;
 }
 
-/**
- * Renders the pause screen. Separate from togglePause so a control on it can
- * redraw the screen it lives on without resuming the game.
- */
+// Separate from togglePause so a control on the screen can redraw it without
+// resuming the game.
 export function showPauseScreen() {
-  // Only offered where vibration exists — on iOS the API is absent entirely,
-  // and a toggle for nothing is worse than no toggle.
+  // iOS has no vibration API at all, and a toggle for nothing is worse than none.
   const actions = [['restart', 'RESTART'], ['menu', 'MAIN MENU']];
   if (Haptics.supported) {
     actions.push(['haptics', Haptics.enabled ? 'BUZZ ON' : 'BUZZ OFF']);
@@ -541,7 +512,7 @@ export function showPauseScreen() {
     ${actionBar(actions)}
     ${controlsHint()}
     <p class="cta">TAP TO RESUME</p>
-  `, { soft: true }); // board stays readable behind it
+  `, { soft: true });
 }
 
 export function togglePause() {
@@ -557,7 +528,7 @@ export function togglePause() {
 
 const lineCount = n => `${n.toLocaleString()} ${n === 1 ? 'LINE' : 'LINES'}`;
 
-/** One card per mode that has anything to show, each with the same three stats. */
+/** One card per mode that has anything to show. */
 function recordCards() {
   const card = (mode, name) => {
     const s = G.stats[mode];
@@ -575,7 +546,7 @@ function recordCards() {
 }
 
 export function showMenu() {
-  snapshotRun();  // keep the run resumable before the board is torn down
+  snapshotRun();  // stay resumable before the board is torn down
   commitStats();  // may be arriving from an abandoned run
   G.state = 'menu';
   G.grid = emptyGrid();
@@ -591,9 +562,7 @@ export function showMenu() {
   const pending = pendingRun();
   const saved = savedMarathon || savedZen;
 
-  // "New" on the first row, "resume" on the second. One verb throughout: the
-  // buttons and the prompt both say RESUME, and both modes are named the same
-  // way wherever they appear.
+  // New on the first row, resume on the second, one verb throughout.
   const actions = [];
 
   if (saved) {
@@ -608,8 +577,6 @@ export function showMenu() {
     actions.push(['zen', 'ZEN MODE']);
   }
 
-  // Naming the mode here is what the separate caption line used to do, without
-  // repeating the whole thing underneath the buttons.
   const cta = pending
     ? `TAP TO RESUME ${pending === 'zen' ? 'ZEN' : 'GAME'}`
     : 'TAP TO PLAY';
@@ -629,11 +596,10 @@ export function showMenu() {
 // ---------- per-frame ----------
 
 /**
- * Advances one frame.
- * @param {number} dt  milliseconds since the last frame, clamped by the caller.
+ * @param {number} dt  ms since the last frame, clamped by the caller.
  *
- * Must run *after* input.js's updateKeyRepeat for the same frame, so a piece
- * moved by held keys is settled before gravity and lock delay are applied.
+ * Must run *after* updateKeyRepeat for the same frame, so a piece moved by held
+ * keys is settled before gravity and lock delay apply.
  */
 export function update(dt) {
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 0.03);

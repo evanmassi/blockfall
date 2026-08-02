@@ -1,5 +1,5 @@
-// Keyboard and touch handling. Gestures are measured in cells rather than
-// pixels, so they behave the same on any screen size.
+// Keyboard and touch. Gestures are measured in cells, not pixels, so they
+// behave the same on any screen size.
 
 import { CTRL } from './config.js';
 import { G } from './state.js';
@@ -13,7 +13,6 @@ import {
 } from './game.js';
 import { Haptics } from './haptics.js';
 
-/** Tapping the menu picks up the most recently played saved run, else starts fresh. */
 const playFromMenu = () => (pendingRun() ? resumeRun() : startGame());
 
 // ---------- keyboard ----------
@@ -21,14 +20,9 @@ const playFromMenu = () => (pendingRun() ? resumeRun() : startGame());
 const keys = { left: 0, right: 0, down: 0 };
 let dasTimer = 0, arrTimer = 0, softTimer = 0, dasDir = 0;
 
-/**
- * Applies held-key auto-repeat for one frame: DAS before the first repeat,
- * then ARR between them.
- *
- * Called from the frame loop rather than from update(), so game.js and this
- * module only depend on each other in one direction. Must run before
- * update() for the same frame.
- */
+// DAS before the first repeat, ARR between them. Called from the frame loop
+// rather than update(), so the dependency between the two modules stays
+// one-way. Must run before update() for the same frame.
 export function updateKeyRepeat(dt) {
   const dir = keys.left && !keys.right ? -1 : keys.right && !keys.left ? 1 : 0;
   if (dir !== dasDir) { dasDir = dir; dasTimer = 0; arrTimer = 0; }
@@ -83,18 +77,17 @@ document.addEventListener('keyup', e => {
 
 let gesture = null, extraPointers = 0;
 
-// Everything here dispatches on pointerdown rather than click. The overlay is a
-// tap-anywhere surface, so the button case has to be decided in the same event
-// that would otherwise resume — and click is not guaranteed to arrive at all.
+// pointerdown, not click: the overlay is a tap-anywhere surface, so the button
+// case has to be decided in the same event that would otherwise resume, and
+// click is not guaranteed to arrive at all under `touch-action: none`.
 let lastTouchTap = -Infinity;
 
 overlay.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
 
-  // A touch also emits a compatibility "mouse" pointerdown at the same spot a
-  // moment later. Any action that swaps the overlay's contents means that ghost
-  // lands on whatever replaced them — which is how MAIN MENU ended up starting
-  // a game instead. preventDefault suppresses it; the timer catches the rest.
+  // A touch also emits a compatibility "mouse" pointerdown a moment later. If
+  // the first swapped the overlay's contents, the ghost lands on whatever
+  // replaced them — which is how MAIN MENU started a game instead.
   const now = e.timeStamp ?? 0;
   if (e.pointerType === 'mouse' && now - lastTouchTap < 700) return;
   if (e.pointerType !== 'mouse') lastTouchTap = now;
@@ -102,9 +95,8 @@ overlay.addEventListener('pointerdown', e => {
 
   if (e.target.closest?.('[data-theme]')) return; // the swatch handles it
 
-  // A thumb that lands in the button row but misses a button must do nothing.
-  // Falling through would resume the game they were trying to leave, which
-  // reads as the button being broken.
+  // A thumb that lands in the button row but misses must do nothing. Falling
+  // through resumes the game they were trying to leave, which reads as broken.
   if (e.target.closest?.('.menuBtns')) return;
 
   Sound.init();
@@ -156,10 +148,9 @@ stage.addEventListener('pointermove', e => {
   const totalX = e.clientX - gesture.startX, totalY = e.clientY - gesture.startY;
   gesture.maxDist = Math.max(gesture.maxDist, Math.hypot(totalX, totalY));
 
-  // A single pointermove is a terrible speedometer — at 120Hz one 8ms sample
-  // can read as a flick in the middle of an unhurried drag, which slammed the
-  // piece to the floor. Smooth the velocity, and require the finger to stay
-  // fast across enough distance to actually mean it.
+  // One pointermove is a terrible speedometer: at 120Hz a single 8ms sample
+  // read as a flick mid-drag and slammed the piece to the floor. Smoothed, and
+  // the finger has to stay fast across enough distance to mean it.
   gesture.vy += (dy / dt - gesture.vy) * CTRL.flickSmooth;
   const fastDown = gesture.vy >= CTRL.flickVel * 0.5;
   if (!fastDown) gesture.burstY = 0;

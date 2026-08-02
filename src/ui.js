@@ -1,6 +1,5 @@
-// Overlay screens, HUD text and the markup helpers the game builds them from.
-// Owns no game rules; game.js composes these into the menu, pause and game-over
-// screens.
+// Overlay screens, HUD text and the markup helpers. Owns no game rules; game.js
+// composes these into the menu, pause and game-over screens.
 
 import { G } from './state.js';
 import { THEMES, theme } from './themes.js';
@@ -8,8 +7,7 @@ import { ROTATIONS, forEachCell } from './pieces.js';
 import { applyTheme, drawThemePreview, drawWordmarkL } from './render.js';
 import { overlay, toastEl, scoreEl, levelEl, linesEl, comboStat, comboEl } from './dom.js';
 
-// The hardware recreations sit on their own row, so the break is forced rather
-// than left to whatever the viewport width happens to wrap at.
+// Forced, so the hardware recreations get their own row regardless of viewport.
 const PICKER_ROW_BREAK = 3;
 
 export function themeBar() {
@@ -37,8 +35,8 @@ const DEBRIS = [
   [90, 'Z', 12, 14, -5], [28, 'I', 8, 25, -20],
 ];
 
-// Built from the real rotation tables, so the shapes falling past are the
-// actual seven tetrominoes rather than anonymous rectangles.
+// From the real rotation tables, so the shapes falling past are the actual
+// seven tetrominoes rather than anonymous rectangles.
 function debrisPiece(type) {
   const m = ROTATIONS[type][0];
   let minX = 9, maxX = -1, minY = 9, maxY = -1;
@@ -62,8 +60,8 @@ export function menuBackdrop() {
   return `<div class="bgfall" aria-hidden="true">${bits}</div>`;
 }
 
-// Canvases in overlay markup can only be drawn once they're actually in the
-// document, so every showOverlay() sweeps for them.
+// Canvases in overlay markup can only be drawn once they are in the document,
+// so every showOverlay() sweeps for them.
 function paintOverlayCanvases() {
   for (const btn of overlay.querySelectorAll?.('[data-theme]') || []) {
     const cv = btn.querySelector?.('canvas');
@@ -88,29 +86,24 @@ overlay.addEventListener('pointerdown', e => {
 
 let actionHandler = null;
 
-// input.js registers what the overlay's buttons do. Inverted this way so the
-// buttons can be bound directly instead of delegated through the overlay.
+// Inverted so the buttons can be bound directly rather than delegated.
 export function onOverlayAction(fn) { actionHandler = fn; }
 
 /**
- * Renders an overlay screen and wires up anything inside it.
- *
- * @param {string} html
  * @param {{soft?: boolean, intro?: boolean}} [opts]
- *   soft  — lighter backdrop, so the board stays readable behind it (pause).
- *   intro — stage the contents in after the title's drop animation (menu).
- *           Leave it off anywhere that must appear instantly.
+ *   soft  — lighter backdrop, board readable behind it (pause).
+ *   intro — stage contents in after the title drop. Off anywhere that must
+ *           appear instantly.
  */
 export function showOverlay(html, opts = {}) {
   overlay.innerHTML = html;
-  overlay.classList.toggle('soft', !!opts.soft);   // board readable behind
-  overlay.classList.toggle('intro', !!opts.intro); // staged reveal after the drop
+  overlay.classList.toggle('soft', !!opts.soft);
+  overlay.classList.toggle('intro', !!opts.intro);
   overlay.classList.remove('hidden');
   paintOverlayCanvases();
 
-  // Bound on the button itself, and stopPropagation keeps the tap from also
-  // reaching the overlay's tap-anywhere handler. Delegating this through the
-  // overlay left the two competing for the same event.
+  // Bound on the button itself; stopPropagation keeps the tap from also
+  // reaching the overlay's tap-anywhere handler, which the two used to race.
   for (const btn of overlay.querySelectorAll?.('[data-act]') || []) {
     btn.addEventListener('pointerdown', e => {
       e.stopPropagation();
@@ -121,17 +114,14 @@ export function showOverlay(html, opts = {}) {
 }
 
 /**
- * Buttons for an overlay screen.
- *
- * @param {Array<[string, string]>} actions  [action, label] pairs.
- *   The action string is dispatched to the onOverlayAction handler in
- *   input.js — a value with no branch there produces a button that silently
- *   does nothing, so the two must be kept in step.
+ * @param {Array<[string, string]>} actions  [action, label] pairs, or null for
+ *   a row break. An action with no branch in input.js's handler produces a
+ *   button that silently does nothing, so the two must be kept in step.
  */
 export function actionBar(actions) {
   const buttons = actions
     .map(entry => (entry === null
-      ? '<span class="btnBreak"></span>' // forces the following buttons onto a new row
+      ? '<span class="btnBreak"></span>'
       : `<button class="menuBtn" data-act="${entry[0]}">${entry[1]}</button>`))
     .join('');
   return `<div class="menuBtns">${buttons}</div>`;
@@ -165,23 +155,21 @@ export function updateHud() {
   levelEl.textContent = G.level;
   linesEl.textContent = G.lines;
 
-  // Score is eased by tickScore rather than written here, but a reset has to
-  // land immediately — counting *down* to zero on a new game would be absurd.
+  // tickScore eases the score up, but a reset lands immediately — counting
+  // *down* to zero on a new game would be absurd.
   if (G.score < shownScore) {
     shownScore = G.score;
     scoreEl.textContent = shownScore.toLocaleString();
   }
 
-  // G.combo counts chained clears from 0, so a chain of two reads as 1.
+  // G.combo counts from 0, so a chain of two reads as 1.
   const chained = G.combo > 0;
   comboStat.hidden = !chained;
   if (chained) comboEl.textContent = (G.combo + 1) + '×';
 }
 
-/**
- * Eases the displayed score toward the real one, a fixed fraction of the gap
- * per frame. Soft-drop points land the same frame; a Tetris visibly counts up.
- */
+// A fixed fraction of the gap per frame: soft-drop points land the same frame,
+// a Tetris visibly counts up.
 export function tickScore() {
   if (shownScore === G.score) return;
   const gap = G.score - shownScore;

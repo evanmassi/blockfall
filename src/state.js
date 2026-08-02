@@ -1,6 +1,5 @@
 // The single mutable game state, plus its persistence. Everything shared lives
-// on `G` because ES module bindings cannot be reassigned across files — a
-// module-level `let` here could be read elsewhere but never updated.
+// on `G` because ES module bindings cannot be reassigned across files.
 
 import { COLS, ROWS } from './config.js';
 
@@ -10,9 +9,7 @@ export function emptyGrid() {
   return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 }
 
-// Records are per mode and identical in shape. Zen's score is unbounded — you
-// cannot lose — but that only makes it a bad *shared* record, and the modes
-// don't share one.
+// Per mode: Zen's score is unbounded, so it must never share with Marathon.
 const blankModeStats = () => ({ score: 0, lines: 0, combo: 0 });
 const blankStats = () => ({ marathon: blankModeStats(), zen: blankModeStats() });
 
@@ -42,8 +39,8 @@ export function saveStats() {
 
 // ---------- in-progress run ----------
 
-// One save per mode. Sharing a slot meant starting either mode silently threw
-// away the other, which is a bad surprise for something you left mid-game.
+// One save per mode: a shared slot meant starting either mode silently threw
+// away the other.
 const RUN_VERSION = 1;
 const LEGACY_RUN_STORE = 'blockfall.run';
 const LAST_MODE_STORE = 'blockfall.lastmode';
@@ -65,7 +62,6 @@ export function clearRun(mode) {
   try { localStorage.removeItem(runKey(mode)); } catch {}
 }
 
-/** Which mode tapping the menu should pick up. */
 export function saveLastMode(mode) {
   try { localStorage.setItem(LAST_MODE_STORE, mode); } catch {}
 }
@@ -75,7 +71,7 @@ export function loadLastMode() {
   catch { return 'marathon'; }
 }
 
-/** Rehomes a run saved before the slots were split, so nobody loses a game. */
+/** Rehomes a run saved before the slots were split by mode. */
 export function migrateLegacyRun() {
   try {
     const raw = localStorage.getItem(LEGACY_RUN_STORE);
@@ -89,7 +85,7 @@ export function migrateLegacyRun() {
   } catch {}
 }
 
-/** The board as one string, '.' for empty — 220 chars rather than nested JSON. */
+/** One string, '.' for empty — 220 chars rather than nested JSON. */
 export function encodeGrid(grid) {
   return grid.map(row => row.map(c => c || '.').join('')).join('');
 }
@@ -106,8 +102,6 @@ export function decodeGrid(str) {
   return grid;
 }
 
-// Everything mutable lives here. ES module bindings can't be reassigned across
-// files, so shared state has to be properties on an object rather than `let`s.
 export const G = {
   grid: emptyGrid(),
   active: null,
@@ -125,15 +119,13 @@ export const G = {
 
   gravityAcc: 0,
 
-  // Lock delay: once grounded, a piece gets LOCK_DELAY ms before it sets, and
-  // each successful move or rotation restarts that clock — capped at
-  // MAX_LOCK_RESETS so a piece cannot be stalled indefinitely.
+  // Each move or rotation restarts the lock clock, capped at MAX_LOCK_RESETS so
+  // a piece cannot be stalled indefinitely.
   lockTimer: 0, lockResets: 0, grounded: false,
 
-  // T-spin detection. A spin only counts if the piece's last successful action
-  // was a rotation, so `rotatedLast` is cleared by any move or by gravity.
-  // `lastKick` is the index into the SRS kick table that succeeded; index 4
-  // promotes a mini T-spin to a full one.
+  // A spin only counts if the last successful action was a rotation, so
+  // `rotatedLast` is cleared by any move or by gravity. `lastKick` is the SRS
+  // kick index that succeeded; 4 promotes a mini T-spin to a full one.
   lastKick: 0, rotatedLast: false,
 
   clearRows: null, clearTimer: 0, clearTime: 200, clearCount: 0, pendingClear: null,

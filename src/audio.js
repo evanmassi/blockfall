@@ -1,6 +1,6 @@
-// Sound effects synthesised through WebAudio — no audio files, so nothing to
-// load or cache. The context can only be created inside a user gesture, which
-// is why init() is called from input handlers rather than at startup.
+// Synthesised through WebAudio, so there are no files to load or cache. The
+// context can only be created inside a user gesture, which is why init() is
+// called from input handlers rather than at startup.
 
 export const Sound = {
   ctx: null,
@@ -32,8 +32,7 @@ export const Sound = {
   lock()    { this.tone(110, 0.07, 'triangle', 0.05); },
   holdSfx() { this.tone(500, 0.06, 'sine', 0.045); },
   drop()    { this.tone(76, 0.10, 'sawtooth', 0.045); },
-  // Rises in length, pitch and volume with the clear; a Tetris also lands a
-  // low hit underneath so it has weight the smaller clears don't.
+  // A Tetris lands a low hit underneath, for weight the smaller clears lack.
   clear(n) {
     const runs = {
       1: [523, 659],

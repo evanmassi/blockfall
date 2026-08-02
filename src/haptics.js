@@ -1,14 +1,12 @@
-// Vibration feedback. Android exposes navigator.vibrate; iOS does not expose it
-// at all, so on an iPhone every call here is simply a no-op rather than
-// something to work around.
+// iOS does not expose navigator.vibrate at all, so every call here is a no-op
+// on an iPhone rather than something to work around.
 //
 // Deliberately not wired to move or rotate: those fire several times a second,
 // and constant motor activity reads as a fault rather than as feedback.
 
 const STORE = 'blockfall.haptics';
 
-// Longer clears get more pulses rather than one longer buzz — the rhythm is
-// what distinguishes them, the same way the audio ladder does.
+// More pulses rather than one longer buzz — rhythm is what distinguishes them.
 const CLEAR_PATTERNS = {
   1: [14],
   2: [12, 40, 14],
