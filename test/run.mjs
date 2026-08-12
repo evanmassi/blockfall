@@ -176,6 +176,14 @@ section('Offline packaging');
         /\.bgfall\s*\{\s*display:\s*none/.test(css.replace(/\s+/g, ' ')));
 
   check('worker registration resolves against the module', read('src/main.js').includes("new URL('../sw.js', import.meta.url)"));
+
+  // A worker may be killed as soon as respondWith settles. Without waitUntil
+  // the revalidation is abandoned mid-flight and an installed app can sit on an
+  // old build forever - which is exactly what iOS did.
+  check('revalidation is given time to finish', /e\.waitUntil\(/.test(sw), 'background update is fire-and-forget');
+  // And it has to reach the server, not the browser's own 10-minute copy.
+  check('revalidation bypasses the HTTP cache', /fetch\(req,\s*\{\s*cache:\s*'no-cache'/.test(sw),
+        'refetch can be answered from stale bytes');
 }
 
 section('Themes');

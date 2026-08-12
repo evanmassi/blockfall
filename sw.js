@@ -1,4 +1,7 @@
-const CACHE = 'blockfall-v1';
+// Bumped only to recover from a bad cache, not per deploy — the fetch handler
+// revalidates on its own. v2 discards whatever the pre-waitUntil worker left,
+// which could be stale entries it never managed to update.
+const CACHE = 'blockfall-v2';
 
 const ASSETS = [
   './', './index.html', './style.css', './manifest.json',
@@ -38,17 +41,23 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
 
-  e.respondWith(
-    caches.open(CACHE).then(cache =>
-      cache.match(req).then(hit => {
-        const net = fetch(req)
-          .then(res => {
-            if (res.ok) cache.put(req, res.clone());
-            return res;
-          })
-          .catch(() => hit || (req.mode === 'navigate' ? cache.match('./index.html') : undefined));
-        return hit || net;
+  const cached = caches.open(CACHE).then(cache => cache.match(req).then(hit => ({ cache, hit })));
+
+  // cache:'no-cache' revalidates against the server rather than letting the
+  // browser's own HTTP cache answer with the same stale bytes and write them
+  // back. Unchanged files come back 304, so it costs headers, not payloads.
+  const fresh = cached.then(({ cache, hit }) =>
+    fetch(req, { cache: 'no-cache' })
+      .then(res => {
+        if (res.ok) cache.put(req, res.clone());
+        return res;
       })
-    )
-  );
+      .catch(() => hit || (req.mode === 'navigate' ? cache.match('./index.html') : undefined)));
+
+  // Both called synchronously: a worker may be killed the moment respondWith
+  // settles, and without waitUntil the update half of stale-while-revalidate
+  // is never given time to finish. That is how an installed iOS app sits on an
+  // old build however many times it is relaunched.
+  e.waitUntil(fresh);
+  e.respondWith(cached.then(({ hit }) => hit || fresh));
 });
