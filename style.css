@@ -28,7 +28,7 @@
    and must never be synthetically bolded. */
 [class*="label"], .stat b, .best b, .recordCard b, .recordCard .sub, .swatch em,
 .controls dt, .controls dd,
-#score, #toast, #overlay h1, #overlay h2, #overlay p {
+#score, #toast, #countdown, #overlay h1, #overlay h2, #overlay p {
   font-family:var(--font-display);
   font-weight:400;
   font-synthesis:none;
@@ -156,6 +156,14 @@ html, body {
      both wider than the well in a pixel face. */
   max-width:94%; text-align:center; pointer-events:none; opacity:0;
   text-shadow:0 0 18px currentColor;
+}
+
+#countdown {
+  position:absolute; left:50%; top:50%;
+  transform:translate(-50%,-50%);
+  font-size:clamp(30px,13vw,54px); line-height:1;
+  color:var(--accent); text-shadow:0 0 24px var(--accent), 0 0 60px var(--accent);
+  pointer-events:none; opacity:0;
 }
 
 #overlay {

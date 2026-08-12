@@ -11,7 +11,7 @@ export const app = $('app'), hud = $('hud');
 export const stage = $('stage');
 export const railLeft = $('railLeft'), railRight = $('railRight');
 export const overlay = $('overlay');
-export const toastEl = $('toast');
+export const toastEl = $('toast'), countdownEl = $('countdown');
 export const scoreEl = $('score'), levelEl = $('level'), linesEl = $('lines');
 export const comboStat = $('comboStat'), comboEl = $('combo');
 export const pauseBtn = $('pauseBtn'), muteBtn = $('muteBtn');

@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b10';
+const BUILD = 'b13';
 
 // ?debug — the real event sequence for a tap. Capture phase, so it sees every
 // event regardless of what any handler does with it.
@@ -75,7 +75,7 @@ function frame(t) {
 
   // Order matters: held keys move the piece, then gravity and lock delay act on
   // where it ended up, then it is drawn once.
-  if (G.state === 'playing' && G.active) updateKeyRepeat(dt);
+  if (G.state === 'playing' && G.active && !G.ready) updateKeyRepeat(dt);
   update(dt);
   render();
 

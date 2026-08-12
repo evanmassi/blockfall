@@ -31,6 +31,8 @@ export const ZEN_RESCUE_ROWS = 4;
 export const LOCK_DELAY = 500, MAX_LOCK_RESETS = 15;
 export const DEATH_ROW_MS = 34, DEATH_HOLD_MS = 280;
 
+export const READY_MS = 2500, READY_BEATS = 3;
+
 // Clear feedback by rows cleared. A single stays modest on purpose — if singles
 // are exciting there is nowhere left to go for a Tetris.
 //   time  ms the animation holds before the stack collapses

@@ -26,8 +26,8 @@ const ctxStub = () => {
 };
 
 export const docHandlers = {}, handlers = {}, els = {};
-const IDS = ['app','hud','board','holdCanvas','nextCanvas','overlay','toast','stage','railLeft','railRight',
-             'score','level','lines','comboStat','combo','pauseBtn','muteBtn'];
+const IDS = ['app','hud','board','holdCanvas','nextCanvas','overlay','toast','countdown','stage',
+             'railLeft','railRight','score','level','lines','comboStat','combo','pauseBtn','muteBtn'];
 
 for (const id of IDS) {
   const listeners = handlers[id] = {};
@@ -122,7 +122,7 @@ globalThis.window = {
 // ---------- the modules under test ----------
 
 export const config = await import('../src/config.js');
-export const { COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS } = config;
+export const { COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS, READY_MS } = config;
 export const { ROTATIONS, TYPES, topRow } = await import('../src/pieces.js');
 export const state = await import('../src/state.js');
 export const { G, loadRun } = state;

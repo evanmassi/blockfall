@@ -7,7 +7,7 @@ import {
   LINE_SCORES, TSPIN_SCORES, TSPIN_MINI_SCORES, PERFECT_SCORES,
   LOCK_DELAY, MAX_LOCK_RESETS, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS,
   FRAME_MS, GRAVITY_FRAMES, GRAVITY_MIN_FRAMES,
-  ZEN_SPEED_CAP_LEVEL, ZEN_RESCUE_ROWS,
+  ZEN_SPEED_CAP_LEVEL, ZEN_RESCUE_ROWS, READY_MS, READY_BEATS,
 } from './config.js';
 import { ROTATIONS, KICKS, topRow } from './pieces.js';
 import { theme } from './themes.js';
@@ -21,9 +21,14 @@ import { view, drawSidePanels, syncLevelPalette } from './render.js';
 import { Sound } from './audio.js';
 import { Haptics } from './haptics.js';
 import {
-  showOverlay, hideOverlay, showToast, updateHud, setRecordStyle,
+  showOverlay, hideOverlay, showToast, updateHud, setRecordStyle, setCountdown,
   themeBar, wordmark, menuBackdrop, actionBar,
 } from './ui.js';
+
+function setReady(ms) {
+  G.ready = ms;
+  setCountdown(ms > 0 ? READY_BEATS : 0);
+}
 
 // Single funnel, so beating the record is caught the instant it happens rather
 // than on the game-over screen.
@@ -377,7 +382,6 @@ export function pendingRun() {
   return null;
 }
 
-/** Leaves the run paused rather than dropping the player into live gravity. */
 export function resumeRun(mode = pendingRun()) {
   const saved = mode && loadRun(mode);
   if (!saved) { startGame(); return; }
@@ -414,7 +418,8 @@ export function resumeRun(mode = pendingRun()) {
   syncLevelPalette();
   updateHud();
   drawSidePanels();
-  if (G.state === 'playing') togglePause();
+  hideOverlay();
+  if (G.state === 'playing') setReady(READY_MS); // spawn() above can have topped out
 }
 
 // ---------- flow ----------
@@ -434,6 +439,7 @@ export function startGame(mode = 'marathon') {
   G.clearRows = null; G.pendingClear = null;
   G.deathRow = ROWS; G.deathTimer = 0;
   G.state = 'playing';
+  setReady(0);
 
   hideOverlay();
   syncLevelPalette(); // back to level 1 after a high-level run
@@ -475,8 +481,7 @@ function finishGameOver() {
     <p>LINES ${G.lines} &nbsp;·&nbsp; LEVEL ${G.level}${
       G.newBest ? '' : `<br>HIGH SCORE ${G.stats[G.mode].score.toLocaleString()}`}</p>
     ${themeBar()}
-    ${actionBar([['menu', 'MAIN MENU']])}
-    <p class="cta">TAP TO PLAY AGAIN</p>
+    ${actionBar([['restart', 'PLAY AGAIN'], ['menu', 'MAIN MENU']])}
   `);
 }
 
@@ -518,11 +523,13 @@ export function showPauseScreen() {
 export function togglePause() {
   if (G.state === 'playing' || G.state === 'clearing') {
     G.state = G.state === 'clearing' ? 'pausedClearing' : 'paused';
+    setReady(0);
     snapshotRun();
     showPauseScreen();
   } else if (G.state === 'paused' || G.state === 'pausedClearing') {
     G.state = G.state === 'pausedClearing' ? 'clearing' : 'playing';
     hideOverlay();
+    setReady(READY_MS);
   }
 }
 
@@ -555,31 +562,25 @@ export function showMenu() {
   G.clearRows = null;
   G.pendingClear = null;
   G.deathRow = ROWS;
+  setReady(0);
   setRecordStyle(false);
 
   const savedMarathon = loadRun('marathon');
   const savedZen = loadRun('zen');
-  const pending = pendingRun();
   const saved = savedMarathon || savedZen;
 
   // New on the first row, resume on the second, one verb throughout.
-  const actions = [];
+  const actions = [['new', 'NEW GAME'], ['zen', saved ? 'NEW ZEN' : 'ZEN MODE']];
 
   if (saved) {
-    actions.push(['new', 'NEW GAME'], ['zen', 'NEW ZEN'], null);
+    actions.push(null);
     if (savedMarathon) {
       actions.push(['continue', `RESUME GAME · ${(savedMarathon.score | 0).toLocaleString()}`]);
     }
     if (savedZen) {
       actions.push(['continue-zen', `RESUME ZEN · ${lineCount(savedZen.lines | 0)}`]);
     }
-  } else {
-    actions.push(['zen', 'ZEN MODE']);
   }
-
-  const cta = pending
-    ? `TAP TO RESUME ${pending === 'zen' ? 'ZEN' : 'GAME'}`
-    : 'TAP TO PLAY';
 
   showOverlay(`
     ${menuBackdrop()}
@@ -589,7 +590,6 @@ export function showMenu() {
     <p class="fine">HOLD SAVES A PIECE &nbsp;·&nbsp; ONCE PER DROP</p>
     ${themeBar()}
     ${actionBar(actions)}
-    <p class="cta">${cta}</p>
   `, { intro: true });
 }
 
@@ -602,6 +602,13 @@ export function showMenu() {
  * keys is settled before gravity and lock delay apply.
  */
 export function update(dt) {
+  // First, so one guard freezes gravity, lock delay, clears and particles alike.
+  if (G.ready > 0) {
+    G.ready = Math.max(0, G.ready - dt);
+    setCountdown(Math.ceil(G.ready / (READY_MS / READY_BEATS)));
+    return;
+  }
+
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 0.03);
 
   for (let i = G.particles.length - 1; i >= 0; i--) {

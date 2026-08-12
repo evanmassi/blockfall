@@ -118,6 +118,7 @@ export const G = {
   stats: { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } },
 
   gravityAcc: 0,
+  ready: 0,        // ms left on the countdown; nothing moves while set
 
   // Each move or rotation restarts the lock clock, capped at MAX_LOCK_RESETS so
   // a piece cannot be stalled indefinitely.

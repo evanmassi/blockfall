@@ -15,7 +15,7 @@ import {
   clearGrid, fillRow, fillFrom, put, filledCells, key,
   tapOverlay, pressAction, dragOnStage, targetMatching, backdropTarget,
   // modules under test
-  COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, CLEAR_TIME_MAX, DEATH_ROW_MS, DEATH_HOLD_MS,
+  COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, CLEAR_TIME_MAX, DEATH_ROW_MS, DEATH_HOLD_MS, READY_MS,
   ROTATIONS, TYPES, topRow,
   G, state, loadRun, hasSavedRun, board, game,
   THEMES, theme, savedThemeName, applyTheme, view, syncLevelPalette,
@@ -416,7 +416,7 @@ section('Block out + death curtain');
   check('best score persisted', JSON.parse(store['blockfall.stats']).marathon.score >= 0);
 }
 
-section('Overlay restart');
+section('Starting from the menu');
 {
   reset();
   const tap = {
@@ -425,7 +425,10 @@ section('Overlay restart');
     preventDefault: noop,
   };
   for (const fn of handlers.overlay.pointerdown || []) fn(tap);
-  check('tapping the overlay restarts', G.state === 'playing', G.state);
+  check('tapping the menu backdrop does nothing', G.state === 'menu', G.state);
+
+  pressAction('new');
+  check('the button is what starts a game', G.state === 'playing', G.state);
   check('score reset', G.score === 0, String(G.score));
 }
 
@@ -700,12 +703,12 @@ section('Menu wording');
   const menu = els.overlay.innerHTML;
 
   check('menu offers zen', menu.includes('data-act="zen"'));
-  check('prompt names the mode it will resume', menu.includes('TAP TO RESUME ZEN'), 'no mode in prompt');
+  check('no tap prompt competing with them', !menu.includes('TAP TO'), 'menu still hints at tapping');
   check('resume button carries its progress',
         menu.includes('RESUME ZEN &middot; 42 LINES') || menu.includes('RESUME ZEN · 42 LINES'),
         'no progress on button');
   check('zen button reads as starting a new one', menu.includes('NEW ZEN'));
-  check('resuming is still the primary action', menu.includes('TAP TO RESUME'));
+  check('with a way to start over beside it', menu.includes('data-act="new"'));
   // One verb throughout — no CONTINUE anywhere alongside RESUME.
   check('one word for the action, not two', !menu.includes('CONTINUE'), 'mixed CONTINUE and RESUME');
 
@@ -992,18 +995,22 @@ section('Resuming a run');
   game.showMenu();
   check('menu still offers the run', hasSavedRun('marathon'));
   check('menu shows a new-game escape hatch', els.overlay.innerHTML.includes('data-act="new"'));
-  check('menu prompt reflects the saved run', els.overlay.innerHTML.includes('TAP TO RESUME'));
+  check('menu offers the run as a button', els.overlay.innerHTML.includes('data-act="continue"'));
 
   game.resumeRun();
-  check('resumes paused, not into live gravity', G.state === 'paused', G.state);
+  check('resumes into the game, not onto a second screen', G.state === 'playing', G.state);
+  check('but held by the countdown, not straight into gravity', G.ready > 0, String(G.ready));
+  check('the board is uncovered while it counts', els.overlay.classes.has('hidden'));
   check('score restored', G.score === 2750, String(G.score));
   check('lines and level restored', G.lines === 7 && G.level === 2, `${G.lines}/${G.level}`);
   check('hold restored', G.hold === 'I', String(G.hold));
   check('board restored', G.grid[ROWS - 1][3] === 'T' && G.grid[ROWS - 1][4] === 'S');
   check('active piece has a usable rotation matrix', !G.active || Array.isArray(G.active.m));
 
+  pumpMs(READY_MS + 50);
+  check('and comes alive once it runs out', G.ready === 0 && G.state === 'playing', `${G.ready}/${G.state}`);
+
   // Finishing or abandoning must not leave a stale run behind.
-  game.togglePause();
   game.gameOver();
   pumpMs(DEATH_ROW_MS * 25 + DEATH_HOLD_MS + 150);
   check('game over clears the saved run', !hasSavedRun('marathon'));
@@ -1024,6 +1031,76 @@ section('Resuming a run');
   store['blockfall.run.marathon'] = JSON.stringify({ v: 0, score: 999 });
   check('an incompatible saved run is discarded', !hasSavedRun('marathon'));
   delete store['blockfall.run'];
+}
+
+section('The countdown between a held board and a live one');
+{
+  reset();
+  fresh();
+  clearGrid();
+  put('T', 4, 5, 0);
+
+  game.togglePause();
+  check('pausing cancels any countdown', G.ready === 0, String(G.ready));
+
+  game.togglePause();
+  check('un-pausing counts back in rather than resuming flat',
+        G.state === 'playing' && G.ready > 0, `${G.state}/${G.ready}`);
+
+  // A level-1 row takes ~800ms, so this is long enough to catch gravity that never stopped.
+  const { x, y, rot } = G.active;
+  pumpMs(READY_MS - 100);
+  check('gravity is held throughout', G.active.y === y, `${G.active.y} vs ${y}`);
+
+  key('ArrowLeft');
+  check('keys do not land either', G.active.x === x, `${G.active.x} vs ${x}`);
+  dragOnStage(1, [[0, 20]]);
+  check('nor does a tap on the board', G.active.rot === rot, `${G.active.rot} vs ${rot}`);
+
+  pumpMs(READY_MS);
+  check('and the piece falls once it clears', G.active && G.active.y > y, String(G.active?.y));
+
+  game.togglePause();
+  game.togglePause();
+  const beats = [];
+  for (let i = 0; i < READY_MS / 50 + 10; i++) {
+    const digit = els.countdown.textContent;
+    if (digit && digit !== beats[beats.length - 1]) beats.push(digit);
+    pumpMs(50);
+  }
+  check('the count is on screen and steps down', beats.join('') === '321', beats.join('') || 'nothing shown');
+  check('and clears itself at the end', els.countdown.textContent === '', els.countdown.textContent);
+}
+
+section('Starting another game is a button, not a hint');
+{
+  reset();
+  // reset() snapshots whatever the last block left running, hence the second wipe.
+  for (const k of Object.keys(store)) delete store[k];
+  game.showMenu();
+  const first = els.overlay.innerHTML;
+  check('a first-run menu offers a new game outright',
+        first.includes('data-act="new"'), 'classic mode was tap-only');
+  check('with the other mode beside it', first.includes('ZEN MODE'));
+
+  reset();
+  fresh('zen');
+  G.score = 4200;
+  G.lines = 30;
+  game.gameOver();
+  pumpPastDeath();
+  const over = els.overlay.innerHTML;
+  check('game over offers a play-again button', over.includes('PLAY AGAIN'), 'main menu was the only button');
+  check('and still a route to the menu', over.includes('data-act="menu"'));
+  check('and no tap prompt beside them', !over.includes('TAP TO'), 'game over still hints at tapping');
+
+  tapOverlay(backdropTarget);
+  check('a stray tap does not restart', G.state === 'over', G.state);
+
+  // Used to hard-code marathon, silently switching mode.
+  pressAction('restart');
+  check('play again stays in the mode you died in', G.mode === 'zen', G.mode);
+  check('and starts from scratch', G.score === 0 && G.lines === 0, `${G.score}/${G.lines}`);
 }
 
 section('Drop gestures');

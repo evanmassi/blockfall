@@ -5,7 +5,8 @@ import { G } from './state.js';
 import { THEMES, theme } from './themes.js';
 import { ROTATIONS, forEachCell } from './pieces.js';
 import { applyTheme, drawThemePreview, drawWordmarkL } from './render.js';
-import { overlay, toastEl, scoreEl, levelEl, linesEl, comboStat, comboEl } from './dom.js';
+import { READY_MS, READY_BEATS } from './config.js';
+import { overlay, toastEl, countdownEl, scoreEl, levelEl, linesEl, comboStat, comboEl } from './dom.js';
 
 // Forced, so the hardware recreations get their own row regardless of viewport.
 const PICKER_ROW_BREAK = 3;
@@ -147,6 +148,25 @@ export function showToast(text, color) {
 
 export function setRecordStyle(on) {
   scoreEl.classList.toggle('record', on);
+}
+
+let shownCount = 0;
+
+/** @param {number} n  beats remaining, 0 to clear. */
+export function setCountdown(n) {
+  if (n === shownCount) return;
+  shownCount = n;
+  countdownEl.textContent = n > 0 ? n : '';
+  if (n <= 0) return;
+  countdownEl.animate(
+    [
+      { opacity: 0, transform: 'translate(-50%,-50%) scale(1.7)' },
+      { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: 0.28 },
+      { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: 0.8 },
+      { opacity: 0, transform: 'translate(-50%,-50%) scale(.92)' },
+    ],
+    { duration: READY_MS / READY_BEATS, easing: 'ease-out' }
+  );
 }
 
 let shownScore = 0;

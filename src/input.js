@@ -47,12 +47,12 @@ document.addEventListener('keydown', e => {
   if (G.state === 'menu' || G.state === 'over') {
     if (e.key === ' ' || e.key === 'Enter') {
       Sound.init();
-      if (G.state === 'menu') playFromMenu(); else startGame();
+      if (G.state === 'menu') playFromMenu(); else startGame(G.mode);
     }
     return;
   }
   if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { togglePause(); return; }
-  if (G.state !== 'playing') return;
+  if (G.state !== 'playing' || G.ready) return;
 
   switch (e.key) {
     case 'ArrowLeft':  keys.left = 1; move(-1); break;
@@ -100,9 +100,8 @@ overlay.addEventListener('pointerdown', e => {
   if (e.target.closest?.('.menuBtns')) return;
 
   Sound.init();
-  if (G.state === 'menu') playFromMenu();
-  else if (G.state === 'over') startGame();
-  else if (G.state === 'paused' || G.state === 'pausedClearing') togglePause();
+  // The only tap-anywhere screen left: resuming is the one action with no button.
+  if (G.state === 'paused' || G.state === 'pausedClearing') togglePause();
 });
 
 onOverlayAction(act => {
@@ -123,7 +122,7 @@ onOverlayAction(act => {
 
 stage.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
-  if (G.state !== 'playing') return;
+  if (G.state !== 'playing' || G.ready) return;
 
   if (gesture) { extraPointers++; rotate(-1); return; }
 

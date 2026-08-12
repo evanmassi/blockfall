@@ -127,6 +127,8 @@ Both are per mode. Records track score, lines and longest combo, shown as a card
 
 Runs are saved at stable points only — a new piece, a pause, leaving for the menu, and `pagehide` — never mid-clear or mid-death, so a restored board is always one a player could have been looking at. The board serialises to a 220-character string, and the payload is versioned so an older save is discarded rather than half-loaded.
 
+Resuming a run and un-pausing both land on the live board behind a 3–2–1 count. Gravity, lock delay, the clear animation and every input sit behind one guard in `update()` for its duration, so the piece already in the air can be read before it starts falling again. Starting fresh skips it — an empty board has nothing to re-read.
+
 ## Haptics
 
 `navigator.vibrate` patterns paired with the sound events; iOS doesn't expose the API, so every call is a no-op there. Nothing fires on move or rotate — those repeat several times a second, and constant motor activity reads as a fault. A **BUZZ** toggle appears on the pause screen only where vibration exists.
