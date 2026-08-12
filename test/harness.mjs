@@ -66,8 +66,18 @@ export const swatchEls = [];
 
 // showOverlay() binds listeners straight onto the action buttons, so the stub
 // has to hand back real-ish elements parsed from the markup it just rendered.
-export let actionButtons = [];
+export let actionButtons = [], debrisCanvases = [];
 els.overlay.querySelectorAll = sel => {
+  // Parsed back out of the markup that was just rendered, the same way the
+  // action buttons are — the stub has to hand back something paintable.
+  if (sel === '.debrisCv') {
+    debrisCanvases = [...els.overlay.innerHTML.matchAll(/data-type="(\w+)" data-cell="(\d+)"/g)]
+      .map(m => {
+        const ctx = ctxStub(); // stable, so the blocks drawn into it are countable
+        return { ...previewCanvas(), ctx, getContext: () => ctx, dataset: { type: m[1], cell: m[2] } };
+      });
+    return debrisCanvases;
+  }
   if (sel !== '[data-act]') return swatchEls;
   actionButtons = [...els.overlay.innerHTML.matchAll(/data-act="([^"]+)"/g)].map(m => {
     const listeners = {};

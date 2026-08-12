@@ -62,3 +62,13 @@ export function topRow(m) {
 export function forEachCell(m, fn) {
   for (let y = 0; y < m.length; y++) for (let x = 0; x < m.length; x++) if (m[y][x]) fn(x, y);
 }
+
+/** Tight bounding box of `m` in cells, ignoring its empty padding rows. */
+export function bounds(m) {
+  let minX = m.length, maxX = -1, minY = m.length, maxY = -1;
+  forEachCell(m, (x, y) => {
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+  });
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}

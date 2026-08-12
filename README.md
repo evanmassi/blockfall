@@ -6,7 +6,7 @@ A block-stacking game for the phone. No build step, no dependencies — plain ES
 
 ## Modes
 
-**Game** — the standard one. Gravity accelerates with the level; top out and the run ends.
+**Classic** — the standard one. Gravity accelerates with the level; top out and the run ends. Identified as `marathon` in code and in storage keys; the display name changed, the internal one deliberately did not, since renaming it would orphan every existing save and record.
 
 **Zen** — endless. Gravity stops accelerating at level 5, and topping out clears the bottom four rows and drops the stack instead of ending the run. Each mode keeps its own saved run and its own records, so an unbounded Zen score can never flatter the other.
 

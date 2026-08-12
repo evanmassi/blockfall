@@ -10,7 +10,7 @@ import {
   // harness
   check, section, report, reset, fresh, pumpMs, pumpPastDeath, now, noop, fs,
   els, handlers, docHandlers, store, cssVars, metaThemeColor,
-  swatchEls, actionButtons, fakeSwatch, previewCanvas, markCv,
+  swatchEls, actionButtons, debrisCanvases, fakeSwatch, previewCanvas, markCv,
   // board + input helpers
   clearGrid, fillRow, fillFrom, put, filledCells, key,
   tapOverlay, pressAction, dragOnStage, targetMatching, backdropTarget,
@@ -33,15 +33,84 @@ section('Boot');
   check('menu rendered on load', menu.includes('<span>B</span>') && menu.includes('OCKFALL'));
   check('wordmark L is a drawn tetromino', menu.includes('class="markL"'));
   check('mark has a floor to land on', menu.includes('markFloor'));
-  check('menu has drifting debris behind it', menu.includes('bgfall') && menu.includes('--piece-'));
-  // Debris must be real tetrominoes, so each falling piece carries 4 cells.
+  check('menu has drifting debris behind it', menu.includes('bgfall') && menu.includes('debrisCv'));
   const debris = menu.slice(menu.indexOf('bgfall'), menu.indexOf('markWrap'));
-  const pieceCount = (debris.match(/<i /g) || []).length;
-  const cellCount = (debris.match(/<b /g) || []).length;
-  check('debris are real tetrominoes', pieceCount > 0 && cellCount === pieceCount * 4,
-        `${pieceCount} pieces, ${cellCount} cells`);
+  const types = [...debris.matchAll(/data-type="(\w+)"/g)].map(m => m[1]);
+  check('debris are real tetrominoes', types.length > 0 && types.every(t => TYPES.includes(t)),
+        types.join(' '));
   check('theme synced to CSS vars', cssVars['--accent'] === '#ff2d95', JSON.stringify(cssVars['--accent']));
   check('board sized', els.board.width > 0);
+}
+
+section('Menu depth field');
+{
+  reset();
+  const field = () => {
+    const html = els.overlay.innerHTML;
+    return html.slice(html.indexOf('bgfall'), html.indexOf('markWrap'));
+  };
+
+  const first = field();
+  const pieces = first.match(/<canvas [^>]*>/g) || [];
+  const opacity = p => Number(p.match(/opacity:([\d.]+)/)[1]);
+  const cell = p => Number(p.match(/data-cell="(\d+)"/)[1]);
+
+  check('the field is the size it claims', pieces.length === 14, String(pieces.length));
+
+  // The whole point of the canvases: each is painted by the real block
+  // renderer, so it carries the theme's bevel and Game Boy's fill marks.
+  check('every piece is drawn with the real block renderer',
+        debrisCanvases.length === 14 && debrisCanvases.every(c => c.ctx.draws === 4),
+        debrisCanvases.map(c => c.ctx.draws).join(','));
+
+  // Sizes must stay on the sprite cache's grid, or it grows on every visit.
+  check('cell sizes are quantised', pieces.every(p => cell(p) % 2 === 0),
+        pieces.map(cell).join(' '));
+
+  const depths = new Set(pieces.map(opacity));
+  check('depth varies across it', depths.size > 8, String(depths.size));
+  check('and stays inside its range',
+        [...depths].every(o => o >= 0.05 && o <= 0.22), [...depths].sort().join(' '));
+
+  // Every property comes off one depth value, so the nearest piece must be the
+  // biggest and the sharpest, and the furthest the smallest and softest.
+  const nearest = pieces.reduce((a, b) => (opacity(a) >= opacity(b) ? a : b));
+  const furthest = pieces.reduce((a, b) => (opacity(a) <= opacity(b) ? a : b));
+  check('the nearest piece is in focus', !nearest.includes('filter:blur'), 'near layer blurred');
+  check('the furthest is soft', furthest.includes('filter:blur'), 'far layer sharp');
+  check('and near reads bigger than far', cell(nearest) > cell(furthest),
+        `${cell(nearest)} vs ${cell(furthest)}`);
+
+  // Blur is the expensive part; it must not reach every piece.
+  const blurred = pieces.filter(p => p.includes('filter:blur')).length;
+  check('only the back of the field carries a filter', blurred >= 7 && blurred <= 11, String(blurred));
+
+  // Lanes, so fourteen random positions cannot clump into one column.
+  const lefts = pieces.map(p => Number(p.match(/left:([\d.]+)%/)[1]));
+  check('pieces are spread across the width',
+        Math.min(...lefts) < 10 && Math.max(...lefts) > 88,
+        `${Math.min(...lefts).toFixed(1)}..${Math.max(...lefts).toFixed(1)}`);
+
+  game.showMenu();
+  check('the field is rebuilt each visit', field() !== first, 'identical arrangement twice');
+
+  // Game Boy tells pieces apart by fill pattern rather than colour, so a theme
+  // change has to redraw the debris, not just recolour them.
+  swatchEls.length = 0;
+  swatchEls.push(fakeSwatch('gameboy'));
+  for (const fn of handlers.overlay.pointerdown || []) {
+    fn({
+      pointerType: 'touch', button: 0, timeStamp: 0, preventDefault: noop,
+      target: { closest: sel => (sel === '[data-theme]' ? { dataset: { theme: 'gameboy' } } : null) },
+    });
+  }
+  check('a theme change repaints them',
+        theme.key === 'gameboy' && debrisCanvases.length === 14 &&
+        debrisCanvases.every(c => c.ctx.draws === 4),
+        `${theme.key} / ${debrisCanvases.map(c => c.ctx.draws).join(',')}`);
+
+  swatchEls.length = 0;
+  applyTheme('neon');
 }
 
 section('Offline packaging');
@@ -669,7 +738,7 @@ section('Saved runs, one slot per mode');
   check('starting marathon left the zen run alone', hasSavedRun('zen'));
   check('both runs offered', menu.includes('data-act="continue"') && menu.includes('data-act="continue-zen"'));
   check('each resume shows its own progress', menu.includes('3,210') && menu.includes('42'));
-  check('marathon resume carries its score', menu.includes('RESUME GAME') && menu.includes('3,210'));
+  check('classic resume carries its score', menu.includes('RESUME CLASSIC') && menu.includes('3,210'));
 
   // A plain tap picks up whichever was played most recently.
   check('most recent mode is what a plain tap resumes', game.pendingRun() === 'marathon', game.pendingRun());
@@ -711,6 +780,8 @@ section('Menu wording');
   check('with a way to start over beside it', menu.includes('data-act="new"'));
   // One verb throughout — no CONTINUE anywhere alongside RESUME.
   check('one word for the action, not two', !menu.includes('CONTINUE'), 'mixed CONTINUE and RESUME');
+  // And one name per mode: it was GAME on the buttons but marathon in the code.
+  check('the other mode is named too', menu.includes('CLASSIC') && !menu.includes('GAME'), 'a mode is still called GAME');
 
   // "1 LINES" was on screen.
   fresh('zen');
@@ -1101,6 +1172,74 @@ section('Starting another game is a button, not a hint');
   pressAction('restart');
   check('play again stays in the mode you died in', G.mode === 'zen', G.mode);
   check('and starts from scratch', G.score === 0 && G.lines === 0, `${G.score}/${G.lines}`);
+}
+
+section('End-of-run tally');
+{
+  reset();
+  fresh();
+  check('a new run starts empty', G.tally.pieces === 0 && G.tally.tetris === 0, JSON.stringify(G.tally));
+
+  // Four filled rows and a vertical I is a tetris and a perfect clear at once.
+  for (let y = ROWS - 4; y < ROWS; y++) fillRow(y, 0);
+  put('I', -2, 0, 1);
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 60);
+  check('pieces counted as they lock', G.tally.pieces === 1, String(G.tally.pieces));
+  check('tetrises counted', G.tally.tetris === 1, String(G.tally.tetris));
+  check('perfect clears counted', G.tally.perfect === 1, String(G.tally.perfect));
+
+  clearGrid();
+  fillRow(ROWS - 1, 4);
+  G.grid[ROWS - 3][3] = 'I';
+  put('T', 3, ROWS - 3, 0);
+  game.rotate(1);
+  game.rotate(1);
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 60);
+  check('t-spins counted', G.tally.tspins === 1, String(G.tally.tspins));
+
+  reset();
+  fresh();
+  const running = G.tally.ms;
+  pumpMs(500);
+  check('the clock runs while playing', G.tally.ms > running, `${G.tally.ms} vs ${running}`);
+
+  game.togglePause();
+  const held = G.tally.ms;
+  pumpMs(500);
+  check('and stops on pause', G.tally.ms === held, `${G.tally.ms} vs ${held}`);
+
+  game.togglePause();
+  pumpMs(READY_MS - 200);
+  check('and stays stopped through the countdown', G.tally.ms === held, `${G.tally.ms} vs ${held}`);
+
+  reset();
+  fresh();
+  G.tally.pieces = 42;
+  G.tally.ms = 90000;
+  game.snapshotRun();
+  game.showMenu();
+  game.resumeRun('marathon');
+  check('the tally survives a resume', G.tally.pieces === 42 && G.tally.ms === 90000, JSON.stringify(G.tally));
+  game.startGame();
+  check('and a new game clears it', G.tally.pieces === 0, String(G.tally.pieces));
+
+  reset();
+  fresh();
+  G.lines = 34;
+  G.level = 4;
+  G.tally = { ms: 252000, pieces: 186, tetris: 3, tspins: 1, perfect: 0, combo: 5 };
+  game.gameOver();
+  pumpPastDeath();
+  const card = els.overlay.innerHTML;
+  check('the card is on the game-over screen', card.includes('class="tally"'), 'no tally card');
+  check('time reads as a clock', card.includes('4:12'), 'no 4:12');
+  check('pieces shown', card.includes('186'));
+  check('lines folded into it', card.includes('>34<'), 'lines missing from the card');
+  check('best combo shown', card.includes('5&times;') || card.includes('5×'));
+  // Score stays the headline above the card; only the supporting numbers moved.
+  check('score still the hero', card.includes('class="best'), 'score block gone');
 }
 
 section('Drop gestures');

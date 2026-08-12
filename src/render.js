@@ -2,7 +2,7 @@
 // it, so a dropped frame can only ever cost a repaint.
 
 import { COLS, VIS_ROWS, HIDDEN, ROWS, CLEAR_FX } from './config.js';
-import { ROTATIONS, forEachCell } from './pieces.js';
+import { ROTATIONS, forEachCell, bounds } from './pieces.js';
 import { theme, setTheme, applyLevelPalette } from './themes.js';
 import { G } from './state.js';
 import { collides } from './board.js';
@@ -279,6 +279,29 @@ export function drawThemePreview(cv, th) {
     g.fillStyle = 'rgba(0,0,0,.22)';
     for (let y = 0; y < h; y += 4) g.fillRect(0, y + 2, w, 2);
   }
+}
+
+/** One menu-backdrop piece, drawn with the real block renderer so it carries
+ *  the theme's bevel, glow and Game Boy fill marks rather than a flat chip. */
+export function drawDebris(cv, type, cell, th = theme) {
+  const m = ROTATIONS[type][0];
+  const b = bounds(m);
+  // Sprites overdraw by half a cell for their glow; without matching padding
+  // here it is clipped square at the piece's edge.
+  const pad = Math.ceil(cell * 0.5);
+  const w = b.w * cell + pad * 2, h = b.h * cell + pad * 2;
+
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  forEachCell(m, (x, y) => {
+    drawBlock(g, pad + (x - b.x) * cell, pad + (y - b.y) * cell, th.pieces[type], cell, type, th);
+  });
 }
 
 // The L tetromino in its first rotation is, conveniently, the letter L.

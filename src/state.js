@@ -5,6 +5,8 @@ import { COLS, ROWS } from './config.js';
 
 const STORE = 'blockfall.stats';
 
+export const blankTally = () => ({ ms: 0, pieces: 0, tetris: 0, tspins: 0, perfect: 0, combo: 0 });
+
 export function emptyGrid() {
   return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 }
@@ -113,6 +115,7 @@ export const G = {
   state: 'menu',   // menu | playing | clearing | paused | pausedClearing | dying | over
   mode: 'marathon', // marathon | zen
   score: 0, lines: 0, level: 1, combo: -1, backToBack: false,
+  tally: blankTally(),
   runBest: 0,      // score to beat, captured at the start of the run
   newBest: false,
   stats: { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } },

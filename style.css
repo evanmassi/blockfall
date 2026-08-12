@@ -27,7 +27,7 @@
    normal face, so anything using it sets its own size and tight letter-spacing,
    and must never be synthetically bolded. */
 [class*="label"], .stat b, .best b, .recordCard b, .recordCard .sub, .swatch em,
-.controls dt, .controls dd,
+.controls dt, .controls dd, .tally dt, .tally dd,
 #score, #toast, #countdown, #overlay h1, #overlay h2, #overlay p {
   font-family:var(--font-display);
   font-weight:400;
@@ -263,14 +263,18 @@ html, body {
 
 /* Two columns so a gesture can never be split from its action. The key column
    never wraps; only the description may, and only on a very narrow screen. */
-.controls {
+.controls, .tally {
   display:grid; grid-template-columns:auto auto;
   justify-content:center; align-items:baseline;
   gap:6px 14px; margin:0;
   font-size:clamp(7px,2.3vw,9px); letter-spacing:.08em; line-height:1.4;
 }
-.controls dt { color:var(--dim); text-align:right; white-space:nowrap; }
-.controls dd { color:var(--text); text-align:left; margin:0; }
+.controls dt, .tally dt { color:var(--dim); text-align:right; white-space:nowrap; }
+.controls dd, .tally dd { color:var(--text); text-align:left; margin:0; }
+
+/* Right-aligned so the numbers line up as a column rather than ragged. */
+.tally { gap:5px 16px; }
+.tally dd { text-align:right; min-width:3.2em; }
 #overlay .cta { color:var(--text); font-size:9px; letter-spacing:.06em; line-height:1.6; animation:pulse 1.7s ease-in-out infinite; }
 
 @keyframes pulse { 0%,100%{opacity:.35} 50%{opacity:1} }
@@ -347,17 +351,19 @@ html, body {
 .btnBreak { flex-basis:100%; height:0; margin:0; }
 
 .bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
-.bgfall i {
-  position:absolute; top:0; display:grid; gap:1px; opacity:.15;
+/* Real block sprites, so the debris carry the theme's bevel, glow and Game Boy
+   fill marks. Size, opacity, blur, spin and sway all come off the piece's depth.
+   will-change so a blurred piece rasterises once and only its transform
+   animates - without it the far layers re-blur every frame. */
+.bgfall canvas {
+  position:absolute; top:0;
+  will-change:transform;
   animation-name:bg-fall; animation-timing-function:linear; animation-iteration-count:infinite;
 }
-.bgfall b {
-  background:var(--c);
-  box-shadow:inset 1px 1px 0 rgba(255,255,255,.32), inset -1px -1px 0 rgba(0,0,0,.38);
-}
 @keyframes bg-fall {
-  0%   { transform:translateY(-20vh) rotate(0deg); }
-  100% { transform:translateY(120vh) rotate(90deg); }
+  0%   { transform:translate(0, -25vh) rotate(0deg); }
+  50%  { transform:translate(var(--sway), 47.5vh) rotate(calc(var(--spin) * 0.5)); }
+  100% { transform:translate(0, 120vh) rotate(var(--spin)); }
 }
 #overlay > *:not(.bgfall) { position:relative; z-index:1; }
 

@@ -3,8 +3,8 @@
 
 import { G } from './state.js';
 import { THEMES, theme } from './themes.js';
-import { ROTATIONS, forEachCell } from './pieces.js';
-import { applyTheme, drawThemePreview, drawWordmarkL } from './render.js';
+import { TYPES } from './pieces.js';
+import { applyTheme, drawThemePreview, drawWordmarkL, drawDebris } from './render.js';
 import { READY_MS, READY_BEATS } from './config.js';
 import { overlay, toastEl, countdownEl, scoreEl, levelEl, linesEl, comboStat, comboEl } from './dom.js';
 
@@ -29,34 +29,51 @@ export function wordmark() {
     </div>`;
 }
 
-// Debris drifting behind the menu: [left%, type, cell px, seconds, delay]
-const DEBRIS = [
-  [4, 'T', 11, 15, 0], [20, 'I', 9, 19, -7], [36, 'S', 12, 16, -12],
-  [51, 'O', 10, 21, -3], [65, 'L', 11, 17, -10], [79, 'J', 9, 23, -16],
-  [90, 'Z', 12, 14, -5], [28, 'I', 8, 25, -20],
-];
+// Debris drifting behind the menu, as a depth field: [count, near, far] per
+// band. Weighted to the back, because a thin distance is what stops reading as
+// distance.
+const DEBRIS_BANDS = [[7, 0, 0.33], [4, 0.34, 0.66], [3, 0.67, 1]];
 
-// From the real rotation tables, so the shapes falling past are the actual
-// seven tetrominoes rather than anonymous rectangles.
-function debrisPiece(type) {
-  const m = ROTATIONS[type][0];
-  let minX = 9, maxX = -1, minY = 9, maxY = -1;
-  forEachCell(m, (x, y) => {
-    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-  });
-  const cells = [];
-  forEachCell(m, (x, y) => cells.push(`<b style="grid-column:${x - minX + 1};grid-row:${y - minY + 1}"></b>`));
-  return { w: maxX - minX + 1, h: maxY - minY + 1, cells: cells.join('') };
+const lerp = (a, b, t) => a + (b - a) * t;
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
+// Depth 0 is furthest, 1 is closest. Every property is derived from it so the
+// layers stay consistent with each other; tune the endpoints, not each piece.
+function debrisField() {
+  const depths = DEBRIS_BANDS.flatMap(([count, lo, hi]) =>
+    Array.from({ length: count }, () => lerp(lo, hi, Math.random())));
+
+  // Shuffled so depth doesn't correlate with the lane a piece falls in.
+  for (let i = depths.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [depths[i], depths[j]] = [depths[j], depths[i]];
+  }
+
+  const lane = 100 / depths.length;
+  return depths.map((d, i) => ({
+    d,
+    type: pick(TYPES),
+    left: i * lane + Math.random() * lane,
+    sign: Math.random() < 0.5 ? -1 : 1,
+  }));
 }
 
 export function menuBackdrop() {
-  const bits = DEBRIS.map(([left, type, unit, dur, delay]) => {
-    const p = debrisPiece(type);
-    return `<i style="left:${left}%; --c:var(--piece-${type.toLowerCase()});
-      grid-template-columns:repeat(${p.w},${unit}px);
-      grid-template-rows:repeat(${p.h},${unit}px);
-      animation-duration:${dur}s; animation-delay:${delay}s;">${p.cells}</i>`;
+  const bits = debrisField().map(({ d, type, left, sign }) => {
+    // Snapped to even pixels: the sprite cache keys on size and is only dropped
+    // on resize or theme change, so free-floating sizes would grow it forever.
+    const unit = Math.max(4, Math.round(lerp(4, 20, d) / 2) * 2);
+    const dur = lerp(34, 8, d);
+    // Reaches zero before the near band, so nothing close is ever soft.
+    const blur = Math.max(0, 1 - d / 0.7) ** 1.2 * 2.6;
+    return `<canvas class="debrisCv" data-type="${type}" data-cell="${unit}"
+      style="left:${left.toFixed(2)}%; z-index:${Math.round(d * 100)};
+      --spin:${Math.round(lerp(60, 400, d)) * sign}deg;
+      --sway:${(lerp(6, 26, d) * -sign).toFixed(1)}px;
+      opacity:${lerp(0.05, 0.22, d).toFixed(3)};
+      ${blur > 0.15 ? `filter:blur(${blur.toFixed(2)}px);` : ''}
+      animation-duration:${dur.toFixed(1)}s;
+      animation-delay:-${(Math.random() * dur).toFixed(1)}s;"></canvas>`;
   }).join('');
   return `<div class="bgfall" aria-hidden="true">${bits}</div>`;
 }
@@ -70,6 +87,9 @@ function paintOverlayCanvases() {
   }
   const mark = overlay.querySelector?.('.markL');
   if (mark) drawWordmarkL(mark);
+  for (const cv of overlay.querySelectorAll?.('.debrisCv') || []) {
+    drawDebris(cv, cv.dataset.type, +cv.dataset.cell);
+  }
 }
 
 // pointerdown, not click: `touch-action: none` on the board suppresses

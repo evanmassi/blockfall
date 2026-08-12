@@ -12,7 +12,7 @@ import {
 import { ROTATIONS, KICKS, topRow } from './pieces.js';
 import { theme } from './themes.js';
 import {
-  G, emptyGrid, saveStats,
+  G, emptyGrid, saveStats, blankTally,
   saveRun, loadRun, clearRun, encodeGrid, decodeGrid,
   saveLastMode, loadLastMode,
 } from './state.js';
@@ -218,6 +218,7 @@ export function lockPiece() {
   const a = G.active;
   const spin = tSpinType();
   let anyVisible = false;
+  G.tally.pieces++;
 
   for (let y = 0; y < a.m.length; y++) {
     for (let x = 0; x < a.m.length; x++) {
@@ -295,6 +296,9 @@ function applyScore(cleared, spin) {
     G.backToBack = false;
   }
 
+  if (spin) G.tally.tspins++;
+  if (cleared === 4) G.tally.tetris++;
+
   if (cleared) {
     G.combo++;
     if (G.combo > 0) {
@@ -303,12 +307,14 @@ function applyScore(cleared, spin) {
       else label += '  ' + (G.combo + 1) + '×';
     }
     G.stats[G.mode].combo = Math.max(G.stats[G.mode].combo, G.combo + 1);
+    G.tally.combo = Math.max(G.tally.combo, G.combo + 1);
 
     G.lines += cleared;
     G.level = Math.floor(G.lines / 10) + 1;
     if (G.level !== prevLevel) syncLevelPalette();
 
     if (G.grid.every(row => row.every(c => !c))) {
+      G.tally.perfect++;
       gain += PERFECT_SCORES[cleared] * G.level;
       label = 'PERFECT CLEAR';
       color = '#ffffff';
@@ -369,6 +375,7 @@ export function snapshotRun() {
     score: G.score, lines: G.lines, level: G.level,
     combo: G.combo, backToBack: G.backToBack,
     runBest: G.runBest, newBest: G.newBest,
+    tally: G.tally,
   });
 }
 
@@ -401,6 +408,7 @@ export function resumeRun(mode = pendingRun()) {
   G.backToBack = !!saved.backToBack;
   G.runBest = saved.runBest | 0;
   G.newBest = !!saved.newBest;
+  G.tally = { ...blankTally(), ...saved.tally };
 
   G.gravityAcc = 0; G.particles = []; G.shake = 0;
   G.clearRows = null; G.pendingClear = null; G.clearCount = 0;
@@ -432,6 +440,7 @@ export function startGame(mode = 'marathon') {
   G.grid = emptyGrid();
   G.queue = []; G.bag = null; G.hold = null; G.canHold = true;
   G.score = 0; G.lines = 0; G.level = 1; G.combo = -1; G.backToBack = false;
+  G.tally = blankTally();
   G.runBest = G.stats[mode].score;
   G.newBest = false;
   setRecordStyle(false);
@@ -465,6 +474,23 @@ function commitStats() {
   saveStats();
 }
 
+function clockText(ms) {
+  const s = Math.floor(ms / 1000);
+  const parts = [Math.floor(s / 60) % 60, s % 60];
+  if (s >= 3600) parts.unshift(Math.floor(s / 3600));
+  return parts.map((n, i) => (i ? String(n).padStart(2, '0') : n)).join(':');
+}
+
+function tallyCard() {
+  const t = G.tally;
+  const rows = [
+    ['LINES', G.lines], ['LEVEL', G.level], ['TIME', clockText(t.ms)],
+    ['PIECES', t.pieces.toLocaleString()], ['TETRIS', t.tetris],
+    ['T-SPINS', t.tspins], ['PERFECT', t.perfect], ['BEST COMBO', t.combo + '&times;'],
+  ];
+  return `<dl class="tally">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+}
+
 function finishGameOver() {
   G.state = 'over';
   Sound.over();
@@ -478,8 +504,8 @@ function finishGameOver() {
       <span class="label">SCORE</span>
       <b>${G.score.toLocaleString()}</b>
     </div>
-    <p>LINES ${G.lines} &nbsp;·&nbsp; LEVEL ${G.level}${
-      G.newBest ? '' : `<br>HIGH SCORE ${G.stats[G.mode].score.toLocaleString()}`}</p>
+    ${tallyCard()}
+    ${G.newBest ? '' : `<p>HIGH SCORE ${G.stats[G.mode].score.toLocaleString()}</p>`}
     ${themeBar()}
     ${actionBar([['restart', 'PLAY AGAIN'], ['menu', 'MAIN MENU']])}
   `);
@@ -548,7 +574,7 @@ function recordCards() {
       </div>`;
   };
 
-  const cards = card('marathon', 'GAME') + card('zen', 'ZEN');
+  const cards = card('marathon', 'CLASSIC') + card('zen', 'ZEN');
   return cards ? `<div class="records">${cards}</div>` : '';
 }
 
@@ -570,12 +596,15 @@ export function showMenu() {
   const saved = savedMarathon || savedZen;
 
   // New on the first row, resume on the second, one verb throughout.
-  const actions = [['new', 'NEW GAME'], ['zen', saved ? 'NEW ZEN' : 'ZEN MODE']];
+  const actions = [
+    ['new', saved ? 'NEW CLASSIC' : 'CLASSIC MODE'],
+    ['zen', saved ? 'NEW ZEN' : 'ZEN MODE'],
+  ];
 
   if (saved) {
     actions.push(null);
     if (savedMarathon) {
-      actions.push(['continue', `RESUME GAME · ${(savedMarathon.score | 0).toLocaleString()}`]);
+      actions.push(['continue', `RESUME CLASSIC · ${(savedMarathon.score | 0).toLocaleString()}`]);
     }
     if (savedZen) {
       actions.push(['continue-zen', `RESUME ZEN · ${lineCount(savedZen.lines | 0)}`]);
@@ -608,6 +637,8 @@ export function update(dt) {
     setCountdown(Math.ceil(G.ready / (READY_MS / READY_BEATS)));
     return;
   }
+
+  if (G.state === 'playing' || G.state === 'clearing') G.tally.ms += dt;
 
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 0.03);
 
