@@ -8,7 +8,7 @@ import {
   LOCK_DELAY, MAX_LOCK_RESETS, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS,
   FRAME_MS, GRAVITY_FRAMES, GRAVITY_MIN_FRAMES,
   ZEN_RESCUE_ROWS, READY_MS, READY_BEATS, CHAIN_SCORES, FALL_MS,
-  UNDO_MAX, ZEN_CAPS,
+  UNDO_MAX, ZEN_CAPS, ZEN_LEVELS,
 } from './config.js';
 import { ROTATIONS, KICKS, topRow } from './pieces.js';
 import { theme } from './themes.js';
@@ -24,7 +24,7 @@ import { Haptics } from './haptics.js';
 import {
   showOverlay, hideOverlay, showToast, updateHud, setRecordStyle, setCountdown,
   themeBar, wordmark, menuBackdrop, actionBar, textButton, textRow, rule,
-  setUndo, settingRow, stepper, toggle, setBoardShowing,
+  setUndo, settingRow, setSettingText, setWheel, wheel, toggle, setBoardShowing,
 } from './ui.js';
 
 function setReady(ms) {
@@ -90,10 +90,16 @@ function resetLockState() {
 
 /** Milliseconds a piece takes to fall one row. Must not be clamped to a floor:
  *  that silently stopped progression while the level counter kept climbing. */
+/** The level Zen plays at: never below its floor, never above its ceiling. */
+export function levelFor(lines) {
+  const step = Math.floor(lines / 10) + 1;
+  if (G.mode !== 'zen') return step;
+  const { zenMin, zenMax } = G.settings;
+  return Math.max(zenMin, zenMax ? Math.min(step, zenMax) : step);
+}
+
 export function gravityInterval() {
-  const cap = G.settings.zenCap; // 0 lets Zen climb like the other modes
-  const level = G.mode === 'zen' && cap ? Math.min(G.level, cap) : G.level;
-  const frames = GRAVITY_FRAMES[level - 1] ?? GRAVITY_MIN_FRAMES;
+  const frames = GRAVITY_FRAMES[G.level - 1] ?? GRAVITY_MIN_FRAMES;
   return frames * FRAME_MS;
 }
 
@@ -379,7 +385,7 @@ function applyScore(cleared, spin, chain = 0) {
     }
 
     G.lines += cleared;
-    G.level = Math.floor(G.lines / 10) + 1;
+    G.level = levelFor(G.lines);
     if (G.level !== prevLevel) syncLevelPalette();
 
     if (G.grid.every(row => row.every(c => !c))) {
@@ -472,7 +478,13 @@ function applyRun(saved) {
 
   G.score = saved.score | 0;
   G.lines = saved.lines | 0;
+  // Clamped to the current floor and ceiling: a run saved under other settings
+  // must not resume playing at a speed those settings no longer allow.
   G.level = Math.max(1, saved.level | 0);
+  if (G.mode === 'zen') {
+    const { zenMin, zenMax } = G.settings;
+    G.level = Math.max(zenMin, zenMax ? Math.min(G.level, zenMax) : G.level);
+  }
   G.combo = Number.isInteger(saved.combo) ? saved.combo : -1;
   G.backToBack = !!saved.backToBack;
   G.runBest = saved.runBest | 0;
@@ -568,7 +580,8 @@ export function startGame(mode = 'marathon', cascade = false) {
   saveLastSlot(slot);
   G.grid = emptyGrid();
   G.queue = []; G.bag = null; G.hold = null; G.canHold = true;
-  G.score = 0; G.lines = 0; G.level = 1; G.combo = -1; G.backToBack = false;
+  G.score = 0; G.lines = 0; G.combo = -1; G.backToBack = false;
+  G.level = levelFor(0); // Zen opens at its floor rather than crawling up to it
   G.tally = blankTally();
   G.runBest = G.stats[slot].score;
   G.newBest = false;
@@ -686,27 +699,49 @@ export function showPauseScreen() {
 // first. The word ahead of it is the feel, the number is the fact.
 const FEEL = [[3, 'GENTLE'], [6, 'STEADY'], [8, 'BRISK'], [10, 'RELENTLESS']];
 
-function speedReads(level) {
+const secondsToFloor = level => {
   const frames = GRAVITY_FRAMES[level - 1] ?? GRAVITY_MIN_FRAMES;
-  const secs = Math.round(VIS_ROWS * frames * FRAME_MS / 1000);
-  const feel = FEEL.find(([upto]) => level <= upto)?.[1] ?? 'RELENTLESS';
-  return `${feel} · ${secs} SECONDS TO THE FLOOR`;
-}
+  return Math.round(VIS_ROWS * frames * FRAME_MS / 1000);
+};
+const feelOf = level => FEEL.find(([upto]) => level <= upto)?.[1] ?? 'RELENTLESS';
 
-// Ordered by how often they get touched: the countdown is a one-time choice,
-// the Zen cap is a mood.
-function settingsRows() {
+/** What each row currently means, keyed by row. Also rewritten in place when a
+ *  wheel reports a value, so the screen never has to be rebuilt mid-scroll. */
+function settingSubs() {
   const s = G.settings;
   const takeBacks = s.undos === 1 ? '1 TAKE-BACK EACH GAME' : `${s.undos} TAKE-BACKS EACH GAME`;
+  return {
+    countdown: s.countdown ? '3-2-1 BEFORE PLAY RESUMES' : 'RESUMES THE MOMENT YOU DO',
+    cascade: s.cascade ? 'CLEARS DROP INTO THE HOLES' : 'ROWS COLLAPSE WHOLE',
+    undos: s.undos ? takeBacks : 'NO TAKE-BACKS',
+    zen: s.zenMax
+      ? `${feelOf(s.zenMin)} ${secondsToFloor(s.zenMin)}s → ${feelOf(s.zenMax)} ${secondsToFloor(s.zenMax)}s TO THE FLOOR`
+      : `${feelOf(s.zenMin)} ${secondsToFloor(s.zenMin)}s, THEN KEEPS SPEEDING UP`,
+  };
+}
+
+// Ordered by how often they get touched: the countdown and cascade are settled
+// once, the numbers are a mood.
+function settingsRows() {
+  const s = G.settings;
+  const subs = settingSubs();
+
+  const undoOptions = [[0, 'OFF'], ...Array.from({ length: UNDO_MAX }, (_, i) => [i + 1, String(i + 1)])];
+  const minOptions = ZEN_LEVELS.map(v => [v, String(v)]);
+  const maxOptions = ZEN_CAPS.map(v => [v, v ? String(v) : 'NONE']);
 
   return `
     <div class="settings">
-      ${settingRow('COUNTDOWN', toggle('countdown', s.countdown ? 'ON' : 'OFF', s.countdown),
-                   s.countdown ? '3-2-1 BEFORE PLAY RESUMES' : 'RESUMES THE MOMENT YOU DO')}
-      ${settingRow('UNDOS', stepper('undos', s.undos || 'OFF'),
-                   s.undos ? takeBacks : 'NO TAKE-BACKS')}
-      ${settingRow('ZEN SPEED', stepper('zen', s.zenCap || 'NO CAP'),
-                   s.zenCap ? speedReads(s.zenCap) : 'KEEPS SPEEDING UP')}
+      ${settingRow('countdown', 'COUNTDOWN',
+                   toggle('countdown', s.countdown ? 'ON' : 'OFF', s.countdown), subs.countdown)}
+      ${settingRow('cascade', 'CASCADE',
+                   toggle('cascade', s.cascade ? 'ON' : 'OFF', s.cascade), subs.cascade)}
+      ${settingRow('undos', 'UNDOS', wheel('undos', undoOptions, s.undos), subs.undos)}
+      ${settingRow('zen', 'ZEN SPEED', `
+        <div class="wheelPair">
+          <div class="wheelCol"><span class="wheelTag">MIN</span>${wheel('zenMin', minOptions, s.zenMin)}</div>
+          <div class="wheelCol"><span class="wheelTag">MAX</span>${wheel('zenMax', maxOptions, s.zenMax)}</div>
+        </div>`, subs.zen)}
     </div>`;
 }
 
@@ -718,14 +753,27 @@ export function showSettings() {
   `, { soft: G.state !== 'menu', modal: true });
 }
 
-/** @param {number} dir  step for a stepper; ignored by the toggles. */
-export function changeSetting(key, dir = 0) {
+/**
+ * @param {string} key    which setting.
+ * @param {number} [value] the wheel's choice; omitted by the toggles.
+ *
+ * Zen's floor and ceiling cannot cross, so moving one past the other pushes it
+ * rather than refusing: she asked for a speed and gets it, from whichever end
+ * she reached for.
+ */
+export function changeSetting(key, value) {
   const s = G.settings;
+  const before = { ...s };
   if (key === 'countdown') s.countdown = !s.countdown;
-  if (key === 'undos') s.undos = Math.min(UNDO_MAX, Math.max(0, s.undos + dir));
-  if (key === 'zen') {
-    const at = ZEN_CAPS.indexOf(s.zenCap);
-    s.zenCap = ZEN_CAPS[Math.min(ZEN_CAPS.length - 1, Math.max(0, at + dir))];
+  if (key === 'cascade') s.cascade = !s.cascade;
+  if (key === 'undos') s.undos = Math.min(UNDO_MAX, Math.max(0, value | 0));
+  if (key === 'zenMin') {
+    s.zenMin = ZEN_LEVELS.includes(value) ? value : s.zenMin;
+    if (s.zenMax && s.zenMax < s.zenMin) s.zenMax = s.zenMin;
+  }
+  if (key === 'zenMax') {
+    s.zenMax = ZEN_CAPS.includes(value) ? value : s.zenMax;
+    if (s.zenMax && s.zenMax < s.zenMin) s.zenMin = s.zenMax;
   }
   saveSettings();
 
@@ -738,7 +786,20 @@ export function changeSetting(key, dir = 0) {
   }
 
   refreshUndo();
-  showSettings();
+
+  // A wheel is never redrawn by the value it just reported: rebuilding the
+  // screen resets its scroll while iOS momentum is still running, which pulls it
+  // out from under the finger and can leave it a number off. Only the meaning
+  // underneath changes — unless the other end of the Zen range was pushed along,
+  // which is a wheel that genuinely has to move.
+  const turned = key === 'undos' || key === 'zenMin' || key === 'zenMax';
+  if (!turned) { showSettings(); return; }
+
+  setSettingText(settingSubs());
+  // The far end of the range, if this pushed it: turned rather than re-rendered,
+  // so the wheel under the finger is never rebuilt out from under it.
+  if (key === 'zenMin' && before.zenMax !== s.zenMax) setWheel('zenMax', ZEN_CAPS.indexOf(s.zenMax));
+  if (key === 'zenMax' && before.zenMin !== s.zenMin) setWheel('zenMin', ZEN_LEVELS.indexOf(s.zenMin));
 }
 
 // Reached from the menu and from pause; where BACK returns is read off the state
@@ -821,23 +882,18 @@ function recordCards() {
 // Which NEW button has its two clears showing, and when the menu was opened —
 // the backdrop is redrawn from that so a re-render resumes the drift rather
 // than restarting it.
-let openPick = null;
-let arriving = false;
+let openPick = false;
 let menuAt = 0;
 
-/** Shows a mode's two clears under it, or puts them away again. */
-export function openPicker(mode) {
-  const wasShut = openPick === null;
-  openPick = openPick === mode ? null : mode;
-  // The row is identical for either mode, so switching between them should leave
-  // it sitting still. Animating it in again read as a flash for no reason.
-  arriving = wasShut && openPick !== null;
+/** Opens the list of runs waiting to be resumed, or puts it away. */
+export function openPicker() {
+  openPick = !openPick;
   renderMenu(false);
 }
 
-export function startSlot(slot) {
-  const { mode, cascade } = parseSlot(slot);
-  startGame(mode, cascade);
+/** A mode name; the clears come from the setting rather than from the button. */
+export function startSlot(mode) {
+  startGame(mode, G.settings.cascade);
 }
 
 export function showMenu() {
@@ -856,16 +912,11 @@ export function showMenu() {
   setRecordStyle(false);
   refreshUndo();
 
-  openPick = null;
-  arriving = false;
+  openPick = false;
   menuAt = Date.now();
   setBoardShowing(false); // nothing behind the menu is worth its glow bleeding through
   renderMenu(true);
 }
-
-/** The two clears a mode can be played with, as the row that opens under it. */
-const clearsRow = mode =>
-  VARIANTS.map(([cascade, label]) => [`play-${slotOf(mode, cascade)}`, label, '', 'variant']);
 
 /**
  * Three groups behind rules: starting, resuming, everything else. Starting a
@@ -878,17 +929,22 @@ const clearsRow = mode =>
  * "RESUME CLASSIC · 18,400" on one line is wider than a phone.
  */
 function renderMenu(intro) {
-  const starts = BASES.map(mode =>
-    [`new-${mode}`, `NEW ${BASE_MENU[mode].name}`, '', openPick === mode ? 'on' : '']);
+  // Which clears a new game gets is a setting now, so it rides on the button
+  // rather than being asked for: she should never start one without seeing it.
+  const clears = G.settings.cascade ? 'CASCADE' : 'NORMAL';
+  const starts = BASES.map(mode => [`new-${mode}`, `NEW ${BASE_MENU[mode].name}`, clears]);
 
-  // Column per mode, so which half of the menu a run is in never moves.
-  const resumes = BASES.flatMap((mode, col) => VARIANTS.flatMap(([cascade, label]) => {
-    const slot = slotOf(mode, cascade);
-    const save = loadRun(slot);
-    if (!save) return [];
-    return [[`go-${slot}`, `RESUME ${BASE_MENU[mode].name}`,
-             `${label} · ${BASE_MENU[mode].progress(save)}`, `col${col}`]];
-  }));
+  const waiting = SLOTS.map(slot => ({ slot, save: loadRun(slot) })).filter(w => w.save);
+
+  // One button, and the runs behind it. Four of them laid out flat was the whole
+  // menu; the list only exists while it is being read.
+  const picker = waiting.map(({ slot, save }) => {
+    const { mode, cascade } = parseSlot(slot);
+    return `<button class="pickRow" data-act="go-${slot}">
+        <span>${BASE_MENU[mode].name} · ${cascade ? 'CASCADE' : 'NORMAL'}</span>
+        <em>${BASE_MENU[mode].progress(save)}</em>
+      </button>`;
+  }).join('');
 
   showOverlay(`
     ${intro ? menuBackdrop() : menuBackdrop((Date.now() - menuAt) / 1000)}
@@ -897,11 +953,15 @@ function renderMenu(intro) {
     ${themeBar()}
     ${rule()}
     ${actionBar(starts)}
-    ${openPick ? actionBar(clearsRow(openPick), arriving ? 'clears arriving' : 'clears') : ''}
-    ${resumes.length ? rule() + actionBar(resumes, 'resumes') : ''}
+    ${waiting.length ? rule() + `
+      <div class="resumeWrap">
+        ${openPick ? `<div class="picker">${picker}</div>` : ''}
+        ${actionBar([['pick-resume', 'RESUME',
+                      waiting.length === 1 ? slotName(waiting[0].slot) : `${waiting.length} RUNS WAITING`]])}
+      </div>` : ''}
     ${rule()}
     ${textRow(textButton('how', 'HOW TO PLAY'), textButton('settings', 'SETTINGS'))}
-  `, { intro });
+  `, { intro, picking: openPick });
 }
 
 // ---------- per-frame ----------

@@ -69,6 +69,10 @@ section('Boot');
   check('the modes come before the text links',
         menu.indexOf('data-act="new-marathon"') < menu.indexOf('data-act="how"'),
         `modes at ${menu.indexOf('data-act="new-marathon"')}, links at ${menu.indexOf('data-act="how"')}`);
+  // Which clears a new game starts with is a setting, so it rides on the button:
+  // she should never begin one without seeing which she is getting.
+  check('and each says which clears it will start',
+        /data-act="new-marathon">NEW CLASSIC<em>NORMAL<\/em>/.test(menu), 'no clears on the button');
   check('and the two links share one row',
         /<div class="textBtns">.*data-act="how".*data-act="settings".*<\/div>/s.test(menu));
 }
@@ -206,6 +210,18 @@ section('Offline packaging');
 
   // A @font-face the worker doesn't cache means fallback type when offline.
   const css = read('style.css');
+
+  // The display face is handed out by one list, so anything new that renders
+  // text has to be added to it or it quietly comes out in the system mono the
+  // body falls back to — which is how six labels ended up in the wrong face.
+  const faceRule = /\n(\[class\*="label"\][^{]*)\{/.exec(css)?.[1].replace(/\s+/g, ' ') ?? '';
+  check('every label the screens draw uses the display face',
+        ['.recHead', '.recSide', '.setSub', '.wheelTag', '#undoBtn b', '.recordCard.empty']
+          .every(sel => faceRule.includes(sel)),
+        faceRule || 'no display-face rule');
+  // The pause and mute glyphs are not in it: it has no ❚ or ♪ to draw.
+  check('but the system glyphs are left alone', !faceRule.includes('.sysBtn'),
+        'the pixel face has no glyph for these');
   const faces = [...css.matchAll(/url\('([^']+)'\)/g)].map(m => m[1]);
   check('every @font-face file exists', faces.every(f => exists(f)), faces.join(', '));
   check('every font is cached by the worker', faces.every(f => listed.includes(f)), faces.join(', '));
@@ -236,7 +252,7 @@ section('Offline packaging');
         tapSelectors.length > 1 && tapSelectors.every(s => s.trim().startsWith('#app ')),
         tapSelectors.join(',') || 'no manipulation rule');
   check('and covers the controls added to the board and settings',
-        ['#undoBtn', '.setToggle', '.stepBtn'].every(s => tapSelectors.some(t => t.includes(s))),
+        ['#undoBtn', '.setToggle'].every(s => tapSelectors.some(t => t.includes(s))),
         tapSelectors.join(','));
 
   // Installed, black-translucent starts the web view at the top of the screen but
@@ -677,7 +693,6 @@ section('Starting from the menu');
   check('tapping the menu backdrop does nothing', G.state === 'menu', G.state);
 
   pressAction('new-marathon');
-  pressAction('play-marathon');
   check('the button is what starts a game', G.state === 'playing', G.state);
   check('score reset', G.score === 0, String(G.score));
 }
@@ -884,12 +899,15 @@ section('Zen rules');
   fresh('zen');
   check('mode recorded', G.mode === 'zen', G.mode);
 
-  // Speed stops climbing, or "endless" would only mean "later".
-  const at = lvl => { const p = G.level; G.level = lvl; const ms = game.gravityInterval(); G.level = p; return ms; };
-  check('gravity caps for zen', at(5) === at(20), `${Math.round(at(5))}ms vs ${Math.round(at(20))}ms`);
-  const zenCap = at(20);
+  // Speed stops climbing, or "endless" would only mean "later". The clamp lives
+  // in levelFor rather than in gravityInterval, so G.level is never out of range
+  // in the first place and one rule covers the HUD and the fall alike.
+  check('zen levels off', game.levelFor(2000) === game.levelFor(50),
+        `${game.levelFor(2000)} vs ${game.levelFor(50)}`);
+  const zenTop = game.levelFor(2000);
   G.mode = 'marathon';
-  check('marathon keeps accelerating', at(20) < zenCap, `${Math.round(at(20))}ms vs ${Math.round(zenCap)}ms`);
+  check('marathon keeps climbing', game.levelFor(2000) > zenTop,
+        `${game.levelFor(2000)} vs ${zenTop}`);
   G.mode = 'zen';
 
   // Filled to the very top, so the spawn genuinely collides. Filling from just
@@ -954,12 +972,32 @@ section('Saved runs, one slot per mode');
   const menu = els.overlay.innerHTML;
 
   check('starting marathon left the zen run alone', hasSavedRun('zen'));
-  // One run going in each mode, so neither needs a question asked of it.
-  check('each mode resumes in one tap',
-        menu.includes('data-act="go-marathon"') && menu.includes('data-act="go-zen"'));
-  check('carrying which clears it was and how far it got',
-        /data-act="go-marathon">RESUME CLASSIC<em>NORMAL · 3,210<\/em>/.test(menu),
-        'resume button lost its progress');
+  // One RESUME, and the runs behind it. Four buttons laid out flat was the whole
+  // menu; the list only exists while it is being read.
+  check('one button stands for every saved run', menu.includes('data-act="pick-resume"'));
+  check('saying how many are waiting', menu.includes('2 RUNS WAITING'), 'no count on the button');
+  check('and none of them is on the menu until it is opened',
+        !menu.includes('data-act="go-'), 'the runs are laid out flat');
+
+  game.openPicker();
+  const picked = els.overlay.innerHTML;
+  check('opening it lists them', picked.includes('data-act="go-marathon"') &&
+        picked.includes('data-act="go-zen"'));
+  check('each naming its clears and its progress',
+        /data-act="go-marathon">\s*<span>CLASSIC · NORMAL<\/span>\s*<em>3,210<\/em>/.test(picked),
+        'a row lost its detail');
+  check('over the button rather than beside it',
+        picked.indexOf('class="picker"') < picked.indexOf('data-act="pick-resume"'),
+        'the list opened below the button');
+
+  // While it is open it is the only thing lit. The chosen theme carries the same
+  // accent, and the button under it did too, so three things claimed the eye at
+  // once and none of them was the question being asked.
+  check('and it is the only thing asking to be looked at',
+        els.overlay.classes.has('picking') && !picked.includes('class="menuBtn on"'),
+        'something else is still lit');
+  game.openPicker();
+  check('which stands down again once it closes', !els.overlay.classes.has('picking'));
 
   // A plain tap picks up whichever was played most recently.
   check('most recent mode is what a plain tap resumes', game.pendingRun() === 'marathon', game.pendingRun());
@@ -994,88 +1032,39 @@ section('Menu wording');
 
   check('menu offers zen', menu.includes('data-act="new-zen"'));
   check('no tap prompt competing with them', !menu.includes('TAP TO'), 'menu still hints at tapping');
-  check('resume button carries its progress',
-        /data-act="go-zen">RESUME ZEN<em>NORMAL · 42 LINES<\/em>/.test(menu), 'no progress on button');
+  // A single run needs no counting — the button names it outright.
+  check('one run waiting is named on the button',
+        /data-act="pick-resume">RESUME<em>ZEN NORMAL<\/em>/.test(menu), 'no run named');
   // Bare mode names did not read as "this starts a game" — the verb has to be on
   // the button, not implied by the RESUME beside it.
   check('start buttons say what they do', /data-act="new-zen">NEW ZEN</.test(menu), 'start button lost its verb');
   check('both modes are offered', ['new-marathon', 'new-zen'].every(a => menu.includes(`data-act="${a}"`)));
 
-  // The clears are a second tap on the button itself, not a mode of their own.
-  const menuRow = menu.slice(menu.indexOf('class="menuBtns"'));
-  check('no menu button names a clear on its own',
-        !menuRow.includes('>NORMAL<') && !menuRow.includes('>CASCADE<'),
-        'clears shown before being asked for');
-
-  game.openPicker('marathon');
-  const opened = els.overlay.innerHTML;
-  check('pressing one offers its two clears',
-        opened.includes('data-act="play-marathon"') && opened.includes('data-act="play-marathon-cascade"'));
-  check('marked as the choice they are', (opened.match(/menuBtn variant/g) || []).length === 2,
-        String((opened.match(/menuBtn variant/g) || []).length));
-  check('the mode they belong to stays lit', /class="menuBtn on" data-act="new-marathon"/.test(opened));
-
-  // Below, so the row already read doesn't move out from under the thumb.
-  check('and they sit below it',
-        opened.indexOf('data-act="play-marathon"') > opened.indexOf('data-act="new-marathon"'),
-        'clears appeared above the button');
-  // Unfilled: a filled background reads as already chosen, and neither is yet.
-  const clearsCss = fs.readFileSync('style.css', 'utf8').replace(/\s+/g, ' ');
-  check('and are not styled as though already picked',
-        !/\.menuBtn\.variant \{[^}]*background:/.test(clearsCss),
-        'the unchosen clears carry a fill');
-
-  check('animating in the first time', /class="menuBtns clears arriving"/.test(opened));
-
-  // Switching modes leaves the same two buttons on screen, so replaying the
-  // entrance was a flash announcing nothing.
-  game.openPicker('zen');
-  check('but sitting still when the mode beside it is picked instead',
-        /class="menuBtns clears"/.test(els.overlay.innerHTML),
-        els.overlay.innerHTML.match(/class="menuBtns clears[^"]*"/)?.[0] ?? 'no clears row');
-  game.openPicker('zen');
-
-  check('pressing it again puts them away', (game.openPicker('marathon'),
-        game.openPicker('marathon'),
-        !els.overlay.innerHTML.includes('data-act="play-marathon"')));
-  check('every slot can be started', BASES.every(mode => {
-    game.openPicker(mode);
-    const html = els.overlay.innerHTML;
-    const ok = VARIANTS_FOR(mode).every(slot => html.includes(`data-act="play-${slot}"`));
-    game.openPicker(mode);
-    return ok;
-  }));
-  game.showMenu();
+  // Cascade is a setting now, so nothing on the menu asks which clears to use.
+  check('the menu never asks which clears',
+        !menu.includes('data-act="play-'), 'the clears are still picked at the door');
 
   // Worst case: a run going in all four slots. The top row must not grow with
   // them — that is the whole reason the clears moved inside their mode.
   for (const slot of SLOTS) { fresh(slot); G.score = 3210; G.lines = 42; game.showMenu(); }
   const full = els.overlay.innerHTML;
   const buttons = (full.match(/class="menuBtn[ "]/g) || []).length;
-  check('every saved run gets a button of its own', buttons === 6, String(buttons));
-  check('one per slot, none doubled up',
-        SLOTS.every(slot => (full.match(new RegExp(`data-act="go-${slot}"`, 'g')) || []).length === 1),
-        'a slot is missing or listed twice');
-
-  // Which column a run is in is half of how it gets found, so it must not depend
-  // on what else happens to be saved.
-  check('classic runs sit in the left column',
-        (full.match(/class="menuBtn col0" data-act="go-marathon/g) || []).length === 2, 'classic column');
-  check('zen runs in the right', (full.match(/class="menuBtn col1" data-act="go-zen/g) || []).length === 2,
-        'zen column');
-  check('each naming its clears and its score',
-        /data-act="go-marathon-cascade">RESUME CLASSIC<em>CASCADE · 3,210<\/em>/.test(full),
-        'a saved run gave no way to tell it from the other');
+  check('four saved runs still cost three buttons', buttons === 3, String(buttons));
+  check('the third of them standing for all four',
+        /data-act="pick-resume">RESUME<em>4 RUNS WAITING<\/em>/.test(full), 'no count on the button');
 
   // Three groups, three rules: starting, resuming, and the rest.
   check('the groups are split by rules', (full.match(/class="menuRule"/g) || []).length === 3,
         String((full.match(/class="menuRule"/g) || []).length));
 
-  game.openPicker('marathon');
-  const deepest = els.overlay.innerHTML;
-  check('opening the clears adds its two, and no more',
-        (deepest.match(/class="menuBtn[ "]/g) || []).length === 8,
-        String((deepest.match(/class="menuBtn[ "]/g) || []).length));
+  game.openPicker();
+  const listed = els.overlay.innerHTML;
+  check('and the list holds one row per run',
+        (listed.match(/class="pickRow"/g) || []).length === 4,
+        String((listed.match(/class="pickRow"/g) || []).length));
+  check('one per slot, none doubled up',
+        SLOTS.every(slot => (listed.match(new RegExp(`data-act="go-${slot}"`, 'g')) || []).length === 1),
+        'a slot is missing or listed twice');
   game.showMenu();
 
   check('with a way to start over beside it', menu.includes('data-act="new-marathon"'));
@@ -1439,7 +1428,7 @@ section('Resuming a run');
   game.showMenu();
   check('menu still offers the run', hasSavedRun('marathon'));
   check('menu shows a new-game escape hatch', els.overlay.innerHTML.includes('data-act="new-marathon"'));
-  check('menu offers the run as a button', els.overlay.innerHTML.includes('data-act="go-marathon"'));
+  check('menu offers the run as a button', els.overlay.innerHTML.includes('data-act="pick-resume"'));
 
   game.resumeRun();
   check('resumes into the game, not onto a second screen', G.state === 'playing', G.state);
@@ -1534,27 +1523,67 @@ section('Settings are hers, and they stay set');
 {
   reset();
   check('the countdown starts off', G.settings.countdown === false);
+  check('cascade starts off', G.settings.cascade === false);
   check('undos start off', G.settings.undos === 0, String(G.settings.undos));
-  check('zen keeps the cap it always had', G.settings.zenCap === DEFAULT_SETTINGS.zenCap,
-        String(G.settings.zenCap));
+  check('zen keeps the ceiling it always had', G.settings.zenMax === DEFAULT_SETTINGS.zenMax,
+        String(G.settings.zenMax));
+  check('and opens at the bottom', G.settings.zenMin === 1, String(G.settings.zenMin));
 
   pressAction('settings');
   check('the menu opens them', els.overlay.innerHTML.includes('SETTINGS'));
   check('modal, so a stray tap cannot start a game behind it', els.overlay.classes.has('modal'));
 
-  pressAction('undos-up');
-  check('undos step up', G.settings.undos === 1, String(G.settings.undos));
+  // Wheels rather than steppers: every value is one reachable tap, and flicking
+  // lands on one. Ours rather than a <select>, which arrives in system chrome.
+  check('undos are a wheel', /data-wheel="undos"/.test(els.overlay.innerHTML), 'no undo wheel');
+
+  // Name and meaning are one block with the control beside them. As a grid the
+  // row's height came from the control, so the sub line sat right under a toggle
+  // and three rows under a wheel, and no two rows agreed on where to look.
+  const rows = els.overlay.innerHTML.replace(/\s+/g, ' ').match(/<div class="setRow">.*?<div class="setCtl">/g) || [];
+  check('every row reads name, meaning, then control', rows.length === 4, String(rows.length));
+  check('in that order, whatever the control is',
+        rows.every(r => r.indexOf('class="label"') < r.indexOf('class="setSub"')),
+        'a row puts its meaning before its name');
+
+  // The wheel is scrolled to its value and reads back what it lands on, both in
+  // multiples of one row — so the row height in the script and the one in the
+  // stylesheet have to be the same number.
+  const rowCss = /--rowH:\s*(\d+)px/.exec(fs.readFileSync('style.css', 'utf8'))?.[1];
+  const rowJs = /const WHEEL_ROW = (\d+)/.exec(fs.readFileSync('src/ui.js', 'utf8'))?.[1];
+  check('its row height agrees with the stylesheet', rowCss && rowCss === rowJs,
+        `css ${rowCss} vs js ${rowJs}`);
+  check('and it is scrolled to the value it is showing',
+        /data-at="0"/.test(els.overlay.innerHTML), 'the wheel opens at the top rather than at its value');
+
+  // #app * would win over a bare class, leaving the wheel unturnable.
+  check('the wheel can be turned by a finger',
+        /#app \.wheelScroll \{[^}]*touch-action:pan-y/.test(
+          fs.readFileSync('style.css', 'utf8').replace(/\s+/g, ' ')),
+        'touch-action loses to #app *');
+  check('with every value on it, off included',
+        [0, 1, 2, 3, 4, 5].every(v => els.overlay.innerHTML.includes(`data-act="set-undos-${v}"`)),
+        'a value is unreachable');
+
+  // A wheel must never be redrawn by the value it just reported: the rebuild
+  // resets its scroll while momentum is still running, which pulls it out from
+  // under the finger and lands it a number off. Only the meaning is rewritten.
+  const wheelHtml = /data-wheel="undos"[\s\S]*?<\/div>/.exec(els.overlay.innerHTML)?.[0];
+  pressAction('set-undos-1');
+  check('picking one sets it', G.settings.undos === 1, String(G.settings.undos));
+  check('without the wheel being rebuilt under the finger',
+        /data-wheel="undos"[\s\S]*?<\/div>/.exec(els.overlay.innerHTML)?.[0] === wheelHtml,
+        'the wheel was redrawn by its own value');
   check('and the screen redraws to say what that means',
         els.overlay.innerHTML.includes('1 TAKE-BACK EACH GAME'), 'says 1 TAKE-BACKS');
-  pressAction('undos-up');
+  pressAction('set-undos-2');
   check('counted properly past one', els.overlay.innerHTML.includes('2 TAKE-BACKS EACH GAME'));
-  pressAction('undos-down');
-
-  for (let i = 0; i < 9; i++) pressAction('undos-up');
-  check('stopping at the ceiling', G.settings.undos === UNDO_MAX, String(G.settings.undos));
-  for (let i = 0; i < 9; i++) pressAction('undos-down');
-  check('and at the floor', G.settings.undos === 0, String(G.settings.undos));
-  check('which reads as off, not as zero', els.overlay.innerHTML.includes('NO TAKE-BACKS'));
+  pressAction('set-undos-0');
+  check('and off reads as off, not as zero', els.overlay.innerHTML.includes('NO TAKE-BACKS'));
+  check('the chosen one is marked on the wheel',
+        /data-act="set-undos-0">OFF/.test(els.overlay.innerHTML.replace(/\s+/g, ' ')) &&
+        /class="wheelItem on"[^>]*data-act="set-undos-0"/.test(els.overlay.innerHTML.replace(/\s+/g, ' ')),
+        'nothing marked as current');
 
   pressAction('countdown');
   check('the countdown toggles', G.settings.countdown === true);
@@ -1562,17 +1591,72 @@ section('Settings are hers, and they stay set');
   pressAction('countdown');
   check('and back again', G.settings.countdown === false);
 
+  // Cascade stops being asked for at the door and becomes a way of playing.
+  pressAction('cascade');
+  check('cascade toggles', G.settings.cascade === true);
+  check('saying what it does rather than naming itself twice',
+        els.overlay.innerHTML.includes('CLEARS DROP INTO THE HOLES'));
+  pressAction('cascade');
+  check('and back', G.settings.cascade === false);
+
+  // Zen gets a floor as well as a ceiling: level 1 is a long wait to sit through.
+  check('zen speed is two wheels', /data-wheel="zenMin"/.test(els.overlay.innerHTML) &&
+        /data-wheel="zenMax"/.test(els.overlay.innerHTML), 'not a range');
+  check('and the ceiling can be taken off entirely',
+        els.overlay.innerHTML.includes('data-act="set-zenMax-0"'), 'no uncapped option');
+
+  pressAction('set-zenMin-4');
+  check('the floor moves', G.settings.zenMin === 4, String(G.settings.zenMin));
+  check('reading as a span she can picture',
+        /GENTLE|STEADY|BRISK|RELENTLESS/.test(els.overlay.innerHTML) &&
+        els.overlay.innerHTML.includes('TO THE FLOOR'), 'no speed in words');
+
+  // They cannot cross, and the one she just reached for is the one she meant.
+  pressAction('set-zenMin-9');
+  check('a floor pushed past the ceiling takes it along',
+        G.settings.zenMin === 9 && G.settings.zenMax === 9,
+        `${G.settings.zenMin}/${G.settings.zenMax}`);
+  pressAction('set-zenMax-3');
+  check('and a ceiling pulled under the floor drags it down',
+        G.settings.zenMin === 3 && G.settings.zenMax === 3,
+        `${G.settings.zenMin}/${G.settings.zenMax}`);
+  pressAction('set-zenMax-0');
+  check('uncapped leaves the floor where it is',
+        G.settings.zenMin === 3 && G.settings.zenMax === 0,
+        `${G.settings.zenMin}/${G.settings.zenMax}`);
+
+  // Pushing one end rebuilds the screen so the other wheel can move. Anything
+  // still queued from the wheels that were thrown away used to fire against a
+  // detached element, whose scrollTop reads 0 — committing the first option and
+  // dropping the whole range to its floor.
+  const cancels = fs.readFileSync('src/ui.js', 'utf8');
+  check('a wheel thrown away takes its pending value with it',
+        cancels.includes('stopWheels()') && /isConnected === false/.test(cancels),
+        'a settle can outlive its wheel');
+  check('and the rebuild is what cancels them',
+        cancels.indexOf('stopWheels(); // before the markup goes') <
+        cancels.indexOf('overlay.innerHTML = html'),
+        'the markup is replaced before the timers are cleared');
+  pressAction('set-zenMin-1');
+  pressAction('set-zenMax-5');
+
   // Written through on every change: setting these twice is the whole complaint.
-  pressAction('undos-up');
+  pressAction('set-undos-1');
   check('saved as they change', JSON.parse(store['blockfall.settings']).undos === 1,
         store['blockfall.settings']);
   check('and read back on the next launch', state.loadSettings().undos === 1);
 
-  store['blockfall.settings'] = JSON.stringify({ undos: 99, zenCap: 40, countdown: 1 });
+  store['blockfall.settings'] = JSON.stringify({ undos: 99, zenMax: 40, zenMin: 88, countdown: 1 });
   const clamped = state.loadSettings();
   check('a hand-edited store is clamped rather than trusted',
-        clamped.undos === UNDO_MAX && clamped.zenCap === DEFAULT_SETTINGS.zenCap && clamped.countdown === true,
+        clamped.undos === UNDO_MAX && clamped.zenMax === DEFAULT_SETTINGS.zenMax &&
+        clamped.zenMin === DEFAULT_SETTINGS.zenMin && clamped.countdown === true,
         JSON.stringify(clamped));
+
+  // zenCap was the ceiling before Zen had a floor.
+  store['blockfall.settings'] = JSON.stringify({ zenCap: 8 });
+  check('a store from before the floor keeps its ceiling',
+        state.loadSettings().zenMax === 8, JSON.stringify(state.loadSettings()));
 
   // The developer readout is toggled by tapping this heading five times. It sits
   // here rather than on the wordmark because the menu is where she taps, and a
@@ -1604,39 +1688,47 @@ section('Zen speed is hers to pick');
 {
   reset();
   fresh('zen');
-  G.level = 20;
-  const capped = game.gravityInterval();
-  check('the cap holds gravity back by default',
-        capped === GRAVITY_FRAMES[DEFAULT_SETTINGS.zenCap - 1] * FRAME_MS, String(capped));
+  check('the ceiling holds the level down',
+        game.levelFor(2000) === DEFAULT_SETTINGS.zenMax, String(game.levelFor(2000)));
 
-  G.settings.zenCap = 10;
-  check('a higher cap falls faster', game.gravityInterval() < capped, String(game.gravityInterval()));
+  // The floor is the other half: level 1 is a long wait to sit through, so Zen
+  // can be told to open partway up instead of crawling there.
+  G.settings.zenMin = 4;
+  check('and the floor holds it up', game.levelFor(0) === 4, String(game.levelFor(0)));
+  check('with the ceiling still on top', game.levelFor(2000) === DEFAULT_SETTINGS.zenMax,
+        String(game.levelFor(2000)));
 
+  fresh('zen');
+  check('a new zen run opens at the floor', G.level === 4, String(G.level));
+  check('and falls at that speed from the first piece',
+        game.gravityInterval() === GRAVITY_FRAMES[3] * FRAME_MS, String(game.gravityInterval()));
+
+  G.settings.zenMin = 1;
   G.mode = 'marathon';
-  const classic = game.gravityInterval();
-  G.settings.zenCap = 1;
-  check('and the cap never touches the other modes', game.gravityInterval() === classic,
-        `${game.gravityInterval()} vs ${classic}`);
+  check('neither touches the other mode', game.levelFor(2000) === 201, String(game.levelFor(2000)));
 
   G.mode = 'zen';
-  G.settings.zenCap = 0;
-  check('uncapped, zen climbs like classic does', game.gravityInterval() === classic,
-        `${game.gravityInterval()} vs ${classic}`);
+  G.settings.zenMax = 0;
+  check('uncapped, zen climbs like classic does', game.levelFor(2000) === 201,
+        String(game.levelFor(2000)));
+  G.settings.zenMax = DEFAULT_SETTINGS.zenMax;
 
   reset();
   pressAction('settings');
-  for (let i = 0; i < 20; i++) pressAction('zen-up');
-  check('the stepper tops out past the last level', G.settings.zenCap === 0, String(G.settings.zenCap));
+  pressAction('set-zenMax-0');
+  check('the ceiling can come off', G.settings.zenMax === 0, String(G.settings.zenMax));
   check('where it says so in words', els.overlay.innerHTML.includes('KEEPS SPEEDING UP'));
-  pressAction('zen-down');
-  check('and steps back down to the fastest cap', G.settings.zenCap === 10, String(G.settings.zenCap));
+  pressAction('set-zenMax-10');
+  check('and go back on at the fastest', G.settings.zenMax === 10, String(G.settings.zenMax));
   // A level number means nothing on its own; how long a piece takes to reach the
   // floor is something she can picture without converting it first.
-  check('read as a time she can picture, not a level number',
-        /RELENTLESS · 2 SECONDS TO THE FLOOR/.test(els.overlay.innerHTML),
+  check('read as a span she can picture, not two level numbers',
+        /GENTLE 16s → RELENTLESS 2s TO THE FLOOR/.test(els.overlay.innerHTML),
         els.overlay.innerHTML.match(/class="setSub">[^<]*/g)?.join(' | ') || 'no sub line');
-  for (let i = 0; i < 20; i++) pressAction('zen-down');
-  check('down to the slowest', G.settings.zenCap === 1, String(G.settings.zenCap));
+  pressAction('set-zenMax-1');
+  check('down to the slowest, which drags the floor with it',
+        G.settings.zenMax === 1 && G.settings.zenMin === 1,
+        `${G.settings.zenMin}/${G.settings.zenMax}`);
 }
 
 section('Undo takes the last piece back');
@@ -1755,7 +1847,7 @@ section('Undo across a pause, a resume and a switch mid-run');
   pumpMs(CLEAR_TIME_MAX + 60);
   game.togglePause();
   pressAction('settings');
-  pressAction('undos-up');
+  pressAction('set-undos-1');
   pressAction('back');
   game.togglePause();
   check('the button arrives without restarting', els.undoBtn.hidden === false);
@@ -1773,10 +1865,10 @@ section('Undo across a pause, a resume and a switch mid-run');
   for (let i = 0; i < 3; i++) { game.hardDrop(); pumpMs(CLEAR_TIME_MAX + 60); clearGrid(); }
   game.togglePause();
   pressAction('settings');
-  for (let i = 0; i < 3; i++) pressAction('undos-down');
+  pressAction('set-undos-0');
   check('switching undos off drops the history with them', G.undoStack.length === 0,
         String(G.undoStack.length));
-  pressAction('undos-up');
+  pressAction('set-undos-3');
   check('and switching back on starts again from here', G.undoStack.length === 1,
         String(G.undoStack.length));
 }
@@ -1969,7 +2061,10 @@ section('Cascade clears');
         G.stats['marathon-cascade'].score === 12000, String(G.stats['marathon-cascade'].score));
   check('and leaves classic alone', G.stats.marathon.score === 0, String(G.stats.marathon.score));
   check('with its own saved run', hasSavedRun('marathon-cascade'));
-  check('offered on the menu', els.overlay.innerHTML.includes('data-act="go-marathon-cascade"'));
+  game.openPicker();
+  check('offered in the list of runs waiting',
+        els.overlay.innerHTML.includes('data-act="go-marathon-cascade"'));
+  game.openPicker();
 
   game.resumeRun('marathon-cascade');
   check('and it resumes with cascade clears',

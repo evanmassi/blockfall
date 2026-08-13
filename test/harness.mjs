@@ -80,6 +80,18 @@ els.overlay.querySelectorAll = sel => {
       });
     return debrisCanvases;
   }
+  // A wheel reports its value without the screen being rebuilt, so the sub lines
+  // are rewritten in place. Writing back into innerHTML keeps that observable.
+  if (sel === '[data-sub]') {
+    return [...els.overlay.innerHTML.matchAll(/<em class="setSub" data-sub="(\w+)">([^<]*)<\/em>/g)]
+      .map(m => ({
+        dataset: { sub: m[1] },
+        set textContent(v) {
+          els.overlay.innerHTML = els.overlay.innerHTML.replace(m[0], m[0].replace(`>${m[2]}<`, `>${v}<`));
+        },
+      }));
+  }
+
   if (sel !== '[data-act]') return swatchEls;
   actionButtons = [...els.overlay.innerHTML.matchAll(/data-act="([^"]+)"/g)].map(m => {
     const listeners = {};

@@ -10,7 +10,7 @@ A block-stacking game for the phone. No build step, no dependencies — plain ES
 
 **Zen** — endless. Gravity stops accelerating at level 5, and topping out clears the bottom four rows and drops the stack instead of ending the run.
 
-Either mode can be played with either kind of clear. NEW CLASSIC and RESUME ZEN open their two above themselves rather than starting a run outright — above, so the row just pressed doesn't move and a hand isn't covering what has to be read next. A mode with a run going in only one of its two resumes it without asking:
+Either mode can be played with either kind of clear, chosen once in settings rather than at the door each time — it is a way of playing, not a question to answer per game. Both NEW buttons carry which they will start, so a run never begins without that being on screen. A run remembers the clears it was played with, so switching the setting never changes one already in progress:
 
 **Normal** — a clear shifts the whole stack down by the rows it took.
 
@@ -151,7 +151,11 @@ Three, on their own screen from the menu and from pause, written to `localStorag
 
 **Undos** — off, or 1–5 a game. A charge winds the run back to the last spawn: board, piece, queue, hold, score and lines together, so a take-back can't bank points. The stack is the same payload a save is, pushed at each spawn and capped one deeper than the charges can reach. Charges are stored as *spent* rather than *left*, so raising the count mid-run needs no reconciliation. Switching undos off drops the history with them; kept across the gap, it would wind back further than anyone asked for. The button sits at the foot of the right rail, under the thumb rather than at the bottom of the screen, and is absent entirely at zero. It stays live mid-clear: the entry it restores predates the piece that set the clear off, so cancelling is clean and the button doesn't go dead for a third of a second after every landing.
 
-**Zen speed** — the level Zen's gravity stops at, 1–10, or no cap at all, in which case it climbs like Classic.
+**Zen speed** — a range. MIN is the level Zen opens at, since crawling up from level 1 is a long wait to sit through; MAX is where it stops accelerating, or NONE to let it climb like Classic. They cannot cross: pushing one past the other takes it along, so whichever end was reached for is the one that wins.
+
+**Cascade** — on or off, and the menu says which.
+
+The numbers are picker wheels rather than steppers: a scroll-snapping list with the value under a band, tilted and scaled per row so it reads as a cylinder turning. Drawn rather than borrowed — a native `<select>` gets the platform wheel free but arrives in system chrome, which reads as a piece of iOS dropped into an 8px pixel font. Two details matter and both were bugs first: a wheel is never re-rendered by the value it reports (the rebuild resets its scroll mid-momentum and lands it a number off), and "settled" means scrollTop stopped changing rather than landing on an exact multiple of a row, because snapping rests on fractional pixels at dpr 3.
 
 ## Haptics
 

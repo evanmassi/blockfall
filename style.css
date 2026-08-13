@@ -28,6 +28,7 @@
    and must never be synthetically bolded. */
 [class*="label"], .stat b, .best b, .recordCard b, .recordCard .sub, .swatch em,
 .controls dt, .controls dd, .tally dt, .tally dd,
+.recHead, .recSide, .recordCard.empty, .setSub, .wheelTag, #undoBtn b,
 #score, #toast, #countdown, #overlay h1, #overlay h2, #overlay p {
   font-family:var(--font-display);
   font-weight:400;
@@ -58,7 +59,11 @@ html, body {
    zoom, but taps behave normally. Needs the #app prefix — `#app *` carries an
    id, so a bare class selector loses to it. */
 #app .menuBtn, #app .swatch, #app .sysBtn, #app .textBtn,
-#app #undoBtn, #app .setToggle, #app .stepBtn { touch-action:manipulation; }
+#app #undoBtn, #app .setToggle { touch-action:manipulation; }
+/* The wheel needs a gesture of its own, and needs it id-qualified for the same
+   reason as the line above: a bare .wheelScroll loses to `#app *` and the wheel
+   cannot be turned by the finger it exists for. */
+#app .wheelScroll { touch-action:pan-y; }
 
 /* justify-content:center so the HUD and the board are centred together as one
    block. Centring the board inside a top-anchored column instead would open a
@@ -430,35 +435,41 @@ html, body {
 }
 .btnBreak { flex-basis:100%; height:0; margin:0; }
 
-/* The two clears, under the mode that opened them. Deliberately *not* filled: a
-   filled background reads as "chosen", and neither of these is chosen yet. They
-   sit narrower and dimmer instead, which reads as a step down from the row above.  */
-/* Pulled up against the row that opened it — the overlay's own 14px gap read as
-   a separate row of the menu rather than as something belonging to the button. */
-.menuBtns.clears { gap:8px; margin-top:-9px; padding:0 6px 6px; }
-/* Only on the way in. The row is the same two buttons for either mode, so
-   re-rendering it to switch modes was replaying this as a flash over nothing. */
-.menuBtns.clears.arriving { animation:clears-in .16s ease-out; }
-.menuBtn.variant {
-  min-height:38px; padding:7px 16px;
-  font-size:7px; letter-spacing:.1em;
-  border-color:var(--edge); color:var(--dim);
+/* The runs waiting to be resumed, in a panel over the button that opened them —
+   four buttons laid out flat was the whole menu, and this only exists while it
+   is being read. Anchored above rather than below so it opens into the screen
+   instead of under the thumb that tapped. */
+.resumeWrap { position:relative; display:flex; flex-direction:column; align-items:center; }
+.picker {
+  position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%);
+  z-index:2; min-width:220px;
+  background:var(--panel); border:1px solid var(--accent); border-radius:var(--radius);
+  box-shadow:0 0 22px -6px var(--accent);
+  animation:pick-in .16s ease-out;
 }
-.menuBtn.variant:active { color:var(--text); border-color:var(--accent); background:var(--edge); }
-@keyframes clears-in {
-  0%   { opacity:0; transform:translateY(-4px); }
-  100% { opacity:1; transform:translateY(0); }
+.pickRow {
+  display:flex; flex-direction:column; align-items:center; gap:3px;
+  width:100%; padding:9px 14px; cursor:pointer;
+  background:none; border:0; border-top:1px solid var(--edge);
+  font-family:var(--font-display); font-weight:400; font-synthesis:none;
+  font-size:8px; letter-spacing:.06em; line-height:1; color:var(--dim);
+}
+.pickRow:first-child { border-top:0; }
+.pickRow em { font-size:7px; font-style:normal; color:var(--text); }
+.pickRow:active { color:var(--text); background:var(--edge); }
+
+/* Everything else stands down while the list is open. The chosen theme is lit
+   the same way the list is, and the button underneath it was too, so three
+   things claimed the eye at once and none of them was the question being asked. */
+#overlay.picking .swatch.on {
+  border-color:var(--edge); color:var(--dim); box-shadow:none;
+}
+#app .pickRow { touch-action:manipulation; }
+@keyframes pick-in {
+  0%   { opacity:0; transform:translate(-50%, 5px); }
+  100% { opacity:1; transform:translate(-50%, 0); }
 }
 
-/* One column per mode, so a run is found by where it sits as much as by reading
-   it. Columns pack upward: holding a cell open for a run that isn't there costs
-   more than the alignment is worth. */
-.menuBtns.resumes {
-  display:grid; grid-template-columns:1fr 1fr; align-items:start;
-  width:100%; max-width:320px;
-}
-.menuBtns.resumes .col0 { grid-column:1; }
-.menuBtns.resumes .col1 { grid-column:2; }
 
 /* Hairlines, and only as wide as the buttons they separate. */
 .menuRule {
@@ -476,28 +487,31 @@ html, body {
 .textBtn:active { color:var(--accent); }
 .textBtns { display:flex; flex-wrap:wrap; justify-content:center; gap:2px 10px; }
 
-/* Label and control on one line, what it means underneath: the meaning has the
-   room to be a sentence there, and reads as belonging to the row above it. */
-.settings { display:flex; flex-direction:column; gap:11px; width:100%; max-width:300px; }
+/* Name over meaning on the left, control on the right, and the control centred
+   against the pair however tall it is. As a grid the row's height came from the
+   control, so the sub line sat right under a toggle and three rows under a
+   wheel — no two rows agreeing on where to look. */
+.settings { display:flex; flex-direction:column; gap:13px; width:100%; max-width:320px; }
 .setRow {
-  display:grid; grid-template-columns:1fr auto; align-items:center; gap:3px 10px;
-  padding-bottom:9px; border-bottom:1px solid var(--edge);
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding-bottom:11px; border-bottom:1px solid var(--edge);
 }
+.setText { display:flex; flex-direction:column; align-items:flex-start; gap:5px; min-width:0; }
+.setCtl { flex:0 0 auto; }
 .setRow .label { font-size:8px; letter-spacing:.08em; color:var(--text); text-align:left; }
 .setSub {
-  grid-column:1 / -1;
-  font-size:7px; font-style:normal; letter-spacing:.04em; line-height:1.5;
+  font-size:7px; font-style:normal; letter-spacing:.04em; line-height:1.6;
   color:var(--dim); text-align:left;
 }
 
-.setToggle, .stepBtn {
+.setToggle {
   font-family:var(--font-display); font-weight:400; font-synthesis:none;
   font-size:8px; line-height:1; cursor:pointer;
   background:var(--panel); border:1px solid var(--edge); border-radius:var(--radius);
   color:var(--dim);
+  min-width:56px; min-height:32px; padding:8px 10px; letter-spacing:.06em;
 }
-.setToggle { min-width:56px; min-height:32px; padding:8px 10px; letter-spacing:.06em; }
-/* On is lit the way a chosen theme and an open mode are, rather than differing
+/* On is lit the way a chosen theme and an open button are, rather than differing
    only by the word inside it — off and on read the same at a glance otherwise. */
 .setToggle.on {
   color:var(--text); border-color:var(--accent);
@@ -505,17 +519,66 @@ html, body {
 }
 .setToggle:active { color:var(--accent); border-color:var(--accent); }
 
-/* Fixed width on the value so stepping 9 -> 10 doesn't shove the buttons sideways. */
-.stepper { display:flex; align-items:center; gap:8px; }
-.stepper b {
-  min-width:62px; font-size:15px; line-height:1;
-  letter-spacing:.02em; color:var(--text); text-align:center;
+/* A picker wheel drawn as one of ours. The phone's own comes free with a
+   <select> but arrives in system chrome — white, rounded, its own typeface —
+   which reads as a piece of iOS dropped into an 8px pixel font.
+
+   The barrel is real 3D: perspective here, and each row tilted and shrunk by its
+   distance from the middle in ui.js, since CSS cannot know what that distance
+   is. --rowH is the whole geometry — three rows tall, the band marks the middle,
+   and the padding lets the first and last value reach it. */
+.wheel {
+  --rowH:26px;
+  position:relative; width:62px; height:calc(var(--rowH) * 3);
+  background:var(--panel); border:1px solid var(--edge); border-radius:var(--radius);
+  perspective:150px;
+  overflow:hidden;
 }
-/* OFF and NO CAP sit in the same slot as the numbers; at 15px they would push
-   the buttons off the row. */
-.stepper b.word { font-size:8px; letter-spacing:.06em; }
-.stepBtn { width:32px; height:32px; padding:0; }
-.stepBtn:active { color:var(--accent); border-color:var(--accent); }
+.wheelScroll {
+  height:100%; overflow-y:auto; scroll-snap-type:y mandatory;
+  padding:var(--rowH) 0;
+  scrollbar-width:none;
+  transform-style:preserve-3d;
+  -webkit-overflow-scrolling:touch;
+}
+.wheelScroll::-webkit-scrollbar { display:none; }
+.wheelItem {
+  /* Centred by the box, not by line-height: leading is distributed from the
+     font's own ascent and descent, and this face carries more above the digits
+     than below, which sat every value high in the band. */
+  display:flex; align-items:center; justify-content:center;
+  width:100%; height:var(--rowH);
+  scroll-snap-align:center;
+  background:none; border:0; cursor:pointer;
+  font-family:var(--font-display); font-weight:400; font-synthesis:none;
+  font-size:9px; letter-spacing:.04em; line-height:1;
+  color:var(--text);
+  /* Scaled rather than resized: the middle row grows as it arrives instead of
+     snapping between two sizes, and nothing reflows while the wheel turns. */
+  transform-origin:center center;
+  will-change:transform, opacity;
+}
+/* Curved away from the light at the ends, like the far side of a drum. */
+.wheel::before, .wheel::after {
+  content:''; position:absolute; left:0; right:0; height:var(--rowH);
+  pointer-events:none; z-index:1;
+}
+.wheel::before { top:0; background:linear-gradient(var(--panel), transparent); }
+.wheel::after { bottom:0; background:linear-gradient(transparent, var(--panel)); }
+/* The band is the selection, so it sits above the numbers but takes no taps.
+   Drawn in the text colour rather than the accent: the accent is how the app
+   says "look here", and a wheel sitting quietly at its value is not asking. */
+.wheelBand {
+  position:absolute; left:0; right:0; top:var(--rowH); height:var(--rowH);
+  border-top:1px solid var(--text); border-bottom:1px solid var(--text);
+  pointer-events:none; z-index:2; opacity:.4;
+}
+#app .wheelItem { touch-action:manipulation; }
+
+/* MIN and MAX under one label, each named above its own wheel. */
+.wheelPair { display:flex; align-items:flex-end; gap:10px; }
+.wheelCol { display:flex; flex-direction:column; align-items:center; gap:4px; }
+.wheelTag { font-size:6px; letter-spacing:.1em; color:var(--dim); }
 
 /* fixed, not absolute: absolute inside #overlay reported the full height but
    rendered cut at viewport + bottom inset. b48 proved a fixed layer paints to

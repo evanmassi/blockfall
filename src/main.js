@@ -12,7 +12,7 @@ import { muteBtn } from './dom.js';
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b61';
+const BUILD = 'b70';
 
 // An installed app can't be handed a query string — the icon keeps whatever URL
 // it was added with — so it is toggled from inside. On the settings screen's

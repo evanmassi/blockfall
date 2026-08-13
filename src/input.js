@@ -112,8 +112,8 @@ onOverlayAction(act => {
   Sound.init();
   // Prefixed rather than named one by one: the menu builds these from the slots,
   // so a fixed list here would have to be kept in step by hand.
-  if (act.startsWith('new-')) openPicker(act.slice(4));
-  else if (act.startsWith('play-')) startSlot(act.slice(5));
+  if (act === 'new-marathon' || act === 'new-zen') startSlot(act.slice(4));
+  else if (act === 'pick-resume') openPicker();
   else if (act.startsWith('go-')) resumeRun(act.slice(3));
   else if (act === 'restart') startGame(G.mode, G.cascade); // stays as it was being played
   else if (act === 'menu') showMenu();
@@ -121,11 +121,12 @@ onOverlayAction(act => {
   else if (act === 'settings') showSettings();
   else if (act === 'back') closeSubScreen();
   else if (act === 'resume') togglePause();
-  else if (act === 'countdown') changeSetting('countdown');
-  else if (act === 'undos-up') changeSetting('undos', 1);
-  else if (act === 'undos-down') changeSetting('undos', -1);
-  else if (act === 'zen-up') changeSetting('zen', 1);
-  else if (act === 'zen-down') changeSetting('zen', -1);
+  // set-<key>-<value>; the toggles carry no value and flip whatever they are.
+  else if (act.startsWith('set-')) {
+    const at = act.lastIndexOf('-');
+    changeSetting(act.slice(4, at), Number(act.slice(at + 1)));
+  }
+  else if (act === 'countdown' || act === 'cascade') changeSetting(act);
   else if (act === 'haptics') {
     Haptics.setEnabled(!Haptics.enabled);
     Haptics.lock();          // a sample of what was just switched on

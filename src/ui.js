@@ -127,12 +127,16 @@ export function onOverlayAction(fn) { actionHandler = fn; }
  *           appear instantly.
  *   modal — a screen reached from another screen. Suppresses the pause screen's
  *           tap-anywhere, which would otherwise resume out from under it.
+ *   picking — a list is open over the screen; everything else stands down so
+ *           the accent is only on the thing being asked about.
  */
 export function showOverlay(html, opts = {}) {
+  stopWheels(); // before the markup goes, so nothing pending outlives its wheel
   overlay.innerHTML = html;
   overlay.classList.toggle('soft', !!opts.soft);
   overlay.classList.toggle('intro', !!opts.intro);
   overlay.classList.toggle('modal', !!opts.modal);
+  overlay.classList.toggle('picking', !!opts.picking);
   overlay.classList.remove('hidden');
   setChrome(opts.soft ? 'soft' : 'overlay');
   paintOverlayCanvases();
@@ -140,11 +144,96 @@ export function showOverlay(html, opts = {}) {
   // Bound on the button itself; stopPropagation keeps the tap from also
   // reaching the overlay's tap-anywhere handler, which the two used to race.
   for (const btn of overlay.querySelectorAll?.('[data-act]') || []) {
-    btn.addEventListener('pointerdown', e => {
+    // A wheel value listens for the click instead: pointerdown here calls
+    // preventDefault, which cancels the scroll the moment a finger lands on a
+    // number — and a scroll produces no click, so the two don't collide.
+    const onWheel = btn.className?.includes?.('wheelItem');
+    btn.addEventListener(onWheel ? 'click' : 'pointerdown', e => {
       e.stopPropagation();
-      e.preventDefault();
+      if (!onWheel) e.preventDefault();
       actionHandler?.(btn.dataset.act);
     });
+  }
+
+  syncWheels();
+}
+
+// Must match --rowH in the stylesheet; a test holds the two together.
+const WHEEL_ROW = 26;
+
+// Every wheel's pending settle. A rebuild throws the elements away, and a timer
+// that outlived its wheel read scrollTop from a detached node — which reports 0,
+// so it committed the first option on the list. That is what reset the Zen range
+// to 1 and 1 whenever the floor pushed the ceiling along.
+let pending = [];
+function stopWheels() {
+  for (const t of pending) clearTimeout(t);
+  pending = [];
+}
+
+/**
+ * Puts each wheel where its value is and commits what it lands on.
+ *
+ * Scrolling alone has to select, or the band across the middle is decoration and
+ * the numbers under it a lie. Committing only when the resting row differs from
+ * the one rendered keeps the programmatic scroll below from feeding itself.
+ */
+function syncWheels() {
+  for (const el of overlay.querySelectorAll?.('.wheelScroll') || []) {
+    const rows = [...(el.querySelectorAll?.('.wheelItem') || [])];
+    // Read rather than captured: the other end of a range is moved by scrolling
+    // it, and a stale index would have it report a value it was just given.
+    const atNow = () => Number(el.dataset?.at) || 0;
+    let settle = 0, frame = 0;
+
+    // The barrel. CSS cannot know how far a row is from the middle, so each one
+    // is tilted, shrunk and faded by its own distance as the wheel turns — which
+    // is what makes it read as a cylinder rolling rather than a list sliding.
+    const curve = () => {
+      frame = 0;
+      const middle = el.scrollTop / WHEEL_ROW;
+      rows.forEach((row, i) => {
+        const d = i - middle;
+        const away = Math.min(Math.abs(d), 2.6);
+        row.style.transform =
+          `rotateX(${(-d * 26).toFixed(1)}deg) scale(${(1.42 - away * 0.24).toFixed(3)})`;
+        row.style.opacity = Math.max(0, 1 - away * 0.36).toFixed(3);
+      });
+    };
+
+    // Waits for the wheel to actually stop. Sampled on a plain timer it read
+    // mid-flight — iOS momentum pauses between frames — and rounded to whichever
+    // row it happened to be nearest, which is how it landed a number out.
+    // Settled means "stopped moving", not "landed on an exact multiple of a
+    // row". Snapping rests on fractional pixels at dpr 3, so a tolerance tight
+    // enough to mean anything was one the wheel often never met — and the value
+    // simply never committed, which is why it took sometimes and not others.
+    let resting = NaN;
+    const commit = () => {
+      if (el.isConnected === false) return; // its screen was rebuilt under it
+      const top = el.scrollTop;
+      if (top !== resting) { resting = top; arm(70); return; }
+      const landed = Math.round(top / WHEEL_ROW);
+      if (landed === atNow()) return;
+      const act = rows[landed]?.dataset?.act;
+      if (act) actionHandler?.(act);
+    };
+
+    const arm = ms => {
+      clearTimeout(settle);
+      settle = setTimeout(commit, ms);
+      pending.push(settle);
+    };
+
+    el.addEventListener?.('scroll', () => {
+      // Per frame at most: a flick fires scroll far faster than anything paints.
+      if (!frame) frame = requestAnimationFrame(curve);
+      resting = NaN; // it is moving again; the next check restarts the wait
+      arm(90);
+    });
+
+    el.scrollTop = atNow() * WHEEL_ROW;
+    curve();
   }
 }
 
@@ -182,23 +271,74 @@ export const textRow = (...buttons) => `<div class="textBtns">${buttons.join('')
 export const toggle = (act, value, on) =>
   `<button class="setToggle${on ? ' on' : ''}" data-act="${act}">${value}</button>`;
 
-/** Numbers are set large enough to read at a glance; a word in the same slot
- *  ("OFF", "NO CAP") drops back down, or it would push the buttons off the row. */
-export const stepper = (act, value) => `
-  <div class="stepper">
-    <button class="stepBtn" data-act="${act}-down" aria-label="Less">&minus;</button>
-    <b${typeof value === 'number' ? '' : ' class="word"'}>${value}</b>
-    <button class="stepBtn" data-act="${act}-up" aria-label="More">+</button>
+/**
+ * A picker wheel, ours rather than the platform's. A native `<select>` gets the
+ * phone's own wheel for free but arrives in system chrome — white, rounded, the
+ * wrong typeface — sitting in the middle of a screen drawn in an 8px pixel font.
+ *
+ * This is a scroll-snapping list: flick it, it lands on a value, and the band
+ * across the middle is the selection. Every option is also a button, so a tap
+ * picks it directly and the whole thing works through the same action handler as
+ * the rest of the menu.
+ *
+ * @param {string} key       setting name, used to build the action.
+ * @param {Array<[number, string]>} options  [value, label], in wheel order.
+ * @param {number} value     the one currently selected.
+ */
+export const wheel = (key, options, value) => `
+  <div class="wheel" data-wheel="${key}">
+    <div class="wheelBand" aria-hidden="true"></div>
+    <div class="wheelScroll" data-at="${Math.max(0, options.findIndex(([v]) => v === value))}">
+      ${options.map(([v, label]) => `
+        <button class="wheelItem${v === value ? ' on' : ''}"
+                data-act="set-${key}-${v}">${label}</button>`).join('')}
+    </div>
   </div>`;
 
-// The sub line says what the value *means*, so a number never has to be decoded
-// — "5" tells her nothing, "STOPS AT 466MS A ROW" does.
-export const settingRow = (label, control, sub) => `
+/**
+ * The sub line says what the value *means*, so a number never has to be decoded
+ * — "5" tells her nothing, "GENTLE 16s TO THE FLOOR" does.
+ *
+ * Name and meaning are one block, with the control beside them: as a grid the
+ * row's height came from whatever control it held, so the sub sat under a
+ * toggle and three rows under a wheel, and no two lined up.
+ */
+export const settingRow = (key, label, control, sub) => `
   <div class="setRow">
-    <span class="label">${label}</span>
-    ${control}
-    <em class="setSub">${sub}</em>
+    <div class="setText">
+      <span class="label">${label}</span>
+      <em class="setSub" data-sub="${key}">${sub}</em>
+    </div>
+    <div class="setCtl">${control}</div>
   </div>`;
+
+/**
+ * Rewrites the meaning under each setting without rebuilding the screen.
+ *
+ * A wheel must not be redrawn by the value it is reporting: the rebuild resets
+ * its scroll while iOS momentum is still running, which pulls it out from under
+ * the finger and can leave it a number off what was chosen.
+ */
+/**
+ * Turns a wheel to a value it did not choose — the far end of a range being
+ * pushed along. Scrolled rather than re-rendered, so the wheel the finger is on
+ * is left alone: rebuilding the screen to move the other one is what made the
+ * range unreliable.
+ */
+export function setWheel(key, index) {
+  const el = overlay.querySelector?.(`[data-wheel="${key}"] .wheelScroll`);
+  if (!el) return;
+  el.dataset.at = String(index);
+  if (el.scrollTo) el.scrollTo({ top: index * WHEEL_ROW, behavior: 'smooth' });
+  else el.scrollTop = index * WHEEL_ROW;
+}
+
+export function setSettingText(subs) {
+  for (const el of overlay.querySelectorAll?.('[data-sub]') || []) {
+    const text = subs[el.dataset?.sub];
+    if (text !== undefined) el.textContent = text;
+  }
+}
 
 /**
  * The board behind a full-screen overlay. Its accent glow spreads ~38px past

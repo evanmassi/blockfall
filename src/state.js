@@ -1,7 +1,7 @@
 // The single mutable game state, plus its persistence. Everything shared lives
 // on `G` because ES module bindings cannot be reassigned across files.
 
-import { COLS, ROWS, DEFAULT_SETTINGS, UNDO_MAX, ZEN_CAPS } from './config.js';
+import { COLS, ROWS, DEFAULT_SETTINGS, UNDO_MAX, ZEN_CAPS, ZEN_LEVELS } from './config.js';
 
 const STORE = 'blockfall.stats';
 const SETTINGS_STORE = 'blockfall.settings';
@@ -68,10 +68,18 @@ export function saveStats() {
 export function loadSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(SETTINGS_STORE) || 'null') || {};
+    // zenCap was one value before Zen gained a floor; it was always the ceiling.
+    const max = raw.zenMax ?? raw.zenCap;
+    const zenMax = ZEN_CAPS.includes(max) ? max : DEFAULT_SETTINGS.zenMax;
+    const zenMin = ZEN_LEVELS.includes(raw.zenMin) ? raw.zenMin : DEFAULT_SETTINGS.zenMin;
     return {
       countdown: !!raw.countdown,
+      cascade: !!raw.cascade,
       undos: Math.min(UNDO_MAX, Math.max(0, raw.undos | 0)),
-      zenCap: ZEN_CAPS.includes(raw.zenCap) ? raw.zenCap : DEFAULT_SETTINGS.zenCap,
+      // Clamped rather than rejected: a hand-edited store could cross them, and
+      // a floor above the ceiling has no sane reading.
+      zenMin: zenMax ? Math.min(zenMin, zenMax) : zenMin,
+      zenMax,
     };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }
