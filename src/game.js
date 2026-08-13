@@ -501,7 +501,7 @@ function applyRun(saved) {
 
 // ---------- undo ----------
 
-export const undosLeft = () => Math.max(0, G.settings.undos - G.undosUsed);
+const undosLeft = () => Math.max(0, G.settings.undos - G.undosUsed);
 
 // Mid-clear counts: the entry restored predates the piece that set the clear off,
 // so it cancels cleanly — and the button doesn't die for a third of a second
@@ -509,7 +509,7 @@ export const undosLeft = () => Math.max(0, G.settings.undos - G.undosUsed);
 const UNDOABLE = { playing: 1, clearing: 1, settling: 1 };
 
 // Two deep at minimum: the top is the piece in play, so something has to be under it.
-export const canUndo = () => !!UNDOABLE[G.state] && undosLeft() > 0 && G.undoStack.length > 1;
+const canUndo = () => !!UNDOABLE[G.state] && undosLeft() > 0 && G.undoStack.length > 1;
 
 function pushUndo() {
   if (!G.settings.undos) return; // nothing to spend, nothing worth keeping

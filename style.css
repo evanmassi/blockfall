@@ -531,11 +531,7 @@ html, body {
    animates - without it the far layers re-blur every frame. */
 .bgfall canvas {
   position:absolute; top:0;
-  /* No will-change here. It promotes each block to its own compositing layer,
-     and WebKit clips a composited layer to its ancestor's rasterised bounds --
-     the viewport, not the box -- so the blocks were cut at a line short of the
-     bottom of the screen while .bgfall itself measured the full height. The
-     blur it was protecting is on the far band only, which barely moves. */
+  will-change:transform;
   animation-name:bg-fall; animation-timing-function:linear; animation-iteration-count:infinite;
 }
 @keyframes bg-fall {

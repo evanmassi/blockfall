@@ -183,7 +183,7 @@ let chromeMode = 'base';
  * @param {'base'|'overlay'|'soft'} [mode]  omit to repaint the current one.
  */
 /** What the screen reads as, flattened. @param {'base'|'overlay'|'soft'} mode */
-export function chromeColor(mode = chromeMode) {
+function chromeColor(mode = chromeMode) {
   if (mode === 'base') return theme.bg;
   return opaque(mode === 'soft' ? theme.overlaySoft : theme.overlay);
 }
