@@ -137,21 +137,27 @@ export function showOverlay(html, opts = {}) {
 }
 
 /**
- * @param {Array<[string, string, string?]>} actions  [action, label, sub] — sub
- *   goes on a second line, which halves how wide a long label needs to be. null
- *   for a row break. An action with no branch in input.js's handler produces a
- *   button that silently does nothing, so the two must be kept in step.
+ * @param {Array<[string, string, string?, string?]>} actions  [action, label,
+ *   sub, cls] — sub goes on a second line, which halves how wide a long label
+ *   needs to be, and cls carries `on` for a button whose choices are showing or
+ *   `variant` for one of those choices. null for a row break. An action with no
+ *   branch in input.js's handler produces a button that silently does nothing,
+ *   so the two must be kept in step.
  */
-export function actionBar(actions) {
+export function actionBar(actions, cls = '') {
   const buttons = actions
     .map(entry => {
       if (entry === null) return '<span class="btnBreak"></span>';
-      const [act, label, sub] = entry;
-      return `<button class="menuBtn" data-act="${act}">${label}${sub ? `<em>${sub}</em>` : ''}</button>`;
+      const [act, label, sub, mods] = entry;
+      return `<button class="menuBtn${mods ? ` ${mods}` : ''}" data-act="${act}">` +
+             `${label}${sub ? `<em>${sub}</em>` : ''}</button>`;
     })
     .join('');
-  return `<div class="menuBtns">${buttons}</div>`;
+  return `<div class="menuBtns${cls ? ` ${cls}` : ''}">${buttons}</div>`;
 }
+
+/** A hairline between menu groups, so starting and resuming don't run together. */
+export const rule = () => '<div class="menuRule"></div>';
 
 /** A control that costs a line of text rather than a 46px button row. */
 export const textButton = (act, label) =>
@@ -161,13 +167,15 @@ export const textButton = (act, label) =>
 export const textRow = (...buttons) => `<div class="textBtns">${buttons.join('')}</div>`;
 
 /** The value doubles as the button: there are only two of them to cycle. */
-export const toggle = (act, value) =>
-  `<button class="setToggle" data-act="${act}">${value}</button>`;
+export const toggle = (act, value, on) =>
+  `<button class="setToggle${on ? ' on' : ''}" data-act="${act}">${value}</button>`;
 
+/** Numbers are set large enough to read at a glance; a word in the same slot
+ *  ("OFF", "NO CAP") drops back down, or it would push the buttons off the row. */
 export const stepper = (act, value) => `
   <div class="stepper">
     <button class="stepBtn" data-act="${act}-down" aria-label="Less">&minus;</button>
-    <b>${value}</b>
+    <b${typeof value === 'number' ? '' : ' class="word"'}>${value}</b>
     <button class="stepBtn" data-act="${act}-up" aria-label="More">+</button>
   </div>`;
 

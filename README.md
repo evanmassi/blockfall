@@ -10,11 +10,17 @@ A block-stacking game for the phone. No build step, no dependencies — plain ES
 
 **Zen** — endless. Gravity stops accelerating at level 5, and topping out clears the bottom four rows and drops the stack instead of ending the run.
 
-**Cascade** — Classic's rules, but a clear doesn't shift the stack down as whole rows. The cleared rows are blanked in place and every surviving cell falls to the lowest free spot in its own column, filling the holes underneath. If that completes another row it clears too, and the chain keeps going. `CHAIN_SCORES` multiplies each link, and the clear effect escalates with depth, so a chained single hits like a double.
+Either mode can be played with either kind of clear. NEW CLASSIC and RESUME ZEN open their two above themselves rather than starting a run outright — above, so the row just pressed doesn't move and a hand isn't covering what has to be read next. A mode with a run going in only one of its two resumes it without asking:
+
+**Normal** — a clear shifts the whole stack down by the rows it took.
+
+**Cascade** — the cleared rows are blanked in place and every surviving cell falls to the lowest free spot in its own column, filling the holes underneath. If that completes another row it clears too, and the chain keeps going. `CHAIN_SCORES` multiplies each link, and the clear effect escalates with depth, so a chained single hits like a double.
+
+The two axes are independent by construction: the mode decides how a run *ends* (`G.mode`), the clears decide how a clear *resolves* (`G.cascade`), and no branch reads both. Cascade was a third mode until it became clear that "Classic or Zen" and "how a clear behaves" were separate questions being answered by one list.
 
 Rigid connected clumps were tried first and were nearly indistinguishable from Classic: a cleared row leaves an empty band, so everything above it is a single clump that falls exactly one row — a row shift by another name. Per-cell gravity chains on about 15% of clears against Classic's zero. Depth is almost always two, which is the geometry rather than a shortfall: after one settle every column is solid from the floor, so a third link needs the new bottom row to be full again.
 
-Each mode keeps its own saved run and its own records, so an unbounded Zen score can never flatter the other, and cascade's chain scores can't flatter Classic.
+The four pairings each keep their own saved run and their own records, so an unbounded Zen score can never flatter Classic and a chain score can never flatter a normal one. The pair is flattened to one slot string — `marathon`, `marathon-cascade`, `zen`, `zen-cascade` — which keys both. Runs and records saved when cascade was a mode of its own are migrated into `marathon-cascade`, the pair they always were.
 
 ## Controls
 
@@ -129,11 +135,21 @@ Adding a theme is one object in `src/themes.js`; the field list is documented at
 
 ## Records and saved runs
 
-Both are per mode. Records track score, lines and longest combo, shown as a card each on the menu once there's something to show. Beating a score mid-run announces itself and keeps the HUD score lit for the rest of the game.
+Both are per slot, so there are four of each. Records track score, lines and longest combo, laid out on the menu as a grid — modes across, clears down. Loose cards had to label themselves "CLASSIC CASCADE", which read as a mode of its own; the grid says the same thing with its axes. Beating a score mid-run announces itself and keeps the HUD score lit for the rest of the game.
 
 Runs are saved at stable points only — a new piece, a pause, leaving for the menu, and `pagehide` — never mid-clear or mid-death, so a restored board is always one a player could have been looking at. The board serialises to a 220-character string, and the payload is versioned so an older save is discarded rather than half-loaded.
 
-Resuming a run and un-pausing both land on the live board behind a 3–2–1 count. Gravity, lock delay, the clear animation and every input sit behind one guard in `update()` for its duration, so the piece already in the air can be read before it starts falling again. Starting fresh skips it — an empty board has nothing to re-read.
+Resuming a run and un-pausing can land on the live board behind a 3–2–1 count, off by default: most pauses are a slip of the thumb, and three seconds is a long time to be told to wait for one. Switched on, gravity, lock delay, the clear animation and every input sit behind one guard in `update()` for its duration, so the piece already in the air can be read before it starts falling again. Starting fresh always skips it — an empty board has nothing to re-read.
+
+## Settings
+
+Three, on their own screen from the menu and from pause, written to `localStorage` on every change and clamped on the way back in — the store is editable by hand, and a bad Zen cap would index off the end of the gravity table.
+
+**Countdown** — the 3–2–1 above. Off by default.
+
+**Undos** — off, or 1–5 a game. A charge winds the run back to the last spawn: board, piece, queue, hold, score and lines together, so a take-back can't bank points. The stack is the same payload a save is, pushed at each spawn and capped one deeper than the charges can reach. Charges are stored as *spent* rather than *left*, so raising the count mid-run needs no reconciliation. Switching undos off drops the history with them; kept across the gap, it would wind back further than anyone asked for. The button sits at the foot of the right rail, under the thumb rather than at the bottom of the screen, and is absent entirely at zero. It stays live mid-clear: the entry it restores predates the piece that set the clear off, so cancelling is clean and the button doesn't go dead for a third of a second after every landing.
+
+**Zen speed** — the level Zen's gravity stops at, 1–10, or no cap at all, in which case it climbs like Classic.
 
 ## Haptics
 

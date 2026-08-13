@@ -3,7 +3,7 @@
 // that writes G, apart from input.js's gesture bookkeeping.
 
 import {
-  COLS, ROWS, HIDDEN,
+  COLS, ROWS, HIDDEN, VIS_ROWS,
   LINE_SCORES, TSPIN_SCORES, TSPIN_MINI_SCORES, PERFECT_SCORES,
   LOCK_DELAY, MAX_LOCK_RESETS, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS,
   FRAME_MS, GRAVITY_FRAMES, GRAVITY_MIN_FRAMES,
@@ -13,9 +13,9 @@ import {
 import { ROTATIONS, KICKS, topRow } from './pieces.js';
 import { theme } from './themes.js';
 import {
-  G, emptyGrid, saveStats, blankTally, MODES,
+  G, emptyGrid, saveStats, blankTally, BASES, SLOTS, slotOf, parseSlot,
   saveRun, loadRun, clearRun, encodeGrid, decodeGrid,
-  saveLastMode, loadLastMode, saveSettings,
+  saveLastSlot, loadLastSlot, saveSettings,
 } from './state.js';
 import { collides, fillQueue, makePiece, settle } from './board.js';
 import { view, drawSidePanels, syncLevelPalette } from './render.js';
@@ -23,7 +23,7 @@ import { Sound } from './audio.js';
 import { Haptics } from './haptics.js';
 import {
   showOverlay, hideOverlay, showToast, updateHud, setRecordStyle, setCountdown,
-  themeBar, wordmark, menuBackdrop, actionBar, textButton, textRow,
+  themeBar, wordmark, menuBackdrop, actionBar, textButton, textRow, rule,
   setUndo, settingRow, stepper, toggle,
 } from './ui.js';
 
@@ -33,6 +33,9 @@ function setReady(ms) {
 }
 
 const resumeDelay = () => (G.settings.countdown ? READY_MS : 0);
+
+/** The record and save slot the run in play belongs to. */
+const currentSlot = () => slotOf(G.mode, G.cascade);
 
 // Single funnel, so beating the record is caught the instant it happens rather
 // than on the game-over screen.
@@ -283,7 +286,7 @@ function finishClear() {
   // Cascade blanks the rows in place and lets the survivors fall; everywhere
   // else the stack shifts down as whole rows.
   let moved = null;
-  if (G.mode === 'cascade') {
+  if (G.cascade) {
     for (const y of rows) G.grid[y] = Array(COLS).fill(null);
     moved = settle(G.grid);
   } else {
@@ -311,7 +314,7 @@ function finishClear() {
 function afterSettle() {
   G.falling = null;
 
-  if (G.mode === 'cascade') {
+  if (G.cascade) {
     const next = fullRows();
     if (next.length) {
       G.chain++;
@@ -370,7 +373,8 @@ function applyScore(cleared, spin, chain = 0) {
         if (!label) label = G.combo + 1 + '× COMBO';
         else label += '  ' + (G.combo + 1) + '×';
       }
-      G.stats[G.mode].combo = Math.max(G.stats[G.mode].combo, G.combo + 1);
+      const best = G.stats[currentSlot()];
+      best.combo = Math.max(best.combo, G.combo + 1);
       G.tally.combo = Math.max(G.tally.combo, G.combo + 1);
     }
 
@@ -434,7 +438,7 @@ function spawnClearParticles(rows, fx) {
 // to survive the play that follows it rather than follow along with it.
 function runPayload() {
   return {
-    mode: G.mode,
+    mode: G.mode, cascade: G.cascade,
     grid: encodeGrid(G.grid),
     // The rotation matrix is rebuilt from ROTATIONS, so only the index is kept.
     active: G.active ? { type: G.active.type, rot: G.active.rot, x: G.active.x, y: G.active.y } : null,
@@ -450,12 +454,16 @@ function runPayload() {
 // never mid-clear or mid-death, so a restored board is always a playable one.
 export function snapshotRun() {
   if (G.state !== 'playing' && G.state !== 'paused') return;
-  saveRun(G.mode, { ...runPayload(), undosUsed: G.undosUsed, undoStack: G.undoStack });
+  saveRun(currentSlot(), { ...runPayload(), undosUsed: G.undosUsed, undoStack: G.undoStack });
 }
 
 /** The live board becomes `saved`. Shared by resuming and undoing. */
 function applyRun(saved) {
-  G.mode = MODES.includes(saved.mode) ? saved.mode : 'marathon';
+  // A run saved while cascade was a mode carries it in `mode` and has no flag of
+  // its own. Read as-is it came back as plain Classic, and the next snapshot
+  // filed it under Classic too — one run becoming two, neither of them cascading.
+  G.mode = BASES.includes(saved.mode) ? saved.mode : 'marathon';
+  G.cascade = !!saved.cascade || saved.mode === 'cascade';
   G.grid = decodeGrid(saved.grid);
   G.queue = Array.isArray(saved.queue) ? [...saved.queue] : [];
   G.bag = Array.isArray(saved.bag) ? [...saved.bag] : null;
@@ -526,18 +534,18 @@ export function undo() {
   snapshotRun();
 }
 
-/** Which mode a plain tap on the menu picks up: last played if it has a save,
+/** Which slot a plain tap on the menu picks up: last played if it has a save,
  *  else whichever does, else none. */
 export function pendingRun() {
-  const last = loadLastMode();
+  const last = loadLastSlot();
   if (loadRun(last)) return last;
-  return MODES.find(m => loadRun(m)) ?? null;
+  return SLOTS.find(s => loadRun(s)) ?? null;
 }
 
-export function resumeRun(mode = pendingRun()) {
-  const saved = mode && loadRun(mode);
+export function resumeRun(slot = pendingRun()) {
+  const saved = slot && loadRun(slot);
   if (!saved) { startGame(); return; }
-  saveLastMode(mode);
+  saveLastSlot(slot);
 
   G.undosUsed = Math.max(0, saved.undosUsed | 0);
   G.undoStack = Array.isArray(saved.undoStack) ? saved.undoStack : [];
@@ -551,16 +559,18 @@ export function resumeRun(mode = pendingRun()) {
 
 // ---------- flow ----------
 
-export function startGame(mode = 'marathon') {
+export function startGame(mode = 'marathon', cascade = false) {
   commitStats(); // the run being replaced may be holding a record
-  clearRun(mode); // only this mode's slot — the other run stays waiting
-  saveLastMode(mode);
   G.mode = mode;
+  G.cascade = !!cascade;
+  const slot = currentSlot();
+  clearRun(slot); // only this slot — the other three stay waiting
+  saveLastSlot(slot);
   G.grid = emptyGrid();
   G.queue = []; G.bag = null; G.hold = null; G.canHold = true;
   G.score = 0; G.lines = 0; G.level = 1; G.combo = -1; G.backToBack = false;
   G.tally = blankTally();
-  G.runBest = G.stats[mode].score;
+  G.runBest = G.stats[slot].score;
   G.newBest = false;
   setRecordStyle(false);
   G.gravityAcc = 0; G.particles = []; G.shake = 0;
@@ -591,7 +601,7 @@ export function gameOver() {
 
 // Per mode, so Zen's unbounded score can never flatter Marathon's.
 function commitStats() {
-  const best = G.stats[G.mode];
+  const best = G.stats[currentSlot()];
   best.score = Math.max(best.score, G.score);
   best.lines = Math.max(best.lines, G.lines);
   saveStats();
@@ -612,7 +622,7 @@ function tallyCard() {
     ['T-SPINS', t.tspins], ['PERFECT', t.perfect], ['BEST COMBO', t.combo + '&times;'],
   ];
   // Chains are impossible outside cascade, so elsewhere the row is always zero.
-  if (G.mode === 'cascade') rows.push(['BEST CHAIN', t.chain + '&times;']);
+  if (G.cascade) rows.push(['BEST CHAIN', t.chain + '&times;']);
   return `<dl class="tally">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
 }
 
@@ -621,7 +631,7 @@ function finishGameOver() {
   Sound.over();
   Haptics.over();
   commitStats();
-  clearRun(G.mode); // the other mode's save is untouched
+  clearRun(currentSlot()); // the other three saves are untouched
 
   showOverlay(`
     <h2${G.newBest ? ' class="record"' : ''}>${G.newBest ? 'NEW HIGH SCORE!' : 'GAME OVER'}</h2>
@@ -630,7 +640,7 @@ function finishGameOver() {
       <b>${G.score.toLocaleString()}</b>
     </div>
     ${tallyCard()}
-    ${G.newBest ? '' : `<p>HIGH SCORE ${G.stats[G.mode].score.toLocaleString()}</p>`}
+    ${G.newBest ? '' : `<p>HIGH SCORE ${G.stats[currentSlot()].score.toLocaleString()}</p>`}
     ${themeBar()}
     ${actionBar([['restart', 'PLAY AGAIN'], ['menu', 'MAIN MENU']])}
   `);
@@ -671,20 +681,32 @@ export function showPauseScreen() {
   `, { soft: true });
 }
 
+// How a level reads as a speed. Seconds for a piece to fall the height of the
+// well: a number she can picture, where milliseconds-a-row had to be translated
+// first. The word ahead of it is the feel, the number is the fact.
+const FEEL = [[3, 'GENTLE'], [6, 'STEADY'], [8, 'BRISK'], [10, 'RELENTLESS']];
+
+function speedReads(level) {
+  const frames = GRAVITY_FRAMES[level - 1] ?? GRAVITY_MIN_FRAMES;
+  const secs = Math.round(VIS_ROWS * frames * FRAME_MS / 1000);
+  const feel = FEEL.find(([upto]) => level <= upto)?.[1] ?? 'RELENTLESS';
+  return `${feel} · ${secs} SECONDS TO THE FLOOR`;
+}
+
 // Ordered by how often they get touched: the countdown is a one-time choice,
 // the Zen cap is a mood.
 function settingsRows() {
   const s = G.settings;
-  const rowMs = level => Math.round((GRAVITY_FRAMES[level - 1] ?? GRAVITY_MIN_FRAMES) * FRAME_MS);
+  const takeBacks = s.undos === 1 ? '1 TAKE-BACK EACH GAME' : `${s.undos} TAKE-BACKS EACH GAME`;
 
   return `
     <div class="settings">
-      ${settingRow('COUNTDOWN', toggle('countdown', s.countdown ? 'ON' : 'OFF'),
+      ${settingRow('COUNTDOWN', toggle('countdown', s.countdown ? 'ON' : 'OFF', s.countdown),
                    s.countdown ? '3-2-1 BEFORE PLAY RESUMES' : 'RESUMES THE MOMENT YOU DO')}
       ${settingRow('UNDOS', stepper('undos', s.undos || 'OFF'),
-                   s.undos ? `${s.undos} TAKE-BACKS EACH GAME` : 'NO TAKE-BACKS')}
+                   s.undos ? takeBacks : 'NO TAKE-BACKS')}
       ${settingRow('ZEN SPEED', stepper('zen', s.zenCap || 'NO CAP'),
-                   s.zenCap ? `STOPS AT ${rowMs(s.zenCap)}MS A ROW` : 'KEEPS SPEEDING UP')}
+                   s.zenCap ? speedReads(s.zenCap) : 'KEEPS SPEEDING UP')}
     </div>`;
 }
 
@@ -756,31 +778,61 @@ export function togglePause() {
 
 const lineCount = n => `${n.toLocaleString()} ${n === 1 ? 'LINE' : 'LINES'}`;
 
-// Menu order, and what a run in progress reads as on its resume button.
-const MENU_MODES = [
-  { mode: 'marathon', name: 'CLASSIC', start: 'new', resume: 'continue',
-    progress: s => (s.score | 0).toLocaleString() },
-  { mode: 'zen', name: 'ZEN', start: 'zen', resume: 'continue-zen',
-    progress: s => lineCount(s.lines | 0) },
-  { mode: 'cascade', name: 'CASCADE', start: 'cascade', resume: 'continue-cascade',
-    progress: s => (s.score | 0).toLocaleString() },
-];
+// What the menu calls each axis, and which number a run is measured by: Zen has
+// no score worth chasing, so it counts lines instead.
+const BASE_MENU = {
+  marathon: { name: 'CLASSIC', progress: s => (s.score | 0).toLocaleString() },
+  zen: { name: 'ZEN', progress: s => lineCount(s.lines | 0) },
+};
+const VARIANTS = [[false, 'NORMAL'], [true, 'CASCADE']];
 
-/** One card per mode that has anything to show. */
+const slotName = slot => {
+  const { mode, cascade } = parseSlot(slot);
+  return `${BASE_MENU[mode].name} ${cascade ? 'CASCADE' : 'NORMAL'}`;
+};
+
+/**
+ * Four records as a grid: mode across, clears down. A row of loose cards made
+ * "CLASSIC CASCADE" read as a mode of its own, which is the confusion the whole
+ * change is meant to undo.
+ */
 function recordCards() {
-  const card = (mode, name) => {
-    const s = G.stats[mode];
-    if (!s.score && !s.lines) return '';
-    return `
-      <div class="recordCard">
-        <span class="label">${name}</span>
-        <b>${s.score.toLocaleString()}</b>
-        <span class="sub">${lineCount(s.lines)} &nbsp;·&nbsp; ${s.combo}&times;</span>
-      </div>`;
-  };
+  const s = slot => G.stats[slot] ?? { score: 0, lines: 0, combo: 0 };
+  if (!SLOTS.some(slot => s(slot).score || s(slot).lines)) return '';
 
-  const cards = card('marathon', 'CLASSIC') + card('zen', 'ZEN') + card('cascade', 'CASCADE');
-  return cards ? `<div class="records">${cards}</div>` : '';
+  const heads = BASES.map(m => `<span class="recHead">${BASE_MENU[m].name}</span>`).join('');
+
+  const rows = VARIANTS.map(([cascade, label]) => {
+    const cells = BASES.map(mode => {
+      const rec = s(slotOf(mode, cascade));
+      if (!rec.score && !rec.lines) return '<div class="recordCard empty">&mdash;</div>';
+      return `
+        <div class="recordCard">
+          <b>${rec.score.toLocaleString()}</b>
+          <span class="sub">${lineCount(rec.lines)} &nbsp;·&nbsp; ${rec.combo}&times;</span>
+        </div>`;
+    }).join('');
+    return `<span class="recSide">${label}</span>${cells}`;
+  }).join('');
+
+  return `<div class="records"><span></span>${heads}${rows}</div>`;
+}
+
+// Which NEW button has its two clears showing, and the debris drifting behind
+// the menu. The backdrop is held rather than rebuilt so that opening a button
+// doesn't restart every animation on screen.
+let openPick = null;
+let backdrop = '';
+
+/** Shows a mode's two clears under it, or puts them away again. */
+export function openPicker(mode) {
+  openPick = openPick === mode ? null : mode;
+  renderMenu(false);
+}
+
+export function startSlot(slot) {
+  const { mode, cascade } = parseSlot(slot);
+  startGame(mode, cascade);
 }
 
 export function showMenu() {
@@ -799,28 +851,50 @@ export function showMenu() {
   setRecordStyle(false);
   refreshUndo();
 
-  // Starting on the first row, resuming below it. Progress goes on a second line
-  // inside the button rather than after the label: "RESUME CASCADE · 18,400" on
-  // one line is wider than a phone, and three of those stacked ran off the bottom.
-  const actions = [];
-  const resumes = [];
+  openPick = null;
+  backdrop = menuBackdrop();
+  renderMenu(true);
+}
 
-  for (const m of MENU_MODES) {
-    actions.push([m.start, `NEW ${m.name}`]);
-    const save = loadRun(m.mode);
-    if (save) resumes.push([m.resume, `RESUME ${m.name}`, m.progress(save)]);
-  }
+/** The two clears a mode can be played with, as the row that opens under it. */
+const clearsRow = mode =>
+  VARIANTS.map(([cascade, label]) => [`play-${slotOf(mode, cascade)}`, label, '', 'variant']);
 
-  if (resumes.length) actions.push(null, ...resumes);
+/**
+ * Three groups behind rules: starting, resuming, everything else. Starting a
+ * game is a mode then its clears, which open *under* the button pressed so that
+ * the row already read doesn't move. Resuming is one button per saved run, laid
+ * out in the modes' own columns — four buttons rather than a question, because a
+ * run is easier to pick out by sight than to remember the name of.
+ *
+ * Progress goes on a second line inside the button rather than after the label:
+ * "RESUME CLASSIC · 18,400" on one line is wider than a phone.
+ */
+function renderMenu(intro) {
+  const starts = BASES.map(mode =>
+    [`new-${mode}`, `NEW ${BASE_MENU[mode].name}`, '', openPick === mode ? 'on' : '']);
+
+  // Column per mode, so which half of the menu a run is in never moves.
+  const resumes = BASES.flatMap((mode, col) => VARIANTS.flatMap(([cascade, label]) => {
+    const slot = slotOf(mode, cascade);
+    const save = loadRun(slot);
+    if (!save) return [];
+    return [[`go-${slot}`, `RESUME ${BASE_MENU[mode].name}`,
+             `${label} · ${BASE_MENU[mode].progress(save)}`, `col${col}`]];
+  }));
 
   showOverlay(`
-    ${menuBackdrop()}
+    ${backdrop}
     ${wordmark()}
     ${recordCards()}
     ${themeBar()}
-    ${actionBar(actions)}
+    ${rule()}
+    ${actionBar(starts)}
+    ${openPick ? actionBar(clearsRow(openPick), 'clears') : ''}
+    ${resumes.length ? rule() + actionBar(resumes, 'resumes') : ''}
+    ${rule()}
     ${textRow(textButton('how', 'HOW TO PLAY'), textButton('settings', 'SETTINGS'))}
-  `, { intro: true });
+  `, { intro });
 }
 
 // ---------- per-frame ----------

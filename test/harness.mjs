@@ -140,7 +140,7 @@ export const {
 } = config;
 export const { ROTATIONS, TYPES, topRow } = await import('../src/pieces.js');
 export const state = await import('../src/state.js');
-export const { G, loadRun } = state;
+export const { G, loadRun, SLOTS, BASES, slotOf, parseSlot } = state;
 export const { THEMES, theme, savedThemeName } = await import('../src/themes.js');
 export const board = await import('../src/board.js');
 export const game = await import('../src/game.js');
@@ -190,11 +190,8 @@ export function report() {
 
 // ---------- world setup ----------
 
-export const blankStats = () => ({
-  marathon: { score: 0, lines: 0, combo: 0 },
-  zen: { score: 0, lines: 0, combo: 0 },
-  cascade: { score: 0, lines: 0, combo: 0 },
-});
+export const blankStats = () =>
+  Object.fromEntries(state.SLOTS.map(s => [s, { score: 0, lines: 0, combo: 0 }]));
 
 /**
  * Returns the world to a known state without starting a game: storage wiped,
@@ -210,7 +207,11 @@ export function reset({ stats = blankStats(), themeName = 'neon' } = {}) {
   // score left over from the previous block would otherwise be written straight
   // into the freshly blanked records — the exact leak this function exists to
   // prevent, which it originally had itself.
+  // 'menu' before showMenu, so its snapshot has nothing to write: a run left
+  // going by the last block was landing in a slot this one is about to assert on.
+  G.state = 'menu';
   G.mode = 'marathon';
+  G.cascade = false;
   G.score = 0;
   G.lines = 0;
   G.level = 1;
@@ -233,8 +234,9 @@ export function reset({ stats = blankStats(), themeName = 'neon' } = {}) {
  * reset() first if the block needs a clean world, which is what block setup is
  * for; this is for restarting within a block.
  */
-export function fresh(mode = 'marathon') {
-  game.startGame(mode);
+export function fresh(slot = 'marathon') {
+  const { mode, cascade } = state.parseSlot(slot);
+  game.startGame(mode, cascade);
   pumpMs(20);
   clearGrid();
 }

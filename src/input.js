@@ -9,8 +9,8 @@ import { stage, overlay, pauseBtn, muteBtn, undoBtn } from './dom.js';
 import { onOverlayAction } from './ui.js';
 import {
   move, rotate, softDrop, hardDrop, holdPiece, undo,
-  startGame, togglePause, showMenu, pendingRun, resumeRun, showPauseScreen,
-  showControls, showSettings, changeSetting, closeSubScreen,
+  startGame, startSlot, openPicker, togglePause, showMenu, pendingRun, resumeRun,
+  showPauseScreen, showControls, showSettings, changeSetting, closeSubScreen,
 } from './game.js';
 import { Haptics } from './haptics.js';
 
@@ -48,7 +48,7 @@ document.addEventListener('keydown', e => {
   if (G.state === 'menu' || G.state === 'over') {
     if (e.key === ' ' || e.key === 'Enter') {
       Sound.init();
-      if (G.state === 'menu') playFromMenu(); else startGame(G.mode);
+      if (G.state === 'menu') playFromMenu(); else startGame(G.mode, G.cascade);
     }
     return;
   }
@@ -110,13 +110,12 @@ overlay.addEventListener('pointerdown', e => {
 
 onOverlayAction(act => {
   Sound.init();
-  if (act === 'zen') startGame('zen');
-  else if (act === 'cascade') startGame('cascade');
-  else if (act === 'restart') startGame(G.mode); // restart stays in the mode you were in
-  else if (act === 'new') startGame();
-  else if (act === 'continue') resumeRun('marathon');
-  else if (act === 'continue-zen') resumeRun('zen');
-  else if (act === 'continue-cascade') resumeRun('cascade');
+  // Prefixed rather than named one by one: the menu builds these from the slots,
+  // so a fixed list here would have to be kept in step by hand.
+  if (act.startsWith('new-')) openPicker(act.slice(4));
+  else if (act.startsWith('play-')) startSlot(act.slice(5));
+  else if (act.startsWith('go-')) resumeRun(act.slice(3));
+  else if (act === 'restart') startGame(G.mode, G.cascade); // stays as it was being played
   else if (act === 'menu') showMenu();
   else if (act === 'how') showControls();
   else if (act === 'settings') showSettings();

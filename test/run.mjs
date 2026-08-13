@@ -18,13 +18,16 @@ import {
   COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, CLEAR_TIME_MAX, DEATH_ROW_MS, DEATH_HOLD_MS, READY_MS,
   UNDO_MAX, DEFAULT_SETTINGS, GRAVITY_FRAMES, FRAME_MS,
   ROTATIONS, TYPES, topRow,
-  G, state, loadRun, hasSavedRun, board, game,
+  G, state, loadRun, hasSavedRun, board, game, SLOTS, BASES, slotOf, parseSlot,
   THEMES, theme, savedThemeName, applyTheme, view, syncLevelPalette,
   INSET_MARKS, NES_MARKS, Haptics, HAPTIC_CLEAR_PATTERNS,
   updateHud as updateHudFromTest, themeBar,
 } from './harness.mjs';
 
 const clock = now();
+
+/** Both slots of a mode, in menu order. */
+const VARIANTS_FOR = mode => [slotOf(mode, false), slotOf(mode, true)];
 
 section('Boot');
 {
@@ -44,8 +47,8 @@ section('Boot');
 
   // Playing is what she came for; reference and settings sit under it.
   check('the modes come before the text links',
-        menu.indexOf('data-act="new"') < menu.indexOf('data-act="how"'),
-        `modes at ${menu.indexOf('data-act="new"')}, links at ${menu.indexOf('data-act="how"')}`);
+        menu.indexOf('data-act="new-marathon"') < menu.indexOf('data-act="how"'),
+        `modes at ${menu.indexOf('data-act="new-marathon"')}, links at ${menu.indexOf('data-act="how"')}`);
   check('and the two links share one row',
         /<div class="textBtns">.*data-act="how".*data-act="settings".*<\/div>/s.test(menu));
 }
@@ -529,7 +532,8 @@ section('Starting from the menu');
   for (const fn of handlers.overlay.pointerdown || []) fn(tap);
   check('tapping the menu backdrop does nothing', G.state === 'menu', G.state);
 
-  pressAction('new');
+  pressAction('new-marathon');
+  pressAction('play-marathon');
   check('the button is what starts a game', G.state === 'playing', G.state);
   check('score reset', G.score === 0, String(G.score));
 }
@@ -775,9 +779,12 @@ section('Records stay in their own mode');
         G.stats.zen.score === 200 && G.stats.zen.lines === 9,
         `${G.stats.zen.score}/${G.stats.zen.lines}`);
   check('and does update its own', G.stats.marathon.score === 5000 && G.stats.marathon.lines === 30);
-  check('both modes appear on the menu',
-        (els.overlay.innerHTML.match(/recordCard/g) || []).length === 2,
-        String((els.overlay.innerHTML.match(/recordCard/g) || []).length));
+  // The grid always holds all four, so an empty slot reads as a gap to fill
+  // rather than as a mode that does not exist.
+  const cards = els.overlay.innerHTML.match(/recordCard/g) || [];
+  const blanks = els.overlay.innerHTML.match(/recordCard empty/g) || [];
+  check('every slot has a cell on the menu', cards.length === 4, String(cards.length));
+  check('and the two never played read as empty', blanks.length === 2, String(blanks.length));
 
   reset({ stats: { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 4200, lines: 90, combo: 4 } } });
   fresh('zen');
@@ -798,13 +805,12 @@ section('Saved runs, one slot per mode');
   const menu = els.overlay.innerHTML;
 
   check('starting marathon left the zen run alone', hasSavedRun('zen'));
-  check('both runs offered', menu.includes('data-act="continue"') && menu.includes('data-act="continue-zen"'));
-  check('each resume shows its own progress', menu.includes('3,210') && menu.includes('42'));
-  // The mode name is already on the row beside it, so the resume button carries
-  // progress alone — three "RESUME <MODE> · <score>" buttons stacked ran off the
-  // bottom of a phone.
-  check('classic resume carries its score',
-        /data-act="continue">RESUME CLASSIC<em>3,210<\/em>/.test(menu), 'resume button lost its progress');
+  // One run going in each mode, so neither needs a question asked of it.
+  check('each mode resumes in one tap',
+        menu.includes('data-act="go-marathon"') && menu.includes('data-act="go-zen"'));
+  check('carrying which clears it was and how far it got',
+        /data-act="go-marathon">RESUME CLASSIC<em>NORMAL · 3,210<\/em>/.test(menu),
+        'resume button lost its progress');
 
   // A plain tap picks up whichever was played most recently.
   check('most recent mode is what a plain tap resumes', game.pendingRun() === 'marathon', game.pendingRun());
@@ -837,40 +843,90 @@ section('Menu wording');
   game.showMenu();
   const menu = els.overlay.innerHTML;
 
-  check('menu offers zen', menu.includes('data-act="zen"'));
+  check('menu offers zen', menu.includes('data-act="new-zen"'));
   check('no tap prompt competing with them', !menu.includes('TAP TO'), 'menu still hints at tapping');
   check('resume button carries its progress',
-        /data-act="continue-zen">RESUME ZEN<em>42 LINES<\/em>/.test(menu), 'no progress on button');
-  // Start buttons are bare mode names; only RESUME carries a verb, which is what
-  // keeps three modes on one row instead of wrapping to two.
+        /data-act="go-zen">RESUME ZEN<em>NORMAL · 42 LINES<\/em>/.test(menu), 'no progress on button');
   // Bare mode names did not read as "this starts a game" — the verb has to be on
   // the button, not implied by the RESUME beside it.
-  check('start buttons say what they do', /data-act="zen">NEW ZEN</.test(menu), 'start button lost its verb');
-  check('every mode can be started', ['new', 'zen', 'cascade'].every(a => menu.includes(`data-act="${a}"`)));
+  check('start buttons say what they do', /data-act="new-zen">NEW ZEN</.test(menu), 'start button lost its verb');
+  check('both modes are offered', ['new-marathon', 'new-zen'].every(a => menu.includes(`data-act="${a}"`)));
 
-  // Worst case: a run going in all three. Starting on the first row, resuming
-  // below it, one break between them.
-  fresh('marathon'); G.score = 3210; game.showMenu();
-  fresh('zen'); G.lines = 42; game.showMenu();
-  fresh('cascade'); G.score = 18400; game.showMenu();
+  // The clears are a second tap on the button itself, not a mode of their own.
+  const menuRow = menu.slice(menu.indexOf('class="menuBtns"'));
+  check('no menu button names a clear on its own',
+        !menuRow.includes('>NORMAL<') && !menuRow.includes('>CASCADE<'),
+        'clears shown before being asked for');
+
+  game.openPicker('marathon');
+  const opened = els.overlay.innerHTML;
+  check('pressing one offers its two clears',
+        opened.includes('data-act="play-marathon"') && opened.includes('data-act="play-marathon-cascade"'));
+  check('marked as the choice they are', (opened.match(/menuBtn variant/g) || []).length === 2,
+        String((opened.match(/menuBtn variant/g) || []).length));
+  check('the mode they belong to stays lit', /class="menuBtn on" data-act="new-marathon"/.test(opened));
+
+  // Below, so the row already read doesn't move out from under the thumb.
+  check('and they sit below it',
+        opened.indexOf('data-act="play-marathon"') > opened.indexOf('data-act="new-marathon"'),
+        'clears appeared above the button');
+  // Unfilled: a filled background reads as already chosen, and neither is yet.
+  const clearsCss = fs.readFileSync('style.css', 'utf8').replace(/\s+/g, ' ');
+  check('and are not styled as though already picked',
+        !/\.menuBtn\.variant \{[^}]*background:/.test(clearsCss),
+        'the unchosen clears carry a fill');
+
+  check('pressing it again puts them away', (game.openPicker('marathon'),
+        !els.overlay.innerHTML.includes('data-act="play-marathon"')));
+  check('every slot can be started', BASES.every(mode => {
+    game.openPicker(mode);
+    const html = els.overlay.innerHTML;
+    const ok = VARIANTS_FOR(mode).every(slot => html.includes(`data-act="play-${slot}"`));
+    game.openPicker(mode);
+    return ok;
+  }));
+  game.showMenu();
+
+  // Worst case: a run going in all four slots. The top row must not grow with
+  // them — that is the whole reason the clears moved inside their mode.
+  for (const slot of SLOTS) { fresh(slot); G.score = 3210; G.lines = 42; game.showMenu(); }
   const full = els.overlay.innerHTML;
-  const buttons = (full.match(/class="menuBtn"/g) || []).length;
-  const breaks = (full.match(/btnBreak/g) || []).length;
-  check('all three modes are offered with their runs', buttons === 6, String(buttons));
-  check('starting and resuming are split by one break', breaks === 1, `${breaks} row breaks, expected 1`);
-  check('no dangling row break', !full.includes('btnBreak"></span></div>'), 'trailing break');
-  // Progress on its own line is what keeps three resume buttons off three rows.
-  // Sliced to the button row: the theme swatches carry an <em> each too.
-  const btnRow = full.slice(full.indexOf('menuBtns'));
-  check('progress sits on a second line', (btnRow.match(/<em>/g) || []).length === 3,
-        String((btnRow.match(/<em>/g) || []).length));
-  check('with a way to start over beside it', menu.includes('data-act="new"'));
+  const buttons = (full.match(/class="menuBtn[ "]/g) || []).length;
+  check('every saved run gets a button of its own', buttons === 6, String(buttons));
+  check('one per slot, none doubled up',
+        SLOTS.every(slot => (full.match(new RegExp(`data-act="go-${slot}"`, 'g')) || []).length === 1),
+        'a slot is missing or listed twice');
+
+  // Which column a run is in is half of how it gets found, so it must not depend
+  // on what else happens to be saved.
+  check('classic runs sit in the left column',
+        (full.match(/class="menuBtn col0" data-act="go-marathon/g) || []).length === 2, 'classic column');
+  check('zen runs in the right', (full.match(/class="menuBtn col1" data-act="go-zen/g) || []).length === 2,
+        'zen column');
+  check('each naming its clears and its score',
+        /data-act="go-marathon-cascade">RESUME CLASSIC<em>CASCADE · 3,210<\/em>/.test(full),
+        'a saved run gave no way to tell it from the other');
+
+  // Three groups, three rules: starting, resuming, and the rest.
+  check('the groups are split by rules', (full.match(/class="menuRule"/g) || []).length === 3,
+        String((full.match(/class="menuRule"/g) || []).length));
+
+  game.openPicker('marathon');
+  const deepest = els.overlay.innerHTML;
+  check('opening the clears adds its two, and no more',
+        (deepest.match(/class="menuBtn[ "]/g) || []).length === 8,
+        String((deepest.match(/class="menuBtn[ "]/g) || []).length));
+  game.showMenu();
+
+  check('with a way to start over beside it', menu.includes('data-act="new-marathon"'));
   // One verb throughout — no CONTINUE anywhere alongside RESUME.
   check('one word for the action, not two', !menu.includes('CONTINUE'), 'mixed CONTINUE and RESUME');
   // And one name per mode: it was GAME on the buttons but marathon in the code.
   check('the other mode is named too', menu.includes('CLASSIC') && !menu.includes('GAME'), 'a mode is still called GAME');
 
-  // "1 LINES" was on screen.
+  // "1 LINES" was on screen. Wants a clean store: with a run going in both of
+  // Zen's slots the button asks which, and carries no number to pluralise.
+  reset();
   fresh('zen');
   G.lines = 1;
   game.showMenu();
@@ -894,6 +950,76 @@ section('Legacy run migration');
   state.migrateLegacyRun();
   check('a legacy save is rehomed to its mode', hasSavedRun('zen'));
   check('and the old key is cleared', !('blockfall.run' in store));
+
+  // Cascade's own slot, from when it was a mode. A run she left going must come
+  // back under the pair it always was, not vanish.
+  reset();
+  store['blockfall.run.cascade'] = JSON.stringify({
+    v: 1, mode: 'cascade', score: 18400, grid: '.'.repeat(ROWS * COLS),
+  });
+  state.migrateLegacyRun();
+  check('a cascade run survives the split', hasSavedRun('marathon-cascade'));
+  check('carrying its score', loadRun('marathon-cascade').score === 18400,
+        String(loadRun('marathon-cascade').score));
+  check('and the mode-era key is gone', !('blockfall.run.cascade' in store));
+
+  // ...and its record along with it.
+  reset();
+  store['blockfall.stats'] = JSON.stringify({
+    marathon: { score: 100, lines: 5, combo: 2 },
+    zen: { score: 0, lines: 0, combo: 0 },
+    cascade: { score: 9100, lines: 33, combo: 4 },
+  });
+  const migrated = state.loadStats();
+  check('a cascade record lands on classic cascade',
+        migrated['marathon-cascade'].score === 9100, JSON.stringify(migrated['marathon-cascade']));
+  check('without disturbing classic', migrated.marathon.score === 100, String(migrated.marathon.score));
+  check('and the pair that never existed starts blank',
+        migrated['zen-cascade'].score === 0, String(migrated['zen-cascade'].score));
+
+  // A resumed cascade run has to know it is one: the flag lives in the payload,
+  // not in the slot it was found under.
+  reset();
+  fresh('marathon-cascade');
+  G.score = 500;
+  game.snapshotRun();
+  check('the save records which clears it was played with',
+        loadRun('marathon-cascade').cascade === true,
+        JSON.stringify(loadRun('marathon-cascade').cascade));
+
+  // The payload written when cascade was a mode says so in `mode` and has no
+  // flag at all. Read literally it came back as plain Classic, and the next
+  // snapshot filed it under Classic as well — one run silently becoming two.
+  reset();
+  store['blockfall.run.cascade'] = JSON.stringify({
+    v: 1, mode: 'cascade', score: 18400, lines: 40, level: 3,
+    grid: '.'.repeat(ROWS * COLS), queue: ['T', 'S', 'Z', 'L', 'J', 'I', 'O'],
+    bag: null, hold: null, canHold: true, combo: -1, backToBack: false,
+    runBest: 0, newBest: false,
+  });
+  state.migrateLegacyRun();
+  check('the moved payload is rewritten as the pair, not just relabelled',
+        loadRun('marathon-cascade').cascade === true &&
+        loadRun('marathon-cascade').mode === 'marathon',
+        JSON.stringify(loadRun('marathon-cascade')).slice(0, 90));
+
+  game.resumeRun('marathon-cascade');
+  check('and it resumes still cascading', G.cascade === true, String(G.cascade));
+  check('with its score intact', G.score === 18400, String(G.score));
+  game.snapshotRun();
+  check('without leaving a phantom run in the classic slot', !hasSavedRun('marathon'),
+        'resuming cascade wrote a second run into normal');
+
+  // Belt and braces: a phone that migrated under the old code has the unrewritten
+  // payload sitting in the slot already, so reading has to forgive it too.
+  reset();
+  store['blockfall.run.marathon-cascade'] = JSON.stringify({
+    v: 1, mode: 'cascade', score: 900, grid: '.'.repeat(ROWS * COLS),
+    queue: ['T', 'S', 'Z', 'L', 'J', 'I', 'O'],
+  });
+  game.resumeRun('marathon-cascade');
+  check('a payload already migrated by the broken version still cascades',
+        G.cascade === true, String(G.cascade));
 }
 
 section('HUD polish');
@@ -1152,8 +1278,8 @@ section('Resuming a run');
   // Simulate a relaunch: wipe live state, then resume from storage alone.
   game.showMenu();
   check('menu still offers the run', hasSavedRun('marathon'));
-  check('menu shows a new-game escape hatch', els.overlay.innerHTML.includes('data-act="new"'));
-  check('menu offers the run as a button', els.overlay.innerHTML.includes('data-act="continue"'));
+  check('menu shows a new-game escape hatch', els.overlay.innerHTML.includes('data-act="new-marathon"'));
+  check('menu offers the run as a button', els.overlay.innerHTML.includes('data-act="go-marathon"'));
 
   game.resumeRun();
   check('resumes into the game, not onto a second screen', G.state === 'playing', G.state);
@@ -1259,7 +1385,10 @@ section('Settings are hers, and they stay set');
   pressAction('undos-up');
   check('undos step up', G.settings.undos === 1, String(G.settings.undos));
   check('and the screen redraws to say what that means',
-        els.overlay.innerHTML.includes('1 TAKE-BACKS EACH GAME'));
+        els.overlay.innerHTML.includes('1 TAKE-BACK EACH GAME'), 'says 1 TAKE-BACKS');
+  pressAction('undos-up');
+  check('counted properly past one', els.overlay.innerHTML.includes('2 TAKE-BACKS EACH GAME'));
+  pressAction('undos-down');
 
   for (let i = 0; i < 9; i++) pressAction('undos-up');
   check('stopping at the ceiling', G.settings.undos === UNDO_MAX, String(G.settings.undos));
@@ -1286,7 +1415,7 @@ section('Settings are hers, and they stay set');
         JSON.stringify(clamped));
 
   pressAction('back');
-  check('BACK returns to the menu it came from', els.overlay.innerHTML.includes('data-act="new"'));
+  check('BACK returns to the menu it came from', els.overlay.innerHTML.includes('data-act="new-marathon"'));
 
   // Reached from a run, BACK owes her the pause screen instead.
   reset();
@@ -1330,7 +1459,11 @@ section('Zen speed is hers to pick');
   check('where it says so in words', els.overlay.innerHTML.includes('KEEPS SPEEDING UP'));
   pressAction('zen-down');
   check('and steps back down to the fastest cap', G.settings.zenCap === 10, String(G.settings.zenCap));
-  check('reading as a speed, not a level number', els.overlay.innerHTML.includes('MS A ROW'));
+  // A level number means nothing on its own; how long a piece takes to reach the
+  // floor is something she can picture without converting it first.
+  check('read as a time she can picture, not a level number',
+        /RELENTLESS · 2 SECONDS TO THE FLOOR/.test(els.overlay.innerHTML),
+        els.overlay.innerHTML.match(/class="setSub">[^<]*/g)?.join(' | ') || 'no sub line');
   for (let i = 0; i < 20; i++) pressAction('zen-down');
   check('down to the slowest', G.settings.zenCap === 1, String(G.settings.zenCap));
 }
@@ -1485,9 +1618,10 @@ section('Starting another game is a button, not a hint');
   game.showMenu();
   const first = els.overlay.innerHTML;
   check('a first-run menu offers a new game outright',
-        first.includes('data-act="new"'), 'classic mode was tap-only');
-  check('with the other modes beside it',
-        first.includes('data-act="zen"') && first.includes('data-act="cascade"'));
+        first.includes('data-act="new-marathon"'), 'classic mode was tap-only');
+  check('with the other mode beside it', first.includes('data-act="new-zen"'));
+  check('and no resume button with nothing to resume',
+        !first.includes('data-act="go-'), 'offered a resume on a blank slate');
 
   reset();
   fresh('zen');
@@ -1506,6 +1640,7 @@ section('Starting another game is a button, not a hint');
   // Used to hard-code marathon, silently switching mode.
   pressAction('restart');
   check('play again stays in the mode you died in', G.mode === 'zen', G.mode);
+  check('and with the clears it was played with', G.cascade === false, String(G.cascade));
   check('and starts from scratch', G.score === 0 && G.lines === 0, `${G.score}/${G.lines}`);
 }
 
@@ -1547,11 +1682,12 @@ section('Cascade gravity');
   check('a settled board is left alone', G.grid[ROWS - 1].join('|') === before);
 }
 
-section('Cascade mode');
+section('Cascade clears');
 {
   reset();
-  fresh('cascade');
-  check('cascade is its own mode', G.mode === 'cascade', G.mode);
+  fresh('marathon-cascade');
+  check('cascade rides on top of a mode rather than replacing it',
+        G.mode === 'marathon' && G.cascade === true, `${G.mode}/${G.cascade}`);
 
   // Bottom row complete but for one column, with a lone block stranded two rows
   // up in that column. Clearing the bottom row drops it into the next gap.
@@ -1571,7 +1707,7 @@ section('Cascade mode');
   // vertical I down column 0 completes the bottom row, and when what is left
   // settles, the stranded block falls in to complete it a second time.
   reset();
-  fresh('cascade');
+  fresh('marathon-cascade');
   clearGrid();
   for (let x = 1; x < COLS; x++) G.grid[ROWS - 1][x] = 'I';
   for (let x = 1; x < COLS - 1; x++) G.grid[ROWS - 2][x] = 'I';
@@ -1585,7 +1721,7 @@ section('Cascade mode');
 
   // Combo counts placements, not links. One piece cannot run it up.
   reset();
-  fresh('cascade');
+  fresh('marathon-cascade');
   clearGrid();
   for (let y = ROWS - 4; y < ROWS; y++) fillRow(y, 0);
   put('I', -2, 0, 1);
@@ -1608,7 +1744,7 @@ section('Cascade mode');
   // The fall has to be watchable: snapping the survivors into place left a
   // chained clear looking like a bonus with nothing to explain it.
   reset();
-  fresh('cascade');
+  fresh('marathon-cascade');
   clearGrid();
   fillRow(ROWS - 1, 0);
   G.grid[ROWS - 4][5] = 'T'; // stranded three rows up, with air beneath it
@@ -1652,19 +1788,57 @@ section('Cascade mode');
   pumpMs(CLEAR_TIME_MAX + 200);
   check('classic never settles', G.falling === null && G.state === 'playing', G.state);
 
-  // Records and saves are per mode, so a cascade score cannot flatter classic.
+  // Records and saves are per slot, so a cascade score cannot flatter classic.
   reset();
-  fresh('cascade');
+  fresh('marathon-cascade');
   G.score = 12000;
   G.lines = 40;
   game.showMenu();
-  check('cascade keeps its own record', G.stats.cascade.score === 12000, String(G.stats.cascade.score));
+  check('cascade keeps its own record',
+        G.stats['marathon-cascade'].score === 12000, String(G.stats['marathon-cascade'].score));
   check('and leaves classic alone', G.stats.marathon.score === 0, String(G.stats.marathon.score));
-  check('with its own saved run', hasSavedRun('cascade'));
-  check('offered on the menu', els.overlay.innerHTML.includes('data-act="continue-cascade"'));
+  check('with its own saved run', hasSavedRun('marathon-cascade'));
+  check('offered on the menu', els.overlay.innerHTML.includes('data-act="go-marathon-cascade"'));
 
-  game.resumeRun('cascade');
-  check('and it resumes as cascade', G.mode === 'cascade' && G.score === 12000, `${G.mode}/${G.score}`);
+  game.resumeRun('marathon-cascade');
+  check('and it resumes with cascade clears',
+        G.mode === 'marathon' && G.cascade === true && G.score === 12000,
+        `${G.mode}/${G.cascade}/${G.score}`);
+}
+
+section('Cascade on either mode');
+{
+  // The pair that never existed before: Zen's rescue with cascade's chains.
+  reset();
+  fresh('zen-cascade');
+  check('zen can be played with cascade clears',
+        G.mode === 'zen' && G.cascade === true, `${G.mode}/${G.cascade}`);
+
+  // Topping out rescues rather than ending the run, exactly as plain Zen does.
+  clearGrid();
+  fillFrom(HIDDEN, 'T');
+  put('T', 4, 0, 0);
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 400);
+  check('and still rescues instead of dying', G.state !== 'dying' && G.state !== 'over', G.state);
+
+  // Rescue shifts whole rows, so it can never strand a cell in mid-air — which
+  // is the one way it could have fed a chain that nothing set off.
+  check('with nothing left floating', G.falling === null, JSON.stringify(G.falling));
+
+  // Zen's gravity cap is a property of the mode, not of the clears.
+  G.level = 20;
+  const zenCascade = game.gravityInterval();
+  G.cascade = false;
+  check('the zen speed cap applies whichever clears are on',
+        game.gravityInterval() === zenCascade, String(zenCascade));
+
+  // And the four keep four separate records.
+  reset();
+  for (const slot of SLOTS) { fresh(slot); G.score = 100; game.showMenu(); }
+  check('four slots, four records', SLOTS.every(slot => G.stats[slot].score === 100),
+        JSON.stringify(Object.fromEntries(SLOTS.map(s => [s, G.stats[s].score]))));
+  check('and four saves', SLOTS.every(slot => hasSavedRun(slot)));
 }
 
 section('End-of-run tally');

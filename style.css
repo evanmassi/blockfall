@@ -263,14 +263,27 @@ html, body {
   color:var(--text); text-shadow:0 0 14px var(--accent), 0 0 34px var(--accent);
 }
 
-/* One card per mode, identical in shape — Zen is not a lesser record. Sized so
-   all three share a row: a six-digit score at the old 22px was 132px of glyphs
-   on its own, which stacked them two deep and pushed the buttons off screen. */
-.records { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+/* A grid, not a row of cards: mode across, clears down. Loose cards had to name
+   themselves "CLASSIC CASCADE", which reads as a mode of its own — the exact
+   confusion that splitting cascade off was meant to end. The row label column is
+   sized to the words, the two score columns share what is left equally. */
+.records {
+  display:grid; grid-template-columns:auto 1fr 1fr;
+  align-items:center; justify-items:center; gap:4px 8px;
+  max-width:300px;
+}
+.recHead { font-size:7px; letter-spacing:.14em; color:var(--dim); }
+/* Right-aligned against its row so the label sits with the numbers it heads. */
+.recSide { font-size:6px; letter-spacing:.1em; color:var(--dim); justify-self:end; }
 .recordCard {
   display:flex; flex-direction:column; align-items:center; gap:4px;
   padding:7px 10px; min-width:96px;
   border-top:1px solid var(--edge); border-bottom:1px solid var(--edge);
+}
+/* Held open at the same height as a filled one, so the grid stays a grid. */
+.recordCard.empty {
+  justify-content:center; min-height:38px;
+  font-size:9px; color:var(--dim); opacity:.5;
 }
 .recordCard .label { font-size:7px; letter-spacing:.18em; }
 .recordCard b {
@@ -386,7 +399,46 @@ html, body {
 .menuBtn em { font-size:7px; font-style:normal; letter-spacing:.04em; color:var(--text); }
 .menuBtn:active { color:var(--text); border-color:var(--accent); background:var(--edge); }
 .menuBtn:active em { color:var(--accent); }
+/* The mode whose clears are showing. Lit the same way a chosen theme swatch is,
+   because it means the same thing — this is the one you have picked. */
+.menuBtn.on {
+  color:var(--text); border-color:var(--accent);
+  box-shadow:0 0 14px -3px var(--accent);
+}
 .btnBreak { flex-basis:100%; height:0; margin:0; }
+
+/* The two clears, under the mode that opened them. Deliberately *not* filled: a
+   filled background reads as "chosen", and neither of these is chosen yet. They
+   sit narrower and dimmer instead, which reads as a step down from the row above.  */
+/* Pulled up against the row that opened it — the overlay's own 14px gap read as
+   a separate row of the menu rather than as something belonging to the button. */
+.menuBtns.clears { gap:8px; margin-top:-9px; padding:0 6px 6px; animation:clears-in .16s ease-out; }
+.menuBtn.variant {
+  min-height:38px; padding:7px 16px;
+  font-size:7px; letter-spacing:.1em;
+  border-color:var(--edge); color:var(--dim);
+}
+.menuBtn.variant:active { color:var(--text); border-color:var(--accent); background:var(--edge); }
+@keyframes clears-in {
+  0%   { opacity:0; transform:translateY(-4px); }
+  100% { opacity:1; transform:translateY(0); }
+}
+
+/* One column per mode, so a run is found by where it sits as much as by reading
+   it. Columns pack upward: holding a cell open for a run that isn't there costs
+   more than the alignment is worth. */
+.menuBtns.resumes {
+  display:grid; grid-template-columns:1fr 1fr; align-items:start;
+  width:100%; max-width:320px;
+}
+.menuBtns.resumes .col0 { grid-column:1; }
+.menuBtns.resumes .col1 { grid-column:2; }
+
+/* Hairlines, and only as wide as the buttons they separate. */
+.menuRule {
+  width:100%; max-width:300px; height:1px;
+  background:var(--edge);
+}
 
 /* Reference material behind a line of text, not a 46px button row. */
 .textBtn {
@@ -418,13 +470,25 @@ html, body {
   background:var(--panel); border:1px solid var(--edge); border-radius:var(--radius);
   color:var(--dim);
 }
-.setToggle { min-width:52px; min-height:30px; padding:8px 10px; letter-spacing:.06em; }
+.setToggle { min-width:56px; min-height:32px; padding:8px 10px; letter-spacing:.06em; }
+/* On is lit the way a chosen theme and an open mode are, rather than differing
+   only by the word inside it — off and on read the same at a glance otherwise. */
+.setToggle.on {
+  color:var(--text); border-color:var(--accent);
+  box-shadow:0 0 14px -3px var(--accent);
+}
 .setToggle:active { color:var(--accent); border-color:var(--accent); }
 
 /* Fixed width on the value so stepping 9 -> 10 doesn't shove the buttons sideways. */
 .stepper { display:flex; align-items:center; gap:8px; }
-.stepper b { min-width:52px; font-size:9px; letter-spacing:.04em; color:var(--text); text-align:center; }
-.stepBtn { width:30px; height:30px; padding:0; }
+.stepper b {
+  min-width:62px; font-size:15px; line-height:1;
+  letter-spacing:.02em; color:var(--text); text-align:center;
+}
+/* OFF and NO CAP sit in the same slot as the numbers; at 15px they would push
+   the buttons off the row. */
+.stepper b.word { font-size:8px; letter-spacing:.06em; }
+.stepBtn { width:32px; height:32px; padding:0; }
 .stepBtn:active { color:var(--accent); border-color:var(--accent); }
 
 .bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
