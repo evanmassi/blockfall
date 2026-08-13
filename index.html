@@ -33,6 +33,11 @@ try {
 </head>
 <body>
 <div id="app">
+  <!-- Outside #overlay on purpose: the overlay is a scroll container and clips
+       to the viewport, which installed is 62pt shorter than the screen. Out
+       here it can be sized to the screen and reach the bottom of it. -->
+  <div class="bgfall" id="bgfall" aria-hidden="true" hidden></div>
+
   <header id="hud">
     <div id="scoreBox">
       <span class="label">SCORE</span>

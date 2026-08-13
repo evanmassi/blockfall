@@ -4,7 +4,7 @@
 import { G, loadStats, loadSettings, migrateLegacyRun } from './state.js';
 import { setTheme, savedThemeName } from './themes.js';
 import { resize, render, tickQueue } from './render.js';
-import { tickScore } from './ui.js';
+import { tickScore, syncScreenHeight } from './ui.js';
 import { update, showMenu, togglePause, snapshotRun } from './game.js';
 import { updateKeyRepeat } from './input.js';
 import { Sound } from './audio.js';
@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b47';
+const BUILD = 'b48';
 
 // An installed app can't be handed a query string — the icon keeps whatever URL
 // it was added with — so five taps on the wordmark toggle it from inside. That
@@ -121,7 +121,7 @@ document.addEventListener('visibilitychange', () => {
   else snapshotRun();
 });
 window.addEventListener('pagehide', snapshotRun);
-window.addEventListener('resize', resize);
+window.addEventListener('resize', () => { syncScreenHeight(); resize(); });
 window.visualViewport?.addEventListener('resize', resize);
 
 let lastFrame = 0;
@@ -150,6 +150,7 @@ G.stats = loadStats();
 G.settings = loadSettings(); // before showMenu, which reads them to size the undo button
 muteBtn.textContent = Sound.muted ? '♪̸' : '♪';
 setTheme(savedThemeName()); // resize() does the sprite/well rebuild that follows
+syncScreenHeight();          // before the menu, which sizes its backdrop from it
 resize();
 showMenu();
 requestAnimationFrame(t => { lastFrame = t; frame(t); });

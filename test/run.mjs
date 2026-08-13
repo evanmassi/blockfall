@@ -37,9 +37,13 @@ section('Boot');
   check('menu rendered on load', menu.includes('<span>B</span>') && menu.includes('OCKFALL'));
   check('wordmark L is a drawn tetromino', menu.includes('class="markL"'));
   check('mark has a floor to land on', menu.includes('markFloor'));
-  check('menu has drifting debris behind it', menu.includes('bgfall') && menu.includes('debrisCv'));
-  const debris = menu.slice(menu.indexOf('bgfall'), menu.indexOf('markWrap'));
-  const types = [...debris.matchAll(/data-type="(\w+)"/g)].map(m => m[1]);
+  // Its own element outside #overlay: the overlay is a scroll container and
+  // clips to the viewport, which installed is 62pt shorter than the screen.
+  check('menu has drifting debris behind it',
+        els.bgfall.innerHTML.includes('debrisCv') && els.bgfall.hidden === false);
+  check('and they are not inside the overlay to be clipped by it',
+        !els.overlay.innerHTML.includes('debrisCv'), 'debris still in the overlay');
+  const types = [...els.bgfall.innerHTML.matchAll(/data-type="(\w+)"/g)].map(m => m[1]);
   check('debris are real tetrominoes', types.length > 0 && types.every(t => TYPES.includes(t)),
         types.join(' '));
   check('theme synced to CSS vars', cssVars['--accent'] === '#ff2d95', JSON.stringify(cssVars['--accent']));
@@ -74,10 +78,7 @@ section('Boot');
 section('Menu depth field');
 {
   reset();
-  const field = () => {
-    const html = els.overlay.innerHTML;
-    return html.slice(html.indexOf('bgfall'), html.indexOf('markWrap'));
-  };
+  const field = () => els.bgfall.innerHTML;
 
   const first = field();
   const pieces = first.match(/<canvas [^>]*>/g) || [];
@@ -114,26 +115,14 @@ section('Menu depth field');
   const blurred = pieces.filter(p => p.includes('filter:blur')).length;
   check('only the back of the field carries a filter', blurred >= 7 && blurred <= 11, String(blurred));
 
-  // Opening a button re-renders the menu, which rebuilds these elements and so
-  // restarts their animations. Without the elapsed time added back as delay,
-  // every block on screen jumped to where it was when the menu opened.
-  const drift = () => [...els.overlay.innerHTML.replace(/\s+/g, ' ').matchAll(
-    /data-type="(\w+)" data-cell="\d+" style="left:([\d.]+)%;[^"]*animation-delay:-([\d.]+)s/g)]
-    .map(m => ({ type: m[1], left: m[2], delay: +m[3] }));
-
-  const settled = drift();
-  const realNow = Date.now;
-  Date.now = () => realNow() + 2000; // two seconds of falling
+  // Opening a button re-renders the menu, which used to rebuild these elements
+  // and restart every animation on screen. Out on their own they are untouched
+  // by it, so there is nothing left to restart.
+  const settled = els.bgfall.innerHTML;
   game.openPicker('marathon');
-  Date.now = realNow;
-  const resumed = drift();
-
-  check('the same field survives a re-render', settled.length === 14 &&
-        settled.every((p, i) => resumed[i]?.type === p.type && resumed[i]?.left === p.left),
-        `${settled.length} then ${resumed.length}`);
-  check('carried on from where it had fallen to',
-        settled.every((p, i) => Math.abs((resumed[i].delay - p.delay) - 2) < 0.11),
-        settled.map((p, i) => (resumed[i].delay - p.delay).toFixed(1)).join(' '));
+  check('a menu re-render leaves the field alone entirely',
+        els.bgfall.innerHTML === settled, 'the backdrop was rebuilt');
+  game.openPicker('marathon');
 
   // The title drop is part of that reveal too, and replayed on every re-render.
   const introCss = fs.readFileSync('style.css', 'utf8').replace(/\s+/g, ' ');
@@ -237,16 +226,16 @@ section('Offline packaging');
         ['#undoBtn', '.setToggle', '.stepBtn'].every(s => tapSelectors.some(t => t.includes(s))),
         tapSelectors.join(','));
 
-  // Installed, black-translucent starts the web view under the status bar but
-  // sizes it to screen-minus-status-bar — 812 of 874 — so the page stops 62pt
-  // above the physical bottom and nothing can be drawn into the strip below it.
-  // The strip is the body's colour and matches; the debris ending at a hard line
-  // is what read as a seam, so they have to fade before they reach it.
-  const bgfall = /\.bgfall \{[^}]*\}/.exec(flat)?.[0] ?? '';
-  check('the debris fade out before the foot of the viewport',
-        /mask-image:linear-gradient\(to bottom/.test(bgfall), bgfall || 'no .bgfall rule');
-  check('with the webkit prefix iOS still needs',
-        /-webkit-mask-image:linear-gradient/.test(bgfall), 'unprefixed only');
+  // Installed, black-translucent starts the web view at the top of the screen but
+  // sizes it to screen-minus-status-bar — 812 of 874 — so anything bound to the
+  // viewport stops 62pt above the bottom and the blocks vanish at a line. The
+  // backdrop is sized to the screen instead, and lives outside the overlay,
+  // which is a scroll container and would clip it back to the viewport.
+  const bgfall = /#bgfall \{[^}]*\}/.exec(flat)?.[0] ?? '';
+  check('the backdrop is sized to the screen, not the viewport',
+        /height:var\(--screen-h/.test(bgfall), bgfall || 'no #bgfall rule');
+  check('and positioned against the screen too',
+        /position:fixed/.test(bgfall), bgfall);
 
   // #app * would otherwise leave the overlay unscrollable by finger, so a menu
   // taller than the screen loses everything past the fold with no way to reach it.
@@ -259,7 +248,7 @@ section('Offline packaging');
   // Splash motion has to be opt-out, and must never gate starting a game.
   check('motion respects prefers-reduced-motion',
         /@media\s*\(prefers-reduced-motion:\s*reduce\)/.test(css) &&
-        /\.bgfall\s*\{\s*display:\s*none/.test(css.replace(/\s+/g, ' ')));
+        /#bgfall\s*\{\s*display:\s*none/.test(css.replace(/\s+/g, ' ')));
 
   check('worker registration resolves against the module', read('src/main.js').includes("new URL('../sw.js', import.meta.url)"));
 

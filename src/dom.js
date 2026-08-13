@@ -8,7 +8,7 @@ export const holdCv = $('holdCanvas'), holdCtx = holdCv.getContext('2d');
 export const nextCv = $('nextCanvas'), nextCtx = nextCv.getContext('2d');
 
 export const app = $('app'), hud = $('hud');
-export const stage = $('stage'), sysBtns = $('sysBtns');
+export const stage = $('stage'), sysBtns = $('sysBtns'), bgfall = $('bgfall');
 export const railLeft = $('railLeft'), railRight = $('railRight');
 export const overlay = $('overlay');
 export const toastEl = $('toast'), countdownEl = $('countdown');

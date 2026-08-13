@@ -8,7 +8,7 @@ import { applyTheme, drawThemePreview, drawWordmarkL, drawDebris } from './rende
 import { READY_MS, READY_BEATS } from './config.js';
 import {
   overlay, toastEl, countdownEl, scoreEl, levelEl, linesEl, comboStat, comboEl,
-  undoBtn, undoLeftEl, stage, hud, sysBtns,
+  undoBtn, undoLeftEl, stage, hud, sysBtns, bgfall,
 } from './dom.js';
 
 export function themeBar() {
@@ -58,18 +58,13 @@ function debrisField() {
   }));
 }
 
-let field = null;
-
 /**
- * @param {number} [drifted]  seconds the field has already been falling. A
- *   re-render rebuilds these elements from scratch, which restarts their
- *   animations — passing the elapsed time as extra negative delay picks each
- *   block up where it was instead of throwing it back to where it started.
- *   Omit for a new field.
+ * Fills the backdrop element and shows it. It lives outside #overlay, so it is
+ * built once per visit and never re-rendered — which also means its animations
+ * are never restarted by the menu redrawing itself.
  */
-export function menuBackdrop(drifted) {
-  if (drifted === undefined) field = debrisField();
-  const bits = field.map(({ d, type, left, sign, phase }) => {
+export function showBackdrop() {
+  bgfall.innerHTML = debrisField().map(({ d, type, left, sign, phase }) => {
     // Snapped to even pixels: the sprite cache keys on size and is only dropped
     // on resize or theme change, so free-floating sizes would grow it forever.
     const unit = Math.max(4, Math.round(lerp(4, 20, d) / 2) * 2);
@@ -83,9 +78,28 @@ export function menuBackdrop(drifted) {
       opacity:${lerp(0.05, 0.22, d).toFixed(3)};
       ${blur > 0.15 ? `filter:blur(${blur.toFixed(2)}px);` : ''}
       animation-duration:${dur.toFixed(1)}s;
-      animation-delay:-${(phase * dur + (drifted ?? 0)).toFixed(1)}s;"></canvas>`;
+      animation-delay:-${(phase * dur).toFixed(1)}s;"></canvas>`;
   }).join('');
-  return `<div class="bgfall" aria-hidden="true">${bits}</div>`;
+  bgfall.hidden = false;
+  for (const cv of bgfall.querySelectorAll?.('.debrisCv') || []) {
+    drawDebris(cv, cv.dataset.type, +cv.dataset.cell);
+  }
+}
+
+export function hideBackdrop() { bgfall.hidden = true; }
+
+/**
+ * The height the backdrop has to span to reach the bottom of the screen.
+ *
+ * Installed, black-translucent starts the web view at the top of the screen but
+ * sizes it to screen-minus-status-bar, so `screen.height` exceeds the viewport
+ * by exactly the strip the blocks were vanishing into. Everywhere else the two
+ * agree and this resolves to the viewport.
+ */
+export function syncScreenHeight() {
+  const vp = window.innerHeight || 0;
+  const px = Math.max(vp, window.screen?.height || 0);
+  document.documentElement.style.setProperty('--screen-h', px ? `${px}px` : '100%');
 }
 
 // Canvases in overlay markup can only be drawn once they are in the document,
@@ -97,9 +111,6 @@ function paintOverlayCanvases() {
   }
   const mark = overlay.querySelector?.('.markL');
   if (mark) drawWordmarkL(mark);
-  for (const cv of overlay.querySelectorAll?.('.debrisCv') || []) {
-    drawDebris(cv, cv.dataset.type, +cv.dataset.cell);
-  }
 }
 
 // pointerdown, not click: `touch-action: none` on the board suppresses
@@ -215,6 +226,7 @@ export function setBoardShowing(on) {
 export function hideOverlay() {
   overlay.classList.add('hidden');
   setBoardShowing(true);
+  hideBackdrop();
   setChrome('base');
 }
 
