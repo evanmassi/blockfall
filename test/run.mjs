@@ -362,6 +362,21 @@ section('Themes');
   check('and the page carries the same colour',
         docStyle.background === '#000000', String(docStyle.background));
 
+  // Installed, the viewport is shorter than the screen — 812 against 874 — and
+  // iOS fills the difference from the page background as it stood at *first
+  // paint*. Repainting from JS happens after that, so the band below the app
+  // kept the stylesheet's colour. The value is remembered for the next launch
+  // and restored by an inline script before anything renders.
+  check('the colour is kept for the next launch',
+        store['blockfall.paint'] === '#000000', String(store['blockfall.paint']));
+  const head = fs.readFileSync('index.html', 'utf8').split('</head>')[0];
+  check('and index restores it before first paint',
+        head.includes("localStorage.getItem('blockfall.paint')") &&
+        head.includes('documentElement.style.background'),
+        'no inline restore in <head>');
+  check('inline rather than fetched, which would land too late',
+        !/<script[^>]*\ssrc=/.test(head), 'the restore is an external script');
+
   // The property that matters, checked as the algebra rather than as a constant:
   // the overlay laid over the page must come back to the page's own colour.
   const settles = () => {

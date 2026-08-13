@@ -106,6 +106,8 @@ export const THEMES = {
 };
 
 const STORE = 'blockfall.theme';
+// Read by the inline script in index.html, which has to run before first paint.
+const PAINT_STORE = 'blockfall.paint';
 
 // Mutated in place: importers hold this binding, so a switch has to change its
 // contents rather than swap the object.
@@ -199,6 +201,12 @@ export function setChrome(mode = chromeMode) {
   // html's background is what propagates to the canvas outside the page.
   if (document.documentElement?.style) document.documentElement.style.background = color;
   if (document.body?.style) document.body.style.background = color;
+
+  // Remembered for the next launch. Installed, the viewport is shorter than the
+  // screen — 812 against 874 — and iOS fills the rest from the page background
+  // as it stood at first paint. Repainting from here happens after that, so the
+  // band kept the stylesheet's colour and never matched the menu above it.
+  try { localStorage.setItem(PAINT_STORE, color); } catch {}
 }
 
 export function setTheme(name) {

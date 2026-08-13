@@ -12,6 +12,17 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-180.png">
 <link rel="stylesheet" href="style.css">
+<script>
+/* Installed, the viewport is shorter than the screen and iOS fills the rest
+   from the page background as it stands at first paint — a band below the app
+   that JS cannot reach afterwards. This runs before that paint, restoring the
+   colour the last session settled on. Inline and tiny on purpose: a separate
+   file would be fetched too late to matter. */
+try {
+  var paint = localStorage.getItem('blockfall.paint');
+  if (paint) document.documentElement.style.background = paint;
+} catch (e) {}
+</script>
 </head>
 <body>
 <div id="app">
