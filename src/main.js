@@ -1,7 +1,7 @@
 // Boot order, the frame loop, and the window-level listeners that belong to no
 // single subsystem.
 
-import { G, loadStats, migrateLegacyRun } from './state.js';
+import { G, loadStats, loadSettings, migrateLegacyRun } from './state.js';
 import { setTheme, savedThemeName } from './themes.js';
 import { resize, render, tickQueue } from './render.js';
 import { tickScore } from './ui.js';
@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b24';
+const BUILD = 'b25';
 
 // ?debug — the real event sequence for a tap. Capture phase, so it sees every
 // event regardless of what any handler does with it.
@@ -88,6 +88,7 @@ function frame(t) {
 
 migrateLegacyRun();
 G.stats = loadStats();
+G.settings = loadSettings(); // before showMenu, which reads them to size the undo button
 muteBtn.textContent = Sound.muted ? '♪̸' : '♪';
 setTheme(savedThemeName()); // resize() does the sprite/well rebuild that follows
 resize();

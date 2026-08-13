@@ -6,7 +6,10 @@ import { THEMES, theme } from './themes.js';
 import { TYPES } from './pieces.js';
 import { applyTheme, drawThemePreview, drawWordmarkL, drawDebris } from './render.js';
 import { READY_MS, READY_BEATS } from './config.js';
-import { overlay, toastEl, countdownEl, scoreEl, levelEl, linesEl, comboStat, comboEl } from './dom.js';
+import {
+  overlay, toastEl, countdownEl, scoreEl, levelEl, linesEl, comboStat, comboEl,
+  undoBtn, undoLeftEl,
+} from './dom.js';
 
 export function themeBar() {
   const swatches = Object.entries(THEMES).map(([key, t]) => `
@@ -154,6 +157,29 @@ export function actionBar(actions) {
 export const textButton = (act, label) =>
   `<button class="textBtn" data-act="${act}">${label}</button>`;
 
+/** Side by side: the overlay is a column, so each one alone costs its own row. */
+export const textRow = (...buttons) => `<div class="textBtns">${buttons.join('')}</div>`;
+
+/** The value doubles as the button: there are only two of them to cycle. */
+export const toggle = (act, value) =>
+  `<button class="setToggle" data-act="${act}">${value}</button>`;
+
+export const stepper = (act, value) => `
+  <div class="stepper">
+    <button class="stepBtn" data-act="${act}-down" aria-label="Less">&minus;</button>
+    <b>${value}</b>
+    <button class="stepBtn" data-act="${act}-up" aria-label="More">+</button>
+  </div>`;
+
+// The sub line says what the value *means*, so a number never has to be decoded
+// — "5" tells her nothing, "STOPS AT 466MS A ROW" does.
+export const settingRow = (label, control, sub) => `
+  <div class="setRow">
+    <span class="label">${label}</span>
+    ${control}
+    <em class="setSub">${sub}</em>
+  </div>`;
+
 export function hideOverlay() {
   overlay.classList.add('hidden');
 }
@@ -193,6 +219,22 @@ export function setCountdown(n) {
     ],
     { duration: READY_MS / READY_BEATS, easing: 'ease-out' }
   );
+}
+
+let undoShown = '';
+
+/**
+ * @param {boolean} on    on screen at all — off entirely when undos are unused.
+ * @param {number} left   charges remaining.
+ * @param {boolean} live  tappable right now.
+ */
+export function setUndo(on, left, live) {
+  const key = `${on}/${left}/${live}`;
+  if (key === undoShown) return;
+  undoShown = key;
+  undoBtn.hidden = !on;
+  undoBtn.disabled = !live;
+  undoLeftEl.textContent = String(left);
 }
 
 let shownScore = 0;

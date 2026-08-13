@@ -31,6 +31,8 @@ export const Sound = {
   rotate()  { this.tone(340, 0.04, 'square', 0.032); },
   lock()    { this.tone(110, 0.07, 'triangle', 0.05); },
   holdSfx() { this.tone(500, 0.06, 'sine', 0.045); },
+  // Falling, where every other confirmation rises: this one gives something back.
+  undo()    { this.arp([494, 392], 0.06, 'sine', 0.05); },
   drop()    { this.tone(76, 0.10, 'sawtooth', 0.045); },
   // A Tetris lands a low hit underneath, for weight the smaller clears lack.
   clear(n) {

@@ -5,12 +5,12 @@ import { CTRL } from './config.js';
 import { G } from './state.js';
 import { view } from './render.js';
 import { Sound } from './audio.js';
-import { stage, overlay, pauseBtn, muteBtn } from './dom.js';
+import { stage, overlay, pauseBtn, muteBtn, undoBtn } from './dom.js';
 import { onOverlayAction } from './ui.js';
 import {
-  move, rotate, softDrop, hardDrop, holdPiece,
+  move, rotate, softDrop, hardDrop, holdPiece, undo,
   startGame, togglePause, showMenu, pendingRun, resumeRun, showPauseScreen,
-  showControls, closeControls,
+  showControls, showSettings, changeSetting, closeSubScreen,
 } from './game.js';
 import { Haptics } from './haptics.js';
 
@@ -119,8 +119,14 @@ onOverlayAction(act => {
   else if (act === 'continue-cascade') resumeRun('cascade');
   else if (act === 'menu') showMenu();
   else if (act === 'how') showControls();
-  else if (act === 'back') closeControls();
+  else if (act === 'settings') showSettings();
+  else if (act === 'back') closeSubScreen();
   else if (act === 'resume') togglePause();
+  else if (act === 'countdown') changeSetting('countdown');
+  else if (act === 'undos-up') changeSetting('undos', 1);
+  else if (act === 'undos-down') changeSetting('undos', -1);
+  else if (act === 'zen-up') changeSetting('zen', 1);
+  else if (act === 'zen-down') changeSetting('zen', -1);
   else if (act === 'haptics') {
     Haptics.setEnabled(!Haptics.enabled);
     Haptics.lock();          // a sample of what was just switched on
@@ -223,6 +229,15 @@ for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
 document.addEventListener('dblclick', e => e.preventDefault());
 
 pauseBtn.addEventListener('click', () => { Sound.init(); togglePause(); });
+
+// pointerdown with the propagation stopped: the button sits inside #stage, whose
+// gesture handler would otherwise read the same tap as a rotate.
+undoBtn.addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  e.preventDefault();
+  Sound.init();
+  undo();
+});
 
 muteBtn.addEventListener('click', () => {
   Sound.muted = !Sound.muted;

@@ -53,7 +53,8 @@ html, body {
 /* ...but tappable controls want `manipulation` instead: still no double-tap
    zoom, but taps behave normally. Needs the #app prefix — `#app *` carries an
    id, so a bare class selector loses to it. */
-#app .menuBtn, #app .swatch, #app .sysBtn, #app .textBtn { touch-action:manipulation; }
+#app .menuBtn, #app .swatch, #app .sysBtn, #app .textBtn,
+#app #undoBtn, #app .setToggle, #app .stepBtn { touch-action:manipulation; }
 
 /* justify-content:center so the HUD and the board are centred together as one
    block. Centring the board inside a top-anchored column instead would open a
@@ -112,6 +113,24 @@ html, body {
   padding:4px 3px 5px;
 }
 .slot .label { font-size:6px; letter-spacing:.02em; }
+
+/* Stretched only on the right, so the button can sit at the foot of the board
+   rather than under NEXT — it has to be where a thumb already rests, and the
+   bottom of the screen is past the board on a tall phone. */
+#railRight { align-self:stretch; }
+#undoBtn {
+  margin-top:auto;
+  display:flex; flex-direction:column; align-items:center; gap:3px;
+  background:var(--panel); border:1px solid var(--edge); border-radius:var(--radius);
+  padding:7px 3px 8px; cursor:pointer;
+}
+#undoBtn .label { font-size:6px; letter-spacing:.02em; }
+#undoBtn b { font-size:12px; line-height:1; color:var(--text); }
+/* display:flex would otherwise win over the attribute's display:none. */
+#undoBtn[hidden] { display:none; }
+#undoBtn:disabled { opacity:.3; }
+#undoBtn:not(:disabled):active { border-color:var(--accent); }
+#undoBtn:not(:disabled):active b { color:var(--accent); }
 
 /* The insets have to be added to the offsets here, not inherited from #app's
    padding. An absolutely positioned element's containing block *is* the padding
@@ -377,6 +396,36 @@ html, body {
   text-decoration:underline; text-underline-offset:3px;
 }
 .textBtn:active { color:var(--accent); }
+.textBtns { display:flex; flex-wrap:wrap; justify-content:center; gap:2px 10px; }
+
+/* Label and control on one line, what it means underneath: the meaning has the
+   room to be a sentence there, and reads as belonging to the row above it. */
+.settings { display:flex; flex-direction:column; gap:11px; width:100%; max-width:300px; }
+.setRow {
+  display:grid; grid-template-columns:1fr auto; align-items:center; gap:3px 10px;
+  padding-bottom:9px; border-bottom:1px solid var(--edge);
+}
+.setRow .label { font-size:8px; letter-spacing:.08em; color:var(--text); text-align:left; }
+.setSub {
+  grid-column:1 / -1;
+  font-size:7px; font-style:normal; letter-spacing:.04em; line-height:1.5;
+  color:var(--dim); text-align:left;
+}
+
+.setToggle, .stepBtn {
+  font-family:var(--font-display); font-weight:400; font-synthesis:none;
+  font-size:8px; line-height:1; cursor:pointer;
+  background:var(--panel); border:1px solid var(--edge); border-radius:var(--radius);
+  color:var(--dim);
+}
+.setToggle { min-width:52px; min-height:30px; padding:8px 10px; letter-spacing:.06em; }
+.setToggle:active { color:var(--accent); border-color:var(--accent); }
+
+/* Fixed width on the value so stepping 9 -> 10 doesn't shove the buttons sideways. */
+.stepper { display:flex; align-items:center; gap:8px; }
+.stepper b { min-width:52px; font-size:9px; letter-spacing:.04em; color:var(--text); text-align:center; }
+.stepBtn { width:30px; height:30px; padding:0; }
+.stepBtn:active { color:var(--accent); border-color:var(--accent); }
 
 .bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
 /* Real block sprites, so the debris carry the theme's bevel, glow and Game Boy

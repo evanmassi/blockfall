@@ -27,7 +27,8 @@ const ctxStub = () => {
 
 export const docHandlers = {}, handlers = {}, els = {};
 const IDS = ['app','hud','board','holdCanvas','nextCanvas','overlay','toast','countdown','stage',
-             'railLeft','railRight','score','level','lines','comboStat','combo','pauseBtn','muteBtn'];
+             'railLeft','railRight','score','level','lines','comboStat','combo','pauseBtn','muteBtn',
+             'undoBtn','undoLeft'];
 
 for (const id of IDS) {
   const listeners = handlers[id] = {};
@@ -133,7 +134,10 @@ globalThis.window = {
 // ---------- the modules under test ----------
 
 export const config = await import('../src/config.js');
-export const { COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS, READY_MS } = config;
+export const {
+  COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS, READY_MS,
+  UNDO_MAX, ZEN_CAPS, DEFAULT_SETTINGS, GRAVITY_FRAMES, FRAME_MS,
+} = config;
 export const { ROTATIONS, TYPES, topRow } = await import('../src/pieces.js');
 export const state = await import('../src/state.js');
 export const { G, loadRun } = state;
@@ -214,6 +218,9 @@ export function reset({ stats = blankStats(), themeName = 'neon' } = {}) {
   // Merged, so a block naming only the modes it cares about still gets a
   // complete stats object — every mode must have a bucket.
   G.stats = { ...blankStats(), ...stats };
+  // Settings live on G, not in the store, so wiping storage alone would let one
+  // block's undo count leak into the next.
+  G.settings = { ...DEFAULT_SETTINGS };
 
   Haptics.supported = false;
   Haptics.enabled = true;
@@ -292,6 +299,15 @@ export function pressAction(act) {
       pointerType: 'touch', button: 0, target: btn, timeStamp: clock,
       stopPropagation: noop, preventDefault: noop,
     });
+  }
+}
+
+/** The undo button, tapped where it lives: inside #stage, which also listens. */
+export function tapUndo() {
+  for (const fn of handlers.undoBtn.pointerdown || []) {
+    fn({ pointerId: 9, pointerType: 'touch', button: 0, target: els.undoBtn,
+         clientX: 200, clientY: 300, timeStamp: clock,
+         stopPropagation: noop, preventDefault: noop });
   }
 }
 

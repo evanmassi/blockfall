@@ -7,14 +7,15 @@ import {
   LINE_SCORES, TSPIN_SCORES, TSPIN_MINI_SCORES, PERFECT_SCORES,
   LOCK_DELAY, MAX_LOCK_RESETS, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS,
   FRAME_MS, GRAVITY_FRAMES, GRAVITY_MIN_FRAMES,
-  ZEN_SPEED_CAP_LEVEL, ZEN_RESCUE_ROWS, READY_MS, READY_BEATS, CHAIN_SCORES, FALL_MS,
+  ZEN_RESCUE_ROWS, READY_MS, READY_BEATS, CHAIN_SCORES, FALL_MS,
+  UNDO_MAX, ZEN_CAPS,
 } from './config.js';
 import { ROTATIONS, KICKS, topRow } from './pieces.js';
 import { theme } from './themes.js';
 import {
   G, emptyGrid, saveStats, blankTally, MODES,
   saveRun, loadRun, clearRun, encodeGrid, decodeGrid,
-  saveLastMode, loadLastMode,
+  saveLastMode, loadLastMode, saveSettings,
 } from './state.js';
 import { collides, fillQueue, makePiece, settle } from './board.js';
 import { view, drawSidePanels, syncLevelPalette } from './render.js';
@@ -22,13 +23,16 @@ import { Sound } from './audio.js';
 import { Haptics } from './haptics.js';
 import {
   showOverlay, hideOverlay, showToast, updateHud, setRecordStyle, setCountdown,
-  themeBar, wordmark, menuBackdrop, actionBar, textButton,
+  themeBar, wordmark, menuBackdrop, actionBar, textButton, textRow,
+  setUndo, settingRow, stepper, toggle,
 } from './ui.js';
 
 function setReady(ms) {
   G.ready = ms;
   setCountdown(ms > 0 ? READY_BEATS : 0);
 }
+
+const resumeDelay = () => (G.settings.countdown ? READY_MS : 0);
 
 // Single funnel, so beating the record is caught the instant it happens rather
 // than on the game-over screen.
@@ -70,6 +74,8 @@ export function spawn() {
   fillQueue();
   if (!enterPiece(piece)) return;
   G.canHold = true;
+  pushUndo();    // ...and the point an undo winds back to
+  refreshUndo();
   snapshotRun(); // a new piece is a stable point to save at
 }
 
@@ -82,7 +88,8 @@ function resetLockState() {
 /** Milliseconds a piece takes to fall one row. Must not be clamped to a floor:
  *  that silently stopped progression while the level counter kept climbing. */
 export function gravityInterval() {
-  const level = G.mode === 'zen' ? Math.min(G.level, ZEN_SPEED_CAP_LEVEL) : G.level;
+  const cap = G.settings.zenCap; // 0 lets Zen climb like the other modes
+  const level = G.mode === 'zen' && cap ? Math.min(G.level, cap) : G.level;
   const frames = GRAVITY_FRAMES[level - 1] ?? GRAVITY_MIN_FRAMES;
   return frames * FRAME_MS;
 }
@@ -423,36 +430,31 @@ function spawnClearParticles(rows, fx) {
 
 // ---------- saving and resuming a run ----------
 
-// Stable points only — a new piece, a pause, the menu, the page being hidden —
-// never mid-clear or mid-death, so a restored board is always a playable one.
-export function snapshotRun() {
-  if (G.state !== 'playing' && G.state !== 'paused') return;
-  saveRun(G.mode, {
+// Everything needed to put a run back. Copied, not referenced: an undo entry has
+// to survive the play that follows it rather than follow along with it.
+function runPayload() {
+  return {
     mode: G.mode,
     grid: encodeGrid(G.grid),
     // The rotation matrix is rebuilt from ROTATIONS, so only the index is kept.
     active: G.active ? { type: G.active.type, rot: G.active.rot, x: G.active.x, y: G.active.y } : null,
-    queue: G.queue, bag: G.bag, hold: G.hold, canHold: G.canHold,
+    queue: [...G.queue], bag: G.bag ? [...G.bag] : null, hold: G.hold, canHold: G.canHold,
     score: G.score, lines: G.lines, level: G.level,
     combo: G.combo, backToBack: G.backToBack,
     runBest: G.runBest, newBest: G.newBest,
-    tally: G.tally,
-  });
+    tally: { ...G.tally },
+  };
 }
 
-/** Which mode a plain tap on the menu picks up: last played if it has a save,
- *  else whichever does, else none. */
-export function pendingRun() {
-  const last = loadLastMode();
-  if (loadRun(last)) return last;
-  return MODES.find(m => loadRun(m)) ?? null;
+// Stable points only — a new piece, a pause, the menu, the page being hidden —
+// never mid-clear or mid-death, so a restored board is always a playable one.
+export function snapshotRun() {
+  if (G.state !== 'playing' && G.state !== 'paused') return;
+  saveRun(G.mode, { ...runPayload(), undosUsed: G.undosUsed, undoStack: G.undoStack });
 }
 
-export function resumeRun(mode = pendingRun()) {
-  const saved = mode && loadRun(mode);
-  if (!saved) { startGame(); return; }
-  saveLastMode(mode);
-
+/** The live board becomes `saved`. Shared by resuming and undoing. */
+function applyRun(saved) {
   G.mode = MODES.includes(saved.mode) ? saved.mode : 'marathon';
   G.grid = decodeGrid(saved.grid);
   G.queue = Array.isArray(saved.queue) ? [...saved.queue] : [];
@@ -486,8 +488,65 @@ export function resumeRun(mode = pendingRun()) {
   syncLevelPalette();
   updateHud();
   drawSidePanels();
+  refreshUndo();
+}
+
+// ---------- undo ----------
+
+export const undosLeft = () => Math.max(0, G.settings.undos - G.undosUsed);
+
+// Mid-clear counts: the entry restored predates the piece that set the clear off,
+// so it cancels cleanly — and the button doesn't die for a third of a second
+// after every landing.
+const UNDOABLE = { playing: 1, clearing: 1, settling: 1 };
+
+// Two deep at minimum: the top is the piece in play, so something has to be under it.
+export const canUndo = () => !!UNDOABLE[G.state] && undosLeft() > 0 && G.undoStack.length > 1;
+
+function pushUndo() {
+  if (!G.settings.undos) return; // nothing to spend, nothing worth keeping
+  G.undoStack.push(runPayload());
+  if (G.undoStack.length > UNDO_MAX + 1) G.undoStack.shift();
+}
+
+function refreshUndo() {
+  const live = G.state !== 'menu' && G.state !== 'over' && G.state !== 'dying';
+  setUndo(G.settings.undos > 0 && live, undosLeft(), canUndo());
+}
+
+/** Takes back the piece in play, putting the board where it was one spawn ago. */
+export function undo() {
+  if (!canUndo()) return;
+  G.undoStack.pop();
+  G.undosUsed++;
+  applyRun(G.undoStack[G.undoStack.length - 1]);
+  Sound.undo();
+  Haptics.lock();
+  showToast('UNDO', theme.accent);
+  snapshotRun();
+}
+
+/** Which mode a plain tap on the menu picks up: last played if it has a save,
+ *  else whichever does, else none. */
+export function pendingRun() {
+  const last = loadLastMode();
+  if (loadRun(last)) return last;
+  return MODES.find(m => loadRun(m)) ?? null;
+}
+
+export function resumeRun(mode = pendingRun()) {
+  const saved = mode && loadRun(mode);
+  if (!saved) { startGame(); return; }
+  saveLastMode(mode);
+
+  G.undosUsed = Math.max(0, saved.undosUsed | 0);
+  G.undoStack = Array.isArray(saved.undoStack) ? saved.undoStack : [];
+  applyRun(saved);
+  // A run saved before undo existed, or with undos switched off at the time.
+  if (!G.undoStack.length) pushUndo();
+
   hideOverlay();
-  if (G.state === 'playing') setReady(READY_MS); // spawn() above can have topped out
+  if (G.state === 'playing') setReady(resumeDelay()); // spawn() above can have topped out
 }
 
 // ---------- flow ----------
@@ -510,6 +569,8 @@ export function startGame(mode = 'marathon') {
   G.deathRow = ROWS; G.deathTimer = 0;
   G.state = 'playing';
   setReady(0);
+  G.undosUsed = 0;
+  G.undoStack = [];
 
   hideOverlay();
   syncLevelPalette(); // back to level 1 after a high-level run
@@ -525,6 +586,7 @@ export function gameOver() {
   G.active = null;
   G.deathRow = ROWS;
   G.deathTimer = 0;
+  refreshUndo();
 }
 
 // Per mode, so Zen's unbounded score can never flatter Marathon's.
@@ -603,10 +665,58 @@ export function showPauseScreen() {
   showOverlay(`
     <h2>PAUSED</h2>
     ${themeBar()}
-    ${textButton('how', 'HOW TO PLAY')}
     ${actionBar(actions)}
+    ${textRow(textButton('how', 'HOW TO PLAY'), textButton('settings', 'SETTINGS'))}
     <p class="cta">TAP TO RESUME</p>
   `, { soft: true });
+}
+
+// Ordered by how often they get touched: the countdown is a one-time choice,
+// the Zen cap is a mood.
+function settingsRows() {
+  const s = G.settings;
+  const rowMs = level => Math.round((GRAVITY_FRAMES[level - 1] ?? GRAVITY_MIN_FRAMES) * FRAME_MS);
+
+  return `
+    <div class="settings">
+      ${settingRow('COUNTDOWN', toggle('countdown', s.countdown ? 'ON' : 'OFF'),
+                   s.countdown ? '3-2-1 BEFORE PLAY RESUMES' : 'RESUMES THE MOMENT YOU DO')}
+      ${settingRow('UNDOS', stepper('undos', s.undos || 'OFF'),
+                   s.undos ? `${s.undos} TAKE-BACKS EACH GAME` : 'NO TAKE-BACKS')}
+      ${settingRow('ZEN SPEED', stepper('zen', s.zenCap || 'NO CAP'),
+                   s.zenCap ? `STOPS AT ${rowMs(s.zenCap)}MS A ROW` : 'KEEPS SPEEDING UP')}
+    </div>`;
+}
+
+export function showSettings() {
+  showOverlay(`
+    <h2>SETTINGS</h2>
+    ${settingsRows()}
+    ${actionBar([['back', 'BACK']])}
+  `, { soft: G.state !== 'menu', modal: true });
+}
+
+/** @param {number} dir  step for a stepper; ignored by the toggles. */
+export function changeSetting(key, dir = 0) {
+  const s = G.settings;
+  if (key === 'countdown') s.countdown = !s.countdown;
+  if (key === 'undos') s.undos = Math.min(UNDO_MAX, Math.max(0, s.undos + dir));
+  if (key === 'zen') {
+    const at = ZEN_CAPS.indexOf(s.zenCap);
+    s.zenCap = ZEN_CAPS[Math.min(ZEN_CAPS.length - 1, Math.max(0, at + dir))];
+  }
+  saveSettings();
+
+  // Nothing is recorded while undos are off, so history kept across that gap
+  // would wind back to whenever they were last on — a whole run, in the worst
+  // case. Dropped on the way out, seeded from where she stands on the way in.
+  if (key === 'undos') {
+    if (!s.undos) G.undoStack = [];
+    else if (!G.undoStack.length && G.active) pushUndo();
+  }
+
+  refreshUndo();
+  showSettings();
 }
 
 // Reached from the menu and from pause; where BACK returns is read off the state
@@ -620,7 +730,7 @@ export function showControls() {
   `, { soft: fromPause, modal: true });
 }
 
-export function closeControls() {
+export function closeSubScreen() {
   if (G.state === 'menu') showMenu();
   else showPauseScreen();
 }
@@ -639,8 +749,9 @@ export function togglePause() {
   } else if (RESUMED_AS[G.state]) {
     G.state = RESUMED_AS[G.state];
     hideOverlay();
-    setReady(READY_MS);
+    setReady(resumeDelay());
   }
+  refreshUndo();
 }
 
 const lineCount = n => `${n.toLocaleString()} ${n === 1 ? 'LINE' : 'LINES'}`;
@@ -686,6 +797,7 @@ export function showMenu() {
   G.deathRow = ROWS;
   setReady(0);
   setRecordStyle(false);
+  refreshUndo();
 
   // Starting on the first row, resuming below it. Progress goes on a second line
   // inside the button rather than after the label: "RESUME CASCADE · 18,400" on
@@ -706,8 +818,8 @@ export function showMenu() {
     ${wordmark()}
     ${recordCards()}
     ${themeBar()}
-    ${textButton('how', 'HOW TO PLAY')}
     ${actionBar(actions)}
+    ${textRow(textButton('how', 'HOW TO PLAY'), textButton('settings', 'SETTINGS'))}
   `, { intro: true });
 }
 

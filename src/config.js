@@ -28,6 +28,17 @@ export const GRAVITY_MIN_FRAMES = 1;    // 30+, the console's kill screen
 export const ZEN_SPEED_CAP_LEVEL = 5;
 export const ZEN_RESCUE_ROWS = 4;
 
+// ---------- what the player owns ----------
+
+export const UNDO_MAX = 5;
+
+// Stepper order: slowest cap first, uncapped last, since 0 is faster than any
+// of them rather than slower.
+export const ZEN_CAPS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0];
+
+// A slip into pause shouldn't cost three seconds, so the countdown is opt-in.
+export const DEFAULT_SETTINGS = { countdown: false, undos: 0, zenCap: ZEN_SPEED_CAP_LEVEL };
+
 export const LOCK_DELAY = 500, MAX_LOCK_RESETS = 15;
 export const DEATH_ROW_MS = 34, DEATH_HOLD_MS = 280;
 

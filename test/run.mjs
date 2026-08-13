@@ -13,9 +13,10 @@ import {
   swatchEls, actionButtons, debrisCanvases, fakeSwatch, previewCanvas, markCv,
   // board + input helpers
   clearGrid, fillRow, fillFrom, put, filledCells, key,
-  tapOverlay, pressAction, dragOnStage, targetMatching, backdropTarget,
+  tapOverlay, pressAction, dragOnStage, tapUndo, targetMatching, backdropTarget,
   // modules under test
   COLS, ROWS, HIDDEN, LOCK_DELAY, CLEAR_FX, CLEAR_TIME_MAX, DEATH_ROW_MS, DEATH_HOLD_MS, READY_MS,
+  UNDO_MAX, DEFAULT_SETTINGS, GRAVITY_FRAMES, FRAME_MS,
   ROTATIONS, TYPES, topRow,
   G, state, loadRun, hasSavedRun, board, game,
   THEMES, theme, savedThemeName, applyTheme, view, syncLevelPalette,
@@ -40,6 +41,13 @@ section('Boot');
         types.join(' '));
   check('theme synced to CSS vars', cssVars['--accent'] === '#ff2d95', JSON.stringify(cssVars['--accent']));
   check('board sized', els.board.width > 0);
+
+  // Playing is what she came for; reference and settings sit under it.
+  check('the modes come before the text links',
+        menu.indexOf('data-act="new"') < menu.indexOf('data-act="how"'),
+        `modes at ${menu.indexOf('data-act="new"')}, links at ${menu.indexOf('data-act="how"')}`);
+  check('and the two links share one row',
+        /<div class="textBtns">.*data-act="how".*data-act="settings".*<\/div>/s.test(menu));
 }
 
 section('Menu depth field');
@@ -167,8 +175,17 @@ section('Offline packaging');
   // `#app *` sets touch-action:none and carries an id, so the override for
   // tappable controls has to be id-qualified or it silently loses.
   const flat = css.replace(/\s+/g, ' ');
+  // Every selector in the list, not a fixed list of them: a control added later
+  // without the prefix would lose silently and only show up as a dead button.
+  const tapRule = /([^{}]+)\{ touch-action:manipulation/.exec(flat)?.[1] ?? '';
+  const commentEnd = tapRule.lastIndexOf('*/'); // the rule is preceded by its own comment
+  const tapSelectors = tapRule.slice(commentEnd < 0 ? 0 : commentEnd + 2).split(',');
   check('touch-action override outranks #app *',
-        /#app \.menuBtn, #app \.swatch, #app \.sysBtn, #app \.textBtn \{ touch-action:manipulation/.test(flat));
+        tapSelectors.length > 1 && tapSelectors.every(s => s.trim().startsWith('#app ')),
+        tapSelectors.join(',') || 'no manipulation rule');
+  check('and covers the controls added to the board and settings',
+        ['#undoBtn', '.setToggle', '.stepBtn'].every(s => tapSelectors.some(t => t.includes(s))),
+        tapSelectors.join(','));
 
   // #app * would otherwise leave the overlay unscrollable by finger, so a menu
   // taller than the screen loses everything past the fold with no way to reach it.
@@ -1140,16 +1157,16 @@ section('Resuming a run');
 
   game.resumeRun();
   check('resumes into the game, not onto a second screen', G.state === 'playing', G.state);
-  check('but held by the countdown, not straight into gravity', G.ready > 0, String(G.ready));
-  check('the board is uncovered while it counts', els.overlay.classes.has('hidden'));
+  check('and straight into play, with nothing to sit through', G.ready === 0, String(G.ready));
+  check('the board is uncovered', els.overlay.classes.has('hidden'));
   check('score restored', G.score === 2750, String(G.score));
   check('lines and level restored', G.lines === 7 && G.level === 2, `${G.lines}/${G.level}`);
   check('hold restored', G.hold === 'I', String(G.hold));
   check('board restored', G.grid[ROWS - 1][3] === 'T' && G.grid[ROWS - 1][4] === 'S');
   check('active piece has a usable rotation matrix', !G.active || Array.isArray(G.active.m));
 
-  pumpMs(READY_MS + 50);
-  check('and comes alive once it runs out', G.ready === 0 && G.state === 'playing', `${G.ready}/${G.state}`);
+  pumpMs(50);
+  check('and stays alive', G.ready === 0 && G.state === 'playing', `${G.ready}/${G.state}`);
 
   // Finishing or abandoning must not leave a stale run behind.
   game.gameOver();
@@ -1181,11 +1198,25 @@ section('The countdown between a held board and a live one');
   clearGrid();
   put('T', 4, 5, 0);
 
+  // Off unless she asks for it: most pauses are a slip, and three seconds is a
+  // long time to be told to wait for one.
+  const flatY = G.active.y;
+  game.togglePause();
+  game.togglePause();
+  check('un-pausing resumes flat by default',
+        G.state === 'playing' && G.ready === 0, `${G.state}/${G.ready}`);
+  pumpMs(900);
+  check('with gravity live from the first frame', G.active.y > flatY, `${G.active.y} vs ${flatY}`);
+
+  G.settings.countdown = true;
+  clearGrid();
+  put('T', 4, 5, 0);
+
   game.togglePause();
   check('pausing cancels any countdown', G.ready === 0, String(G.ready));
 
   game.togglePause();
-  check('un-pausing counts back in rather than resuming flat',
+  check('un-pausing counts back in once it is switched on',
         G.state === 'playing' && G.ready > 0, `${G.state}/${G.ready}`);
 
   // A level-1 row takes ~800ms, so this is long enough to catch gravity that never stopped.
@@ -1211,6 +1242,239 @@ section('The countdown between a held board and a live one');
   }
   check('the count is on screen and steps down', beats.join('') === '321', beats.join('') || 'nothing shown');
   check('and clears itself at the end', els.countdown.textContent === '', els.countdown.textContent);
+}
+
+section('Settings are hers, and they stay set');
+{
+  reset();
+  check('the countdown starts off', G.settings.countdown === false);
+  check('undos start off', G.settings.undos === 0, String(G.settings.undos));
+  check('zen keeps the cap it always had', G.settings.zenCap === DEFAULT_SETTINGS.zenCap,
+        String(G.settings.zenCap));
+
+  pressAction('settings');
+  check('the menu opens them', els.overlay.innerHTML.includes('SETTINGS'));
+  check('modal, so a stray tap cannot start a game behind it', els.overlay.classes.has('modal'));
+
+  pressAction('undos-up');
+  check('undos step up', G.settings.undos === 1, String(G.settings.undos));
+  check('and the screen redraws to say what that means',
+        els.overlay.innerHTML.includes('1 TAKE-BACKS EACH GAME'));
+
+  for (let i = 0; i < 9; i++) pressAction('undos-up');
+  check('stopping at the ceiling', G.settings.undos === UNDO_MAX, String(G.settings.undos));
+  for (let i = 0; i < 9; i++) pressAction('undos-down');
+  check('and at the floor', G.settings.undos === 0, String(G.settings.undos));
+  check('which reads as off, not as zero', els.overlay.innerHTML.includes('NO TAKE-BACKS'));
+
+  pressAction('countdown');
+  check('the countdown toggles', G.settings.countdown === true);
+  check('and says what it will do', els.overlay.innerHTML.includes('3-2-1 BEFORE PLAY RESUMES'));
+  pressAction('countdown');
+  check('and back again', G.settings.countdown === false);
+
+  // Written through on every change: setting these twice is the whole complaint.
+  pressAction('undos-up');
+  check('saved as they change', JSON.parse(store['blockfall.settings']).undos === 1,
+        store['blockfall.settings']);
+  check('and read back on the next launch', state.loadSettings().undos === 1);
+
+  store['blockfall.settings'] = JSON.stringify({ undos: 99, zenCap: 40, countdown: 1 });
+  const clamped = state.loadSettings();
+  check('a hand-edited store is clamped rather than trusted',
+        clamped.undos === UNDO_MAX && clamped.zenCap === DEFAULT_SETTINGS.zenCap && clamped.countdown === true,
+        JSON.stringify(clamped));
+
+  pressAction('back');
+  check('BACK returns to the menu it came from', els.overlay.innerHTML.includes('data-act="new"'));
+
+  // Reached from a run, BACK owes her the pause screen instead.
+  reset();
+  fresh();
+  game.togglePause();
+  pressAction('settings');
+  check('the pause screen opens them too', els.overlay.innerHTML.includes('SETTINGS'));
+  check('over a readable board', els.overlay.classes.has('soft'));
+  pressAction('back');
+  check('and BACK goes back to pause, not to the menu',
+        els.overlay.innerHTML.includes('PAUSED') && G.state === 'paused', G.state);
+}
+
+section('Zen speed is hers to pick');
+{
+  reset();
+  fresh('zen');
+  G.level = 20;
+  const capped = game.gravityInterval();
+  check('the cap holds gravity back by default',
+        capped === GRAVITY_FRAMES[DEFAULT_SETTINGS.zenCap - 1] * FRAME_MS, String(capped));
+
+  G.settings.zenCap = 10;
+  check('a higher cap falls faster', game.gravityInterval() < capped, String(game.gravityInterval()));
+
+  G.mode = 'marathon';
+  const classic = game.gravityInterval();
+  G.settings.zenCap = 1;
+  check('and the cap never touches the other modes', game.gravityInterval() === classic,
+        `${game.gravityInterval()} vs ${classic}`);
+
+  G.mode = 'zen';
+  G.settings.zenCap = 0;
+  check('uncapped, zen climbs like classic does', game.gravityInterval() === classic,
+        `${game.gravityInterval()} vs ${classic}`);
+
+  reset();
+  pressAction('settings');
+  for (let i = 0; i < 20; i++) pressAction('zen-up');
+  check('the stepper tops out past the last level', G.settings.zenCap === 0, String(G.settings.zenCap));
+  check('where it says so in words', els.overlay.innerHTML.includes('KEEPS SPEEDING UP'));
+  pressAction('zen-down');
+  check('and steps back down to the fastest cap', G.settings.zenCap === 10, String(G.settings.zenCap));
+  check('reading as a speed, not a level number', els.overlay.innerHTML.includes('MS A ROW'));
+  for (let i = 0; i < 20; i++) pressAction('zen-down');
+  check('down to the slowest', G.settings.zenCap === 1, String(G.settings.zenCap));
+}
+
+section('Undo takes the last piece back');
+{
+  reset();
+  fresh();
+  check('no button at all while undos are off', els.undoBtn.hidden === true);
+  check('and nothing banked to hold it up', G.undoStack.length === 0, String(G.undoStack.length));
+
+  reset();
+  G.settings.undos = 3;
+  fresh();
+  check('the button appears once they are on', els.undoBtn.hidden === false);
+  check('showing what is left', els.undoLeft.textContent === '3', String(els.undoLeft.textContent));
+  check('but dead on the first piece, with nothing behind it', els.undoBtn.disabled === true);
+
+  const first = G.active.type;
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 60);
+  check('a piece lands', filledCells() === 4, String(filledCells()));
+  check('and now there is something to take back', els.undoBtn.disabled === false);
+
+  tapUndo();
+  check('undo clears it off the board', filledCells() === 0, String(filledCells()));
+  check('and hands the same piece back', G.active.type === first, `${G.active.type} vs ${first}`);
+  check('a charge is spent', G.undosUsed === 1, String(G.undosUsed));
+  check('and counted down on the button', els.undoLeft.textContent === '2', String(els.undoLeft.textContent));
+
+  // Score has to come back with it, or undo is a way to bank points for free.
+  reset();
+  G.settings.undos = 2;
+  fresh();
+  G.score = 500;
+  fillRow(ROWS - 1, 5);
+  game.spawn();          // a stable point holding the board as it now stands
+  put('I', 3, 0, 1);
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 200);
+  check('the clear scores', G.score > 500, String(G.score));
+  check('and counts the line', G.lines === 1, String(G.lines));
+
+  tapUndo();
+  check('undo gives the score back', G.score === 500, String(G.score));
+  check('and the line', G.lines === 0, String(G.lines));
+  check('and puts the row back on the board', filledCells() === COLS - 1, String(filledCells()));
+}
+
+section('Undo charges run out, and refill on a new game');
+{
+  reset();
+  G.settings.undos = 2;
+  fresh();
+  for (let i = 0; i < 3; i++) { game.hardDrop(); pumpMs(CLEAR_TIME_MAX + 60); }
+
+  tapUndo();
+  tapUndo();
+  check('both charges spend', G.undosUsed === 2, String(G.undosUsed));
+  check('the button goes dead once they are gone', els.undoBtn.disabled === true);
+  check('reading zero', els.undoLeft.textContent === '0', String(els.undoLeft.textContent));
+
+  const stuck = filledCells();
+  tapUndo();
+  check('and a third tap does nothing at all', filledCells() === stuck, `${filledCells()} vs ${stuck}`);
+
+  fresh();
+  check('a new game refills them', G.undosUsed === 0, String(G.undosUsed));
+  check('and says so', els.undoLeft.textContent === '2', String(els.undoLeft.textContent));
+
+  // Raising the setting mid-run is spending money she already has, not a reset.
+  G.settings.undos = 4;
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 60);
+  tapUndo();
+  check('a charge spent leaves the rest', G.undosUsed === 1 && els.undoLeft.textContent === '3',
+        `${G.undosUsed}/${els.undoLeft.textContent}`);
+
+  // The stack cannot grow without bound just because the game is long.
+  reset();
+  G.settings.undos = UNDO_MAX;
+  fresh();
+  // Swept between drops: twelve pieces landing in one column would top out long
+  // before the stack had a chance to overfill.
+  for (let i = 0; i < 12; i++) { game.hardDrop(); pumpMs(CLEAR_TIME_MAX + 60); clearGrid(); }
+  check('only as much history as the charges can reach',
+        G.undoStack.length <= UNDO_MAX + 1, String(G.undoStack.length));
+
+  // ...and it has to be deep enough to spend every charge back to back.
+  let spent = 0;
+  for (let i = 0; i < UNDO_MAX; i++) { tapUndo(); spent = G.undosUsed; }
+  check('every charge can be spent in a row', spent === UNDO_MAX, String(spent));
+}
+
+section('Undo across a pause, a resume and a switch mid-run');
+{
+  reset();
+  G.settings.undos = 3;
+  fresh();
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 60);
+  tapUndo();
+
+  game.snapshotRun();
+  game.showMenu();
+  check('the button leaves with the board', els.undoBtn.hidden === true);
+
+  game.resumeRun('marathon');
+  check('a spent charge stays spent across a resume', G.undosUsed === 1, String(G.undosUsed));
+  check('and the button comes back with the count', els.undoLeft.textContent === '2',
+        String(els.undoLeft.textContent));
+
+  // Switched on part-way through: she gets undos from here, not for what is
+  // already behind her.
+  reset();
+  fresh();
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 60);
+  game.togglePause();
+  pressAction('settings');
+  pressAction('undos-up');
+  pressAction('back');
+  game.togglePause();
+  check('the button arrives without restarting', els.undoBtn.hidden === false);
+  check('but there is no history to undo into yet', els.undoBtn.disabled === true);
+
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 60);
+  check('and it comes alive on the next piece', els.undoBtn.disabled === false);
+
+  // Nothing is recorded while they are off, so history from before the gap
+  // would wind the run back further than she ever asked for.
+  reset();
+  G.settings.undos = 3;
+  fresh();
+  for (let i = 0; i < 3; i++) { game.hardDrop(); pumpMs(CLEAR_TIME_MAX + 60); clearGrid(); }
+  game.togglePause();
+  pressAction('settings');
+  for (let i = 0; i < 3; i++) pressAction('undos-down');
+  check('switching undos off drops the history with them', G.undoStack.length === 0,
+        String(G.undoStack.length));
+  pressAction('undos-up');
+  check('and switching back on starts again from here', G.undoStack.length === 1,
+        String(G.undoStack.length));
 }
 
 section('Starting another game is a button, not a hint');
@@ -1440,8 +1704,16 @@ section('End-of-run tally');
   check('and stops on pause', G.tally.ms === held, `${G.tally.ms} vs ${held}`);
 
   game.togglePause();
+  pumpMs(300);
+  check('and runs again the moment she is back', G.tally.ms > held, `${G.tally.ms} vs ${held}`);
+
+  // Waiting to be let back in is not playing time.
+  G.settings.countdown = true;
+  game.togglePause();
+  const counted = G.tally.ms;
+  game.togglePause();
   pumpMs(READY_MS - 200);
-  check('and stays stopped through the countdown', G.tally.ms === held, `${G.tally.ms} vs ${held}`);
+  check('and stays stopped through the countdown', G.tally.ms === counted, `${G.tally.ms} vs ${counted}`);
 
   reset();
   fresh();

@@ -1,9 +1,10 @@
 // The single mutable game state, plus its persistence. Everything shared lives
 // on `G` because ES module bindings cannot be reassigned across files.
 
-import { COLS, ROWS } from './config.js';
+import { COLS, ROWS, DEFAULT_SETTINGS, UNDO_MAX, ZEN_CAPS } from './config.js';
 
 const STORE = 'blockfall.stats';
+const SETTINGS_STORE = 'blockfall.settings';
 
 export const blankTally = () => ({ ms: 0, pieces: 0, tetris: 0, tspins: 0, perfect: 0, combo: 0, chain: 0 });
 
@@ -39,6 +40,25 @@ export function loadStats() {
 
 export function saveStats() {
   try { localStorage.setItem(STORE, JSON.stringify(G.stats)); } catch {}
+}
+
+// ---------- settings ----------
+
+// Read back through the same clamps that write them: storage is editable by
+// hand, and a zenCap of 40 would index off the end of the gravity table.
+export function loadSettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SETTINGS_STORE) || 'null') || {};
+    return {
+      countdown: !!raw.countdown,
+      undos: Math.min(UNDO_MAX, Math.max(0, raw.undos | 0)),
+      zenCap: ZEN_CAPS.includes(raw.zenCap) ? raw.zenCap : DEFAULT_SETTINGS.zenCap,
+    };
+  } catch { return { ...DEFAULT_SETTINGS }; }
+}
+
+export function saveSettings() {
+  try { localStorage.setItem(SETTINGS_STORE, JSON.stringify(G.settings)); } catch {}
 }
 
 // ---------- in-progress run ----------
@@ -124,6 +144,11 @@ export const G = {
   runBest: 0,      // score to beat, captured at the start of the run
   newBest: false,
   stats: { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } },
+  settings: { ...DEFAULT_SETTINGS },
+
+  // Charges spent, not charges left, so raising the setting mid-run just works.
+  undosUsed: 0,
+  undoStack: [],   // one run payload per piece start, newest last
 
   gravityAcc: 0,
   ready: 0,        // ms left on the countdown; nothing moves while set
