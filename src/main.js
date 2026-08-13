@@ -20,44 +20,76 @@ if ('serviceWorker' in navigator) {
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b42';
+const BUILD = 'b43';
 
-// ?debug — the real event sequence for a tap. Capture phase, so it sees every
-// event regardless of what any handler does with it.
-if (new URLSearchParams(location.search).has('debug')) {
+// An installed app can't be handed a query string — the icon keeps whatever URL
+// it was added with — so five taps on the wordmark toggle it from inside. That
+// is the only way to read the boxes on the one configuration that matters.
+const DEBUG_KEY = 'blockfall.debug';
+let marks = 0, markedAt = -Infinity;
+
+document.addEventListener('pointerdown', e => {
+  if (!e.target?.closest?.('.markWrap')) return;
+  const now = e.timeStamp ?? 0;
+  marks = now - markedAt < 3000 ? marks + 1 : 1;
+  markedAt = now;
+  if (marks < 5) return;
+  marks = 0;
+  try {
+    const on = localStorage.getItem(DEBUG_KEY) === '1';
+    localStorage.setItem(DEBUG_KEY, on ? '0' : '1');
+  } catch {}
+  location.reload(); // so the boot-time measurements run under the new setting
+}, true);
+
+const debugging = new URLSearchParams(location.search).has('debug') ||
+  (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
+
+// The real event sequence for a tap. Capture phase, so it sees every event
+// regardless of what any handler does with it.
+if (debugging) {
   const out = document.createElement('div');
   out.id = 'debug';
   document.body.appendChild(out);
   document.getElementById('app').classList.add('showBoxes');
 
-  const lines = [`build ${BUILD}`];
-  // Also posted to the dev server, so a phone's log lands in debug.log instead
-  // of being read off a tiny green bar and retyped.
-  const log = line => {
-    lines.push(line);
-    if (lines.length > 8) lines.splice(1, 1);
-    out.textContent = lines.join('\n');
+  // The measurements are pinned above the event log rather than scrolling with
+  // it: on an installed app there is no dev server to post to, so a screenshot
+  // of this readout is the only way they leave the device.
+  let head = [], tail = [];
+  const draw = () => { out.textContent = [`build ${BUILD}`, ...head, ...tail].join('\n'); };
+  const post = line => {
     // An image GET, not fetch/sendBeacon: nothing can quietly drop it.
-    try { new Image().src = '/log?m=' + encodeURIComponent(line) + '&t=' + lines.length; } catch {}
+    try { new Image().src = '/log?m=' + encodeURIComponent(line) + '&t=' + Date.now(); } catch {}
+  };
+  const log = line => {
+    tail.push(line);
+    if (tail.length > 4) tail.shift();
+    draw();
+    post(line);
   };
   globalThis.__bfLog = log;
-  log(`--- session start, build ${BUILD} ---`);
+  post(`--- session start, build ${BUILD} ---`);
 
-  // Where each layer actually lands. A seam between them is only visible on a
-  // device, and reading it off a screenshot is guesswork — these are the numbers
-  // that say which box is short and by how much.
+  // Where each layer actually lands. A seam between them is only visible on the
+  // device it happens on, and reading it off a screenshot is guesswork — these
+  // are the numbers that say which box is short and by how much.
   const boxes = () => {
-    const app = document.getElementById('app');
-    const cs = getComputedStyle(app);
+    const cs = getComputedStyle(document.getElementById('app'));
     const r = sel => {
       const el = sel[0] === '#' ? document.getElementById(sel.slice(1)) : document.querySelector(sel);
       const b = el?.getBoundingClientRect?.();
       return b ? `${sel} ${Math.round(b.top)}→${Math.round(b.bottom)}` : `${sel} absent`;
     };
-    log(`vp ${innerWidth}x${innerHeight} vis ${Math.round(visualViewport?.height ?? 0)} dpr ${devicePixelRatio}`);
-    log(`safe t${cs.paddingTop} b${cs.paddingBottom} standalone=${!!navigator.standalone}`);
-    log(`${r('#app')} ${r('#overlay')}`);
-    log(`${r('.bgfall')} ${r('#stage')}`);
+    head = [
+      `vp ${innerWidth}x${innerHeight} vis ${Math.round(visualViewport?.height ?? 0)} dpr ${devicePixelRatio}`,
+      `safe t${cs.paddingTop} b${cs.paddingBottom} standalone=${!!navigator.standalone}`,
+      `${r('#app')} ${r('#overlay')}`,
+      `${r('.bgfall')} ${r('#stage')}`,
+      `paint ${document.documentElement.style.background || '(css)'}`,
+    ];
+    draw();
+    head.forEach(post);
   };
 
   // After the intro settles, and again whenever the URL bar resizes the viewport.
