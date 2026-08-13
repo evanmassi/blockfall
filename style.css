@@ -34,8 +34,12 @@
   font-synthesis:none;
 }
 
+/* --screen-h, not 100%. Installed, 100% resolves against the viewport — 812 of
+   the screen's 874 — and body carries overflow:hidden, so it clips everything
+   inside it at a line short of the bottom. That is what cut the falling blocks,
+   and the outlines of the very boxes drawn to find it. */
 html, body {
-  height:100%;
+  height:var(--screen-h, 100%);
   overflow:hidden;
   overscroll-behavior:none;
   background:var(--bg);
@@ -200,7 +204,6 @@ html, body {
   position:absolute; inset:0; z-index:5;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
   background:var(--overlay);
-  backdrop-filter:blur(3px);
   text-align:center;
   /* Same trap as #sysBtns: inset:0 spans #app's padding box, so overlay content
      needs its own safe-area allowance or a tall screen can run under the status
@@ -218,7 +221,12 @@ html, body {
 #overlay > * { flex:0 0 auto; }
 #overlay.hidden { display:none; }
 
-/* Pause keeps the board readable underneath rather than blanking it out. */
+/* Pause keeps the board readable underneath rather than blanking it out. The
+   blur lives here and nowhere else: backdrop-filter puts the element and its
+   whole subtree in a compositing layer, and iOS rasterises that against the
+   viewport rather than the box — so on the menu it cut the falling blocks at a
+   line short of the bottom of the screen. The pause screen holds no debris, and
+   is the only screen with anything behind it worth blurring. */
 #overlay.soft { background:var(--overlay-soft); backdrop-filter:blur(1px); }
 
 /* Sized so all five fit one row on a phone: 5 x 64px plus four 6px gaps is
@@ -509,14 +517,25 @@ html, body {
 .stepBtn { width:32px; height:32px; padding:0; }
 .stepBtn:active { color:var(--accent); border-color:var(--accent); }
 
-.bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
+/* fixed, not absolute: absolute inside #overlay reported the full height but
+   rendered cut at viewport + bottom inset. b48 proved a fixed layer paints to
+   the true bottom; inside #overlay it still sits above the tint and below the
+   UI, which is where it has to be. */
+.bgfall {
+  position:fixed; top:0; left:0; right:0; height:var(--screen-h, 100%);
+  overflow:hidden; pointer-events:none; z-index:0;
+}
 /* Real block sprites, so the debris carry the theme's bevel, glow and Game Boy
    fill marks. Size, opacity, blur, spin and sway all come off the piece's depth.
    will-change so a blurred piece rasterises once and only its transform
    animates - without it the far layers re-blur every frame. */
 .bgfall canvas {
   position:absolute; top:0;
-  will-change:transform;
+  /* No will-change here. It promotes each block to its own compositing layer,
+     and WebKit clips a composited layer to its ancestor's rasterised bounds --
+     the viewport, not the box -- so the blocks were cut at a line short of the
+     bottom of the screen while .bgfall itself measured the full height. The
+     blur it was protecting is on the far band only, which barely moves. */
   animation-name:bg-fall; animation-timing-function:linear; animation-iteration-count:infinite;
 }
 @keyframes bg-fall {
@@ -529,10 +548,14 @@ html, body {
 /* Solid black over the foot of the screen, which is indistinguishable from the
    app drawing a black band there — it sent a hunt for a seam that was this. Half
    transparent and outlined so it always reads as the tool, not as the page. */
+/* Flush to the bottom, with the inset as padding instead. Offset by it, this
+   left an undarkened 34px strip under its own translucent background — a hard
+   edge across the foot of the screen, from the tool being used to hunt one. */
 #debug {
   position:fixed; left:0; right:0; z-index:99;
-  bottom:env(safe-area-inset-bottom);
-  padding:6px 8px; background:rgba(0,0,0,.55); color:#0f0;
+  bottom:0;
+  padding:6px 8px calc(env(safe-area-inset-bottom) + 6px);
+  background:rgba(0,0,0,.55); color:#0f0;
   border-top:1px dashed #0f0;
   font:10px/1.35 ui-monospace,monospace; text-align:left;
   pointer-events:none; word-break:break-all; white-space:pre-wrap;

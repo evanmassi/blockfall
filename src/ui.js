@@ -221,7 +221,12 @@ export function setBoardShowing(on) {
  * two agree and this resolves to the viewport.
  */
 export function syncScreenHeight() {
-  const px = Math.max(window.innerHeight || 0, window.screen?.height || 0);
+  const vp = window.innerHeight || 0;
+  // Only an installed iOS app is short of its own screen. Anywhere else the
+  // window is legitimately smaller than the display, and screen.height would
+  // stretch #app far past the bottom of it — on a desktop it pushed the whole
+  // menu down by the difference between the window and the monitor.
+  const px = navigator.standalone ? Math.max(vp, window.screen?.height || 0) : vp;
   document.documentElement.style.setProperty('--screen-h', px ? `${px}px` : '100%');
 }
 

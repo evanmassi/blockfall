@@ -250,6 +250,17 @@ section('Offline packaging');
   check('and not pinned to the viewport by inset',
         !/inset:0/.test(appRule), appRule);
 
+  // The one that actually cut the falling blocks. body carries overflow:hidden,
+  // so a body sized to the viewport clips everything inside it — including, as
+  // it turned out, the outlines of the boxes drawn to hunt the clip. Sizing the
+  // layers within it is worth nothing while their container is short.
+  const rootRule = /html, body \{([^}]*)\}/.exec(flat)?.[1] ?? '';
+  check('and so are html and body, which clip what is inside them',
+        /height:var\(--screen-h/.test(rootRule), rootRule || 'no html, body rule');
+  check('there being no point sizing the layers if their container is short',
+        /overflow:hidden/.test(rootRule) && /height:var\(--screen-h/.test(rootRule),
+        rootRule);
+
   // #app * would otherwise leave the overlay unscrollable by finger, so a menu
   // taller than the screen loses everything past the fold with no way to reach it.
   check('a too-tall overlay can still be scrolled', /touch-action:\s*pan-y/.test(overlayRule),

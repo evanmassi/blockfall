@@ -10,22 +10,35 @@ import { updateKeyRepeat } from './input.js';
 import { Sound } from './audio.js';
 import { muteBtn } from './dom.js';
 
-// Resolved against this module so it still lands on /sw.js when served from a
-// subpath like /blockfall/. Needs HTTPS or localhost.
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register(new URL('../sw.js', import.meta.url)).catch(() => {});
-  });
-}
-
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b47';
+const BUILD = 'b59';
 
 // An installed app can't be handed a query string — the icon keeps whatever URL
 // it was added with — so five taps on the wordmark toggle it from inside. That
 // is the only way to read the boxes on the one configuration that matters.
 const DEBUG_KEY = 'blockfall.debug';
+const debugging = new URLSearchParams(location.search).has('debug') ||
+  (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
+
+// Resolved against this module so it still lands on /sw.js when served from a
+// subpath like /blockfall/. Needs HTTPS or localhost.
+//
+// Skipped while debugging, and anything it already cached torn down with it: an
+// installed app testing a change against a dev server has to be reading the
+// bytes on disk, not a copy of them from two builds ago.
+if ('serviceWorker' in navigator) {
+  if (debugging) {
+    navigator.serviceWorker.getRegistrations?.()
+      .then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+    globalThis.caches?.keys?.().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
+  } else {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register(new URL('../sw.js', import.meta.url)).catch(() => {});
+    });
+  }
+}
+
 let marks = 0, markedAt = -Infinity;
 
 document.addEventListener('pointerdown', e => {
@@ -41,9 +54,6 @@ document.addEventListener('pointerdown', e => {
   } catch {}
   location.reload(); // so the boot-time measurements run under the new setting
 }, true);
-
-const debugging = new URLSearchParams(location.search).has('debug') ||
-  (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
 
 // The real event sequence for a tap. Capture phase, so it sees every event
 // regardless of what any handler does with it.
@@ -87,6 +97,10 @@ if (debugging) {
       `safe t${cs.paddingTop} b${cs.paddingBottom} standalone=${!!navigator.standalone}`,
       `${r('#app')} ${r('#overlay')}`,
       `${r('.bgfall')} ${r('#stage')}`,
+      // Never measured before tonight, and they contain everything else.
+      `html ${Math.round(document.documentElement.getBoundingClientRect().bottom)} ` +
+      `body ${Math.round(document.body.getBoundingClientRect().bottom)} ` +
+      `ovf ${getComputedStyle(document.body).overflow}`,
       `html=${document.documentElement.style.background || '(css)'} body=${document.body.style.background || '(css)'}`,
     ];
     draw();
