@@ -339,54 +339,60 @@ section('Themes');
   check('soft overlay var follows', cssVars['--overlay-soft'] === THEMES.aurora.overlaySoft, cssVars['--overlay-soft']);
   check('status bar color follows', metaThemeColor.content === THEMES.aurora.bg, metaThemeColor.content);
 
-  // The browser paints its own chrome with theme-color — the iOS status bar, the
-  // strip behind Safari's toolbar. Told the theme's base colour while a menu is
-  // over the whole page, it painted a band lighter than anything on screen at
-  // both ends of the page, which read as the app cutting its background short.
-  // NES is the worst of them: #1c1c1c against a menu that renders #030303.
+  // The browser paints its own chrome with theme-color, and fills the strip
+  // outside the page — behind the home indicator when installed — from the
+  // document's own background. Neither is reached by the overlay drawn inside
+  // the page, so both stayed the theme's raw colour while the page rendered the
+  // overlay over it, leaving a band at the edge of the screen.
+  //
+  // The page has to be painted the overlay's own colour, alpha dropped: the page
+  // renders aO + (1-a)X, and that equals X only where X = O. Compositing the
+  // overlay over the theme lands close but never equal, which is how this
+  // survived being fixed twice.
   applyTheme('nes');
   fresh();
   check('playing, the chrome is the board colour',
         metaThemeColor.content === THEMES.nes.bg, metaThemeColor.content);
 
   game.showMenu();
-  check('under a menu it is the overlay over it instead',
-        metaThemeColor.content === '#030303', metaThemeColor.content);
-  // The strip iOS fills outside the page when installed comes from the document's
-  // own background, not from anything drawn inside it. theme-color alone left a
-  // band at the foot of the screen that the falling blocks vanished behind.
-  check('and the page itself is painted to match',
-        docStyle.background === '#030303', String(docStyle.background));
-
-  // The overlay has to be opaque at that same colour. Translucent, it composited
-  // over the page it had just been matched to and came out darker again — the
-  // same seam, a few levels quieter, which is how it survived being "fixed".
-  check('and the overlay does not tint it a second time',
-        els.overlay.style.background === '#030303', String(els.overlay.style.background));
-  check('so the strip, the page and the tag are one colour',
-        new Set([docStyle.background, els.overlay.style.background, metaThemeColor.content]).size === 1,
-        [docStyle.background, els.overlay.style.background, metaThemeColor.content].join(' '));
-
+  check('under a menu it is the overlay it will be painted with',
+        metaThemeColor.content === '#000000', metaThemeColor.content);
   check('which is nothing like the raw theme colour',
         metaThemeColor.content !== THEMES.nes.bg, 'chrome still mismatches the page');
+  check('and the page carries the same colour',
+        docStyle.background === '#000000', String(docStyle.background));
 
-  // Pause is the exception: it is see-through so the board can be read behind it.
-  fresh();
-  game.togglePause();
-  check('and the see-through pause screen lands between the two',
-        metaThemeColor.content === '#0d0d0d', metaThemeColor.content);
-  check('with the overlay left see-through for it',
-        !els.overlay.style.background, els.overlay.style.background || '(css)');
-  game.togglePause();
-  check('back to the board colour once play resumes',
-        metaThemeColor.content === THEMES.nes.bg, metaThemeColor.content);
+  // The property that matters, checked as the algebra rather than as a constant:
+  // the overlay laid over the page must come back to the page's own colour.
+  const settles = () => {
+    const [, r, g, b, a] = /rgba?\(\s*([\d.]+)\D+([\d.]+)\D+([\d.]+)\s*,\s*([\d.]+)/.exec(theme.overlay);
+    const X = [1, 3, 5].map(i => parseInt(docStyle.background.slice(i, i + 2), 16));
+    return [+r, +g, +b].every((o, i) => Math.round(o * +a + X[i] * (1 - +a)) === X[i]);
+  };
+  check('so the overlay over the page leaves the page unchanged', settles(), docStyle.background);
 
-  // Themes whose overlay is already their background can never mismatch, which
-  // is why this was invisible on Neon and obvious on NES.
+  for (const name of Object.keys(THEMES)) {
+    applyTheme(name);
+    check(`  and for ${name}`, settles(), `${name} ${docStyle.background} vs ${theme.overlay}`);
+  }
+
+  // Switching theme on the menu has to repaint it: pinned to the theme that was
+  // live when the menu was drawn, every theme rendered the first one's colour.
   applyTheme('neon');
   game.showMenu();
-  check('a theme tinted with its own background needs no correction',
-        metaThemeColor.content === THEMES.neon.bg, metaThemeColor.content);
+  const wasNeon = docStyle.background;
+  applyTheme('gameboy');
+  check('switching theme under a menu repaints the page',
+        docStyle.background !== wasNeon, `stuck at ${docStyle.background}`);
+
+  applyTheme('nes');
+  fresh();
+  check('back to the board colour once play resumes',
+        metaThemeColor.content === THEMES.nes.bg, metaThemeColor.content);
+  game.togglePause();
+  check('and the see-through pause screen gets its own',
+        metaThemeColor.content === '#000000', metaThemeColor.content);
+  game.togglePause();
   applyTheme('aurora');
   check('choice persisted', store['blockfall.theme'] === 'aurora', store['blockfall.theme']);
   check('savedThemeName reads it back', savedThemeName() === 'aurora');

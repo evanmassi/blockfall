@@ -2,7 +2,7 @@
 // composes these into the menu, pause and game-over screens.
 
 import { G } from './state.js';
-import { THEMES, theme, setChrome, chromeColor } from './themes.js';
+import { THEMES, theme, setChrome } from './themes.js';
 import { TYPES } from './pieces.js';
 import { applyTheme, drawThemePreview, drawWordmarkL, drawDebris } from './render.js';
 import { READY_MS, READY_BEATS } from './config.js';
@@ -135,12 +135,6 @@ export function showOverlay(html, opts = {}) {
   overlay.classList.toggle('modal', !!opts.modal);
   overlay.classList.remove('hidden');
   setChrome(opts.soft ? 'soft' : 'overlay');
-
-  // Opaque, at exactly the colour the page is painted for the strip iOS fills
-  // outside it. Left translucent it composited over that same colour a second
-  // time, so the page came out a few levels darker than the strip and the seam
-  // survived in miniature. Pause stays see-through — the board is the point.
-  overlay.style.background = opts.soft ? '' : chromeColor('overlay');
   paintOverlayCanvases();
 
   // Bound on the button itself; stopPropagation keeps the tap from also

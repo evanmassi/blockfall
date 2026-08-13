@@ -147,18 +147,24 @@ export function savedThemeName() {
   return 'neon';
 }
 
-/** `rgba(...)` laid over an opaque `#rrggbb`, flattened. */
-function composite(over, base) {
+/**
+ * An `rgba(...)` with its alpha dropped, as `#rrggbb`.
+ *
+ * Which is the colour to paint the page under a translucent overlay. The page
+ * renders `aO + (1-a)X` for a page colour X, and the strip the browser fills
+ * outside the page *is* X — so they are equal only where `X = aO + (1-a)X`,
+ * which solves to `X = O`. Compositing the overlay over the theme instead, as
+ * this did, lands a few levels off every time and leaves the seam in miniature.
+ */
+function opaque(over) {
   const inner = /rgba?\(([^)]+)\)/.exec(over);
-  if (!inner) return base;
+  if (!inner) return over;
   // Split rather than pattern-matched per channel: a separator of \D+ ate the
   // decimal point of ".9" and read the alpha as 9.
   const parts = inner[1].split(',').map(parseFloat);
-  if (parts.slice(0, 3).some(Number.isNaN)) return base;
-  const a = parts.length > 3 && !Number.isNaN(parts[3]) ? parts[3] : 1;
-  const bg = [0, 2, 4].map(i => parseInt(base.replace('#', '').slice(i, i + 2), 16));
-  const hex = i => Math.round(parts[i] * a + bg[i] * (1 - a)).toString(16).padStart(2, '0');
-  return '#' + [0, 1, 2].map(hex).join('');
+  if (parts.slice(0, 3).some(Number.isNaN)) return over;
+  return '#' + parts.slice(0, 3)
+    .map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
 }
 
 let chromeMode = 'base';
@@ -177,7 +183,7 @@ let chromeMode = 'base';
 /** What the screen reads as, flattened. @param {'base'|'overlay'|'soft'} mode */
 export function chromeColor(mode = chromeMode) {
   if (mode === 'base') return theme.bg;
-  return composite(mode === 'soft' ? theme.overlaySoft : theme.overlay, theme.bg);
+  return opaque(mode === 'soft' ? theme.overlaySoft : theme.overlay);
 }
 
 export function setChrome(mode = chromeMode) {
