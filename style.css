@@ -416,7 +416,10 @@ html, body {
    sit narrower and dimmer instead, which reads as a step down from the row above.  */
 /* Pulled up against the row that opened it — the overlay's own 14px gap read as
    a separate row of the menu rather than as something belonging to the button. */
-.menuBtns.clears { gap:8px; margin-top:-9px; padding:0 6px 6px; animation:clears-in .16s ease-out; }
+.menuBtns.clears { gap:8px; margin-top:-9px; padding:0 6px 6px; }
+/* Only on the way in. The row is the same two buttons for either mode, so
+   re-rendering it to switch modes was replaying this as a flash over nothing. */
+.menuBtns.clears.arriving { animation:clears-in .16s ease-out; }
 .menuBtn.variant {
   min-height:38px; padding:7px 16px;
   font-size:7px; letter-spacing:.1em;

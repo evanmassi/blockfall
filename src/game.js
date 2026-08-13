@@ -822,11 +822,16 @@ function recordCards() {
 // the backdrop is redrawn from that so a re-render resumes the drift rather
 // than restarting it.
 let openPick = null;
+let arriving = false;
 let menuAt = 0;
 
 /** Shows a mode's two clears under it, or puts them away again. */
 export function openPicker(mode) {
+  const wasShut = openPick === null;
   openPick = openPick === mode ? null : mode;
+  // The row is identical for either mode, so switching between them should leave
+  // it sitting still. Animating it in again read as a flash for no reason.
+  arriving = wasShut && openPick !== null;
   renderMenu(false);
 }
 
@@ -852,6 +857,7 @@ export function showMenu() {
   refreshUndo();
 
   openPick = null;
+  arriving = false;
   menuAt = Date.now();
   renderMenu(true);
 }
@@ -890,7 +896,7 @@ function renderMenu(intro) {
     ${themeBar()}
     ${rule()}
     ${actionBar(starts)}
-    ${openPick ? actionBar(clearsRow(openPick), 'clears') : ''}
+    ${openPick ? actionBar(clearsRow(openPick), arriving ? 'clears arriving' : 'clears') : ''}
     ${resumes.length ? rule() + actionBar(resumes, 'resumes') : ''}
     ${rule()}
     ${textRow(textButton('how', 'HOW TO PLAY'), textButton('settings', 'SETTINGS'))}

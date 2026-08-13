@@ -910,7 +910,18 @@ section('Menu wording');
         !/\.menuBtn\.variant \{[^}]*background:/.test(clearsCss),
         'the unchosen clears carry a fill');
 
+  check('animating in the first time', /class="menuBtns clears arriving"/.test(opened));
+
+  // Switching modes leaves the same two buttons on screen, so replaying the
+  // entrance was a flash announcing nothing.
+  game.openPicker('zen');
+  check('but sitting still when the mode beside it is picked instead',
+        /class="menuBtns clears"/.test(els.overlay.innerHTML),
+        els.overlay.innerHTML.match(/class="menuBtns clears[^"]*"/)?.[0] ?? 'no clears row');
+  game.openPicker('zen');
+
   check('pressing it again puts them away', (game.openPicker('marathon'),
+        game.openPicker('marathon'),
         !els.overlay.innerHTML.includes('data-act="play-marathon"')));
   check('every slot can be started', BASES.every(mode => {
     game.openPicker(mode);
