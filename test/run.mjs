@@ -9,7 +9,7 @@
 import {
   // harness
   check, section, report, reset, fresh, pumpMs, pumpPastDeath, now, noop, fs, blankStats,
-  els, handlers, docHandlers, store, cssVars, metaThemeColor,
+  els, handlers, docHandlers, store, cssVars, metaThemeColor, docStyle,
   swatchEls, actionButtons, debrisCanvases, fakeSwatch, previewCanvas, markCv,
   // board + input helpers
   clearGrid, fillRow, fillFrom, put, filledCells, key,
@@ -352,6 +352,11 @@ section('Themes');
   game.showMenu();
   check('under a menu it is the overlay over it instead',
         metaThemeColor.content === '#030303', metaThemeColor.content);
+  // The strip iOS fills outside the page when installed comes from the document's
+  // own background, not from anything drawn inside it. theme-color alone left a
+  // band at the foot of the screen that the falling blocks vanished behind.
+  check('and the page itself is painted to match',
+        docStyle.background === '#030303', String(docStyle.background));
   check('which is nothing like the raw theme colour',
         metaThemeColor.content !== THEMES.nes.bg, 'chrome still mismatches the page');
 

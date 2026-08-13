@@ -176,10 +176,18 @@ let chromeMode = 'base';
  */
 export function setChrome(mode = chromeMode) {
   chromeMode = mode;
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) return;
   const over = mode === 'soft' ? theme.overlaySoft : theme.overlay;
-  meta.setAttribute('content', mode === 'base' ? theme.bg : composite(over, theme.bg));
+  const color = mode === 'base' ? theme.bg : composite(over, theme.bg);
+
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
+
+  // And the document's own background. Installed, iOS fills the strip outside
+  // the page — behind the home indicator — from this rather than from anything
+  // drawn inside it, so the overlay never reached it and it stayed the theme's
+  // raw colour. theme-color alone fixed the top and left that band at the foot.
+  // html's background is what propagates to the canvas outside the page.
+  if (document.documentElement?.style) document.documentElement.style.background = color;
+  if (document.body?.style) document.body.style.background = color;
 }
 
 export function setTheme(name) {

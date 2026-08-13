@@ -103,9 +103,13 @@ const rafQueue = [];
 const oscNode = { connect: n => n, start: noop, stop: noop, type: '', frequency: { setValueAtTime: noop } };
 const gainNode = { gain: { setValueAtTime: noop, exponentialRampToValueAtTime: noop }, connect: n => n };
 
+/** documentElement.style, so the page background is observable — it is what iOS
+ *  fills the strip outside the page with once installed. */
+export const docStyle = { setProperty: (k, v) => { cssVars[k] = v; } };
+
 globalThis.document = {
   hidden: false,
-  documentElement: { style: { setProperty: (k, v) => { cssVars[k] = v; } } },
+  documentElement: { style: docStyle },
   getElementById: id => els[id],
   querySelector: () => metaThemeColor,
   createElement: () => ({ width: 10, height: 10, style: {}, getContext: ctxStub }),
