@@ -12,11 +12,13 @@ import { muteBtn } from './dom.js';
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b60';
+const BUILD = 'b61';
 
 // An installed app can't be handed a query string — the icon keeps whatever URL
-// it was added with — so five taps on the wordmark toggle it from inside. That
-// is the only way to read the boxes on the one configuration that matters.
+// it was added with — so it is toggled from inside. On the settings screen's
+// heading rather than the wordmark: the menu is where she spends her taps, and
+// stumbling into a green readout with no idea how to leave would read as the
+// game breaking.
 const DEBUG_KEY = 'blockfall.debug';
 const debugging = new URLSearchParams(location.search).has('debug') ||
   (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
@@ -42,7 +44,7 @@ if ('serviceWorker' in navigator) {
 let marks = 0, markedAt = -Infinity;
 
 document.addEventListener('pointerdown', e => {
-  if (!e.target?.closest?.('.markWrap')) return;
+  if (!e.target?.closest?.('[data-debug]')) return;
   const now = e.timeStamp ?? 0;
   marks = now - markedAt < 3000 ? marks + 1 : 1;
   markedAt = now;

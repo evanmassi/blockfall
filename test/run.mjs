@@ -1574,6 +1574,17 @@ section('Settings are hers, and they stay set');
         clamped.undos === UNDO_MAX && clamped.zenCap === DEFAULT_SETTINGS.zenCap && clamped.countdown === true,
         JSON.stringify(clamped));
 
+  // The developer readout is toggled by tapping this heading five times. It sits
+  // here rather than on the wordmark because the menu is where she taps, and a
+  // green readout she cannot dismiss would read as the game breaking.
+  check('the settings heading carries the debug toggle',
+        /<h2 data-debug>SETTINGS<\/h2>/.test(els.overlay.innerHTML), 'no toggle target');
+  const shell = fs.readFileSync('src/main.js', 'utf8');
+  check('and nothing else in the app does',
+        (shell.match(/\[data-debug\]/g) || []).length === 1 &&
+        !shell.includes(".closest?.('.markWrap')"),
+        'the toggle is still on the wordmark');
+
   pressAction('back');
   check('BACK returns to the menu it came from', els.overlay.innerHTML.includes('data-act="new-marathon"'));
 

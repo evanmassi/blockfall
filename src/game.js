@@ -712,7 +712,7 @@ function settingsRows() {
 
 export function showSettings() {
   showOverlay(`
-    <h2>SETTINGS</h2>
+    <h2 data-debug>SETTINGS</h2>
     ${settingsRows()}
     ${actionBar([['back', 'BACK']])}
   `, { soft: G.state !== 'menu', modal: true });
