@@ -174,10 +174,15 @@ let chromeMode = 'base';
  *
  * @param {'base'|'overlay'|'soft'} [mode]  omit to repaint the current one.
  */
+/** What the screen reads as, flattened. @param {'base'|'overlay'|'soft'} mode */
+export function chromeColor(mode = chromeMode) {
+  if (mode === 'base') return theme.bg;
+  return composite(mode === 'soft' ? theme.overlaySoft : theme.overlay, theme.bg);
+}
+
 export function setChrome(mode = chromeMode) {
   chromeMode = mode;
-  const over = mode === 'soft' ? theme.overlaySoft : theme.overlay;
-  const color = mode === 'base' ? theme.bg : composite(over, theme.bg);
+  const color = chromeColor(mode);
 
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
 

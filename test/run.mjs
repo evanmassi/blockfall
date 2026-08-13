@@ -357,13 +357,26 @@ section('Themes');
   // band at the foot of the screen that the falling blocks vanished behind.
   check('and the page itself is painted to match',
         docStyle.background === '#030303', String(docStyle.background));
+
+  // The overlay has to be opaque at that same colour. Translucent, it composited
+  // over the page it had just been matched to and came out darker again — the
+  // same seam, a few levels quieter, which is how it survived being "fixed".
+  check('and the overlay does not tint it a second time',
+        els.overlay.style.background === '#030303', String(els.overlay.style.background));
+  check('so the strip, the page and the tag are one colour',
+        new Set([docStyle.background, els.overlay.style.background, metaThemeColor.content]).size === 1,
+        [docStyle.background, els.overlay.style.background, metaThemeColor.content].join(' '));
+
   check('which is nothing like the raw theme colour',
         metaThemeColor.content !== THEMES.nes.bg, 'chrome still mismatches the page');
 
+  // Pause is the exception: it is see-through so the board can be read behind it.
   fresh();
   game.togglePause();
   check('and the see-through pause screen lands between the two',
         metaThemeColor.content === '#0d0d0d', metaThemeColor.content);
+  check('with the overlay left see-through for it',
+        !els.overlay.style.background, els.overlay.style.background || '(css)');
   game.togglePause();
   check('back to the board colour once play resumes',
         metaThemeColor.content === THEMES.nes.bg, metaThemeColor.content);
