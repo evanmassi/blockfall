@@ -59,11 +59,22 @@ html, body {
 /* justify-content:center so the HUD and the board are centred together as one
    block. Centring the board inside a top-anchored column instead would open a
    gap under the score while leaving the void at the bottom. */
+/* Height from --screen-h, not inset:0. Installed, black-translucent starts the
+   web view at the top of the screen but sizes it to screen-minus-status-bar --
+   812 of 874 -- so inset:0 left every layer inside here 62pt short of the
+   bottom, and the falling blocks stopped at a line. --screen-h is the screen,
+   measured at runtime; everywhere else it equals the viewport. */
 #app {
-  position:fixed; inset:0;
+  position:fixed; top:0; left:0; right:0;
+  height:var(--screen-h, 100%);
   display:flex; flex-direction:column; justify-content:center;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
+
+/* Hidden until a run starts, set in the markup so the very first paint has it
+   away: nothing behind the menu is worth reading, and it flashed SCORE 0 on
+   every launch. visibility, not display — resize() measures these boxes. */
+#app.atMenu #hud, #app.atMenu #stage, #app.atMenu #sysBtns { visibility:hidden; }
 
 #hud {
   flex:0 0 auto;
@@ -185,24 +196,11 @@ html, body {
   pointer-events:none; opacity:0;
 }
 
-/* The tint and blur of whatever is behind an overlay, as its own layer so the
-   debris can drift on top of it while the UI stays above them both. Sized to the
-   screen like the debris are: the viewport stops 62pt short once installed. */
-#scrim {
-  position:fixed; top:0; left:0; right:0; height:var(--screen-h, 100%);
-  z-index:5;
-  background:var(--overlay);
-}
-#scrim[hidden] { display:none; }
-/* Blur only where there is something behind worth blurring. WebKit puts an
-   element with backdrop-filter on its own compositing layer, which can paint it
-   over siblings whatever their z-index says — and on the menu the board is
-   hidden anyway, so it was buying a layering hazard for no picture. */
-#scrim.soft { background:var(--overlay-soft); backdrop-filter:blur(1px); }
-
 #overlay {
-  position:absolute; inset:0; z-index:7;
+  position:absolute; inset:0; z-index:5;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+  background:var(--overlay);
+  backdrop-filter:blur(3px);
   text-align:center;
   /* Same trap as #sysBtns: inset:0 spans #app's padding box, so overlay content
      needs its own safe-area allowance or a tall screen can run under the status
@@ -220,8 +218,8 @@ html, body {
 #overlay > * { flex:0 0 auto; }
 #overlay.hidden { display:none; }
 
-/* Pause keeps the board readable underneath rather than blanking it out; the
-   scrim carries that, since it is what does the tinting. */
+/* Pause keeps the board readable underneath rather than blanking it out. */
+#overlay.soft { background:var(--overlay-soft); backdrop-filter:blur(1px); }
 
 /* Sized so all five fit one row on a phone: 5 x 64px plus four 6px gaps is
    344px, inside the ~364px an overlay leaves after its safe-area padding. */
@@ -388,7 +386,7 @@ html, body {
    rather than one thing moving in an already-finished screen. Scoped to .intro
    so pausing stays instant, and .cta is excluded because this shorthand would
    otherwise replace its pulse outright. */
-#overlay.intro > *:not(.markWrap):not(.cta) { animation:menu-in .5s ease-out .95s both; }
+#overlay.intro > *:not(.bgfall):not(.markWrap):not(.cta) { animation:menu-in .5s ease-out .95s both; }
 #overlay.intro > .cta { animation:menu-in .5s ease-out .95s both, pulse 1.7s ease-in-out 1.45s infinite; }
 @keyframes menu-in {
   0%   { opacity:0; transform:translateY(7px); }
@@ -511,23 +509,12 @@ html, body {
 .stepBtn { width:32px; height:32px; padding:0; }
 .stepBtn:active { color:var(--accent); border-color:var(--accent); }
 
-/* Sized to the screen, not the viewport, and outside #overlay so nothing clips
-   it. Installed, black-translucent starts the web view at the top of the screen
-   but still sizes it to screen-minus-status-bar — 812 of 874 — so a layer bound
-   to the viewport stops 62pt short of the bottom and the blocks vanish at a
-   line. --screen-h is that difference, measured at runtime; it falls back to
-   the viewport everywhere the two agree. */
-#bgfall {
-  position:fixed; top:0; left:0; right:0;
-  height:var(--screen-h, 100%);
-  overflow:hidden; pointer-events:none; z-index:6;
-}
-#bgfall[hidden] { display:none; }
+.bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
 /* Real block sprites, so the debris carry the theme's bevel, glow and Game Boy
    fill marks. Size, opacity, blur, spin and sway all come off the piece's depth.
    will-change so a blurred piece rasterises once and only its transform
    animates - without it the far layers re-blur every frame. */
-#bgfall canvas {
+.bgfall canvas {
   position:absolute; top:0;
   will-change:transform;
   animation-name:bg-fall; animation-timing-function:linear; animation-iteration-count:infinite;
@@ -537,7 +524,7 @@ html, body {
   50%  { transform:translate(var(--sway), 47.5vh) rotate(calc(var(--spin) * 0.5)); }
   100% { transform:translate(0, 120vh) rotate(var(--spin)); }
 }
-#overlay > * { position:relative; z-index:1; }
+#overlay > *:not(.bgfall) { position:relative; z-index:1; }
 
 /* Solid black over the foot of the screen, which is indistinguishable from the
    app drawing a black band there — it sent a hunt for a seam that was this. Half
@@ -554,12 +541,11 @@ html, body {
 /* ?debug only: where each layer actually lands, since a seam between them can
    only be seen on the device it happens on. */
 #app.showBoxes #overlay { outline:2px solid #f0f; outline-offset:-2px; }
-#app.showBoxes #scrim   { outline:2px solid #f80; outline-offset:-6px; }
-#app.showBoxes #bgfall  { outline:2px solid #0f0; outline-offset:-4px; }
+#app.showBoxes .bgfall  { outline:2px solid #0f0; outline-offset:-4px; }
 #app.showBoxes #stage   { outline:2px solid #0ff; outline-offset:-2px; }
 
 @media (prefers-reduced-motion: reduce) {
   /* !important because the staged reveal uses a multi-animation shorthand. */
   #overlay * { animation:none !important; }
-  #bgfall { display:none; }
+  .bgfall { display:none; }
 }

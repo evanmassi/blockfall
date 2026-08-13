@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b50';
+const BUILD = 'b47';
 
 // An installed app can't be handed a query string — the icon keeps whatever URL
 // it was added with — so five taps on the wordmark toggle it from inside. That
@@ -150,7 +150,7 @@ G.stats = loadStats();
 G.settings = loadSettings(); // before showMenu, which reads them to size the undo button
 muteBtn.textContent = Sound.muted ? '♪̸' : '♪';
 setTheme(savedThemeName()); // resize() does the sprite/well rebuild that follows
-syncScreenHeight();          // before the menu, which sizes its backdrop from it
+syncScreenHeight();          // #app is sized from it, so before anything measures
 resize();
 showMenu();
 requestAnimationFrame(t => { lastFrame = t; frame(t); });

@@ -23,7 +23,7 @@ import { Sound } from './audio.js';
 import { Haptics } from './haptics.js';
 import {
   showOverlay, hideOverlay, showToast, updateHud, setRecordStyle, setCountdown,
-  themeBar, wordmark, showBackdrop, actionBar, textButton, textRow, rule,
+  themeBar, wordmark, menuBackdrop, actionBar, textButton, textRow, rule,
   setUndo, settingRow, stepper, toggle, setBoardShowing,
 } from './ui.js';
 
@@ -823,6 +823,7 @@ function recordCards() {
 // than restarting it.
 let openPick = null;
 let arriving = false;
+let menuAt = 0;
 
 /** Shows a mode's two clears under it, or puts them away again. */
 export function openPicker(mode) {
@@ -857,7 +858,7 @@ export function showMenu() {
 
   openPick = null;
   arriving = false;
-  showBackdrop();
+  menuAt = Date.now();
   setBoardShowing(false); // nothing behind the menu is worth its glow bleeding through
   renderMenu(true);
 }
@@ -890,6 +891,7 @@ function renderMenu(intro) {
   }));
 
   showOverlay(`
+    ${intro ? menuBackdrop() : menuBackdrop((Date.now() - menuAt) / 1000)}
     ${wordmark()}
     ${recordCards()}
     ${themeBar()}

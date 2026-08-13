@@ -32,15 +32,10 @@ try {
 </script>
 </head>
 <body>
-<div id="app">
-  <!-- Three layers, bottom to top: the scrim darkens and blurs the board behind
-       it, the debris drift on top of that, and #overlay carries the UI above
-       them both. The tint has to be its own element — with it on #overlay the
-       debris were either clipped to the viewport (inside) or seen through 90%
-       opacity and a 3px blur (outside), which is a glass wall. -->
-  <div id="scrim" aria-hidden="true" hidden></div>
-  <div id="bgfall" aria-hidden="true" hidden></div>
-
+<!-- The board starts hidden. Boot renders the shell, then showMenu() hides it a
+     frame later, which flashed an empty board reading SCORE 0 on every launch.
+     game.js reveals it when a run starts. -->
+<div id="app" class="atMenu">
   <header id="hud">
     <div id="scoreBox">
       <span class="label">SCORE</span>
