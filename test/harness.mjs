@@ -28,7 +28,7 @@ const ctxStub = () => {
 export const docHandlers = {}, handlers = {}, els = {};
 const IDS = ['app','hud','board','holdCanvas','nextCanvas','overlay','toast','countdown','stage',
              'railLeft','railRight','score','level','lines','comboStat','combo','pauseBtn','muteBtn',
-             'undoBtn','undoLeft'];
+             'undoBtn','undoLeft','sysBtns'];
 
 for (const id of IDS) {
   const listeners = handlers[id] = {};
@@ -212,6 +212,11 @@ export function reset({ stats = blankStats(), themeName = 'neon' } = {}) {
   G.state = 'menu';
   G.mode = 'marathon';
   G.cascade = false;
+  // The bag too, or a block that draws pieces inherits whatever fraction of one
+  // the last block left behind — which is how "700 draws, 100 of each" started
+  // depending on nobody having played a game before it.
+  G.bag = null;
+  G.queue = [];
   G.score = 0;
   G.lines = 0;
   G.level = 1;

@@ -45,6 +45,24 @@ section('Boot');
   check('theme synced to CSS vars', cssVars['--accent'] === '#ff2d95', JSON.stringify(cssVars['--accent']));
   check('board sized', els.board.width > 0);
 
+  // The board's glow spreads ~38px past its own edges, and at the menu overlay's
+  // 90% that came through as a lit rectangle whose edges read as seams. Nothing
+  // behind the menu is worth reading — it says SCORE 0.
+  check('the board is put away behind the menu',
+        [els.stage, els.hud, els.sysBtns].every(el => el.style.visibility === 'hidden'),
+        [els.stage, els.hud, els.sysBtns].map(el => el.style.visibility || '(shown)').join(' '));
+
+  fresh();
+  check('and comes back the moment a game starts',
+        [els.stage, els.hud, els.sysBtns].every(el => el.style.visibility === ''),
+        [els.stage, els.hud, els.sysBtns].map(el => el.style.visibility || '(shown)').join(' '));
+
+  // Pause is deliberately see-through, so the board must still be there.
+  game.togglePause();
+  check('and stays out on the pause screen, which is meant to show it',
+        els.stage.style.visibility === '', els.stage.style.visibility || '(shown)');
+  game.togglePause();
+
   // Playing is what she came for; reference and settings sit under it.
   check('the modes come before the text links',
         menu.indexOf('data-act="new-marathon"') < menu.indexOf('data-act="how"'),
@@ -320,6 +338,38 @@ section('Themes');
   check('scanlines var follows', cssVars['--scanlines'] === 'none', cssVars['--scanlines']);
   check('soft overlay var follows', cssVars['--overlay-soft'] === THEMES.aurora.overlaySoft, cssVars['--overlay-soft']);
   check('status bar color follows', metaThemeColor.content === THEMES.aurora.bg, metaThemeColor.content);
+
+  // The browser paints its own chrome with theme-color — the iOS status bar, the
+  // strip behind Safari's toolbar. Told the theme's base colour while a menu is
+  // over the whole page, it painted a band lighter than anything on screen at
+  // both ends of the page, which read as the app cutting its background short.
+  // NES is the worst of them: #1c1c1c against a menu that renders #030303.
+  applyTheme('nes');
+  fresh();
+  check('playing, the chrome is the board colour',
+        metaThemeColor.content === THEMES.nes.bg, metaThemeColor.content);
+
+  game.showMenu();
+  check('under a menu it is the overlay over it instead',
+        metaThemeColor.content === '#030303', metaThemeColor.content);
+  check('which is nothing like the raw theme colour',
+        metaThemeColor.content !== THEMES.nes.bg, 'chrome still mismatches the page');
+
+  fresh();
+  game.togglePause();
+  check('and the see-through pause screen lands between the two',
+        metaThemeColor.content === '#0d0d0d', metaThemeColor.content);
+  game.togglePause();
+  check('back to the board colour once play resumes',
+        metaThemeColor.content === THEMES.nes.bg, metaThemeColor.content);
+
+  // Themes whose overlay is already their background can never mismatch, which
+  // is why this was invisible on Neon and obvious on NES.
+  applyTheme('neon');
+  game.showMenu();
+  check('a theme tinted with its own background needs no correction',
+        metaThemeColor.content === THEMES.neon.bg, metaThemeColor.content);
+  applyTheme('aurora');
   check('choice persisted', store['blockfall.theme'] === 'aurora', store['blockfall.theme']);
   check('savedThemeName reads it back', savedThemeName() === 'aurora');
 

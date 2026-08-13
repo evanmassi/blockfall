@@ -147,6 +147,41 @@ export function savedThemeName() {
   return 'neon';
 }
 
+/** `rgba(...)` laid over an opaque `#rrggbb`, flattened. */
+function composite(over, base) {
+  const inner = /rgba?\(([^)]+)\)/.exec(over);
+  if (!inner) return base;
+  // Split rather than pattern-matched per channel: a separator of \D+ ate the
+  // decimal point of ".9" and read the alpha as 9.
+  const parts = inner[1].split(',').map(parseFloat);
+  if (parts.slice(0, 3).some(Number.isNaN)) return base;
+  const a = parts.length > 3 && !Number.isNaN(parts[3]) ? parts[3] : 1;
+  const bg = [0, 2, 4].map(i => parseInt(base.replace('#', '').slice(i, i + 2), 16));
+  const hex = i => Math.round(parts[i] * a + bg[i] * (1 - a)).toString(16).padStart(2, '0');
+  return '#' + [0, 1, 2].map(hex).join('');
+}
+
+let chromeMode = 'base';
+
+/**
+ * What the browser paints its *own* chrome with — the iOS status bar, the strip
+ * behind Safari's toolbar, the Android bar.
+ *
+ * It has to be what is actually on screen, and under a full overlay that is the
+ * overlay composited over the theme rather than the theme itself. On NES those
+ * are #030303 against #1c1c1c, which showed as a lighter band at both ends of
+ * the page, mistakable for the app cutting its own background short.
+ *
+ * @param {'base'|'overlay'|'soft'} [mode]  omit to repaint the current one.
+ */
+export function setChrome(mode = chromeMode) {
+  chromeMode = mode;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  const over = mode === 'soft' ? theme.overlaySoft : theme.overlay;
+  meta.setAttribute('content', mode === 'base' ? theme.bg : composite(over, theme.bg));
+}
+
 export function setTheme(name) {
   if (!THEMES[name]) name = 'neon';
 
@@ -173,8 +208,7 @@ export function setTheme(name) {
 
   pushPieceVars();
 
-  // Colors the Android status bar to match the board.
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.bg);
+  setChrome();
 
   try { localStorage.setItem(STORE, name); } catch {}
 }

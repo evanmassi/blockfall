@@ -2,13 +2,13 @@
 // composes these into the menu, pause and game-over screens.
 
 import { G } from './state.js';
-import { THEMES, theme } from './themes.js';
+import { THEMES, theme, setChrome } from './themes.js';
 import { TYPES } from './pieces.js';
 import { applyTheme, drawThemePreview, drawWordmarkL, drawDebris } from './render.js';
 import { READY_MS, READY_BEATS } from './config.js';
 import {
   overlay, toastEl, countdownEl, scoreEl, levelEl, linesEl, comboStat, comboEl,
-  undoBtn, undoLeftEl,
+  undoBtn, undoLeftEl, stage, hud, sysBtns,
 } from './dom.js';
 
 export function themeBar() {
@@ -134,6 +134,7 @@ export function showOverlay(html, opts = {}) {
   overlay.classList.toggle('intro', !!opts.intro);
   overlay.classList.toggle('modal', !!opts.modal);
   overlay.classList.remove('hidden');
+  setChrome(opts.soft ? 'soft' : 'overlay');
   paintOverlayCanvases();
 
   // Bound on the button itself; stopPropagation keeps the tap from also
@@ -199,8 +200,22 @@ export const settingRow = (label, control, sub) => `
     <em class="setSub">${sub}</em>
   </div>`;
 
+/**
+ * The board behind a full-screen overlay. Its accent glow spreads ~38px past
+ * its own edges, and at 90% overlay opacity that came through as a soft
+ * rectangle whose edges read as seams across the menu. Nothing back there is
+ * worth reading on the menu anyway — it says SCORE 0.
+ *
+ * visibility, not display: resize() measures these boxes.
+ */
+export function setBoardShowing(on) {
+  for (const el of [stage, hud, sysBtns]) el.style.visibility = on ? '' : 'hidden';
+}
+
 export function hideOverlay() {
   overlay.classList.add('hidden');
+  setBoardShowing(true);
+  setChrome('base');
 }
 
 export function showToast(text, color) {

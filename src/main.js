@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b33';
+const BUILD = 'b39';
 
 // ?debug — the real event sequence for a tap. Capture phase, so it sees every
 // event regardless of what any handler does with it.
@@ -28,6 +28,7 @@ if (new URLSearchParams(location.search).has('debug')) {
   const out = document.createElement('div');
   out.id = 'debug';
   document.body.appendChild(out);
+  document.getElementById('app').classList.add('showBoxes');
 
   const lines = [`build ${BUILD}`];
   // Also posted to the dev server, so a phone's log lands in debug.log instead
@@ -41,13 +42,38 @@ if (new URLSearchParams(location.search).has('debug')) {
   };
   globalThis.__bfLog = log;
   log(`--- session start, build ${BUILD} ---`);
+
+  // Where each layer actually lands. A seam between them is only visible on a
+  // device, and reading it off a screenshot is guesswork — these are the numbers
+  // that say which box is short and by how much.
+  const boxes = () => {
+    const app = document.getElementById('app');
+    const cs = getComputedStyle(app);
+    const r = sel => {
+      const el = sel[0] === '#' ? document.getElementById(sel.slice(1)) : document.querySelector(sel);
+      const b = el?.getBoundingClientRect?.();
+      return b ? `${sel} ${Math.round(b.top)}→${Math.round(b.bottom)}` : `${sel} absent`;
+    };
+    log(`vp ${innerWidth}x${innerHeight} vis ${Math.round(visualViewport?.height ?? 0)} dpr ${devicePixelRatio}`);
+    log(`safe t${cs.paddingTop} b${cs.paddingBottom} standalone=${!!navigator.standalone}`);
+    log(`${r('#app')} ${r('#overlay')}`);
+    log(`${r('.bgfall')} ${r('#stage')}`);
+  };
+
+  // After the intro settles, and again whenever the URL bar resizes the viewport.
+  setTimeout(boxes, 1600);
+  addEventListener('resize', () => setTimeout(boxes, 120));
+  visualViewport?.addEventListener('resize', () => setTimeout(boxes, 120));
   for (const type of ['pointerdown', 'pointerup', 'click']) {
     document.addEventListener(type, e => {
       const t = e.target;
       const cls = typeof t.className === 'string' && t.className
         ? '.' + t.className.trim().split(/\s+/).join('.') : '';
       const act = t.closest?.('[data-act]')?.dataset.act ?? '-';
-      log(`${type}/${e.pointerType || 'x'} ${t.tagName}${cls} act=${act} → ${G.state}`);
+      // Coordinates too: tapping a seam is the only way to say where it is in
+      // the page's own terms rather than in screenshot pixels.
+      const at = `@${Math.round(e.clientY)}/${innerHeight}`;
+      log(`${type}/${e.pointerType || 'x'} ${at} ${t.tagName}${cls} act=${act} → ${G.state}`);
     }, true);
   }
 }

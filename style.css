@@ -515,13 +515,23 @@ html, body {
 }
 #overlay > *:not(.bgfall) { position:relative; z-index:1; }
 
+/* Solid black over the foot of the screen, which is indistinguishable from the
+   app drawing a black band there — it sent a hunt for a seam that was this. Half
+   transparent and outlined so it always reads as the tool, not as the page. */
 #debug {
   position:fixed; left:0; right:0; z-index:99;
   bottom:env(safe-area-inset-bottom);
-  padding:6px 8px; background:#000; color:#0f0;
+  padding:6px 8px; background:rgba(0,0,0,.55); color:#0f0;
+  border-top:1px dashed #0f0;
   font:10px/1.35 ui-monospace,monospace; text-align:left;
   pointer-events:none; word-break:break-all; white-space:pre-wrap;
 }
+
+/* ?debug only: where each layer actually lands, since a seam between them can
+   only be seen on the device it happens on. */
+#app.showBoxes #overlay { outline:2px solid #f0f; outline-offset:-2px; }
+#app.showBoxes .bgfall  { outline:2px solid #0f0; outline-offset:-4px; }
+#app.showBoxes #stage   { outline:2px solid #0ff; outline-offset:-2px; }
 
 @media (prefers-reduced-motion: reduce) {
   /* !important because the staged reveal uses a multi-animation shorthand. */

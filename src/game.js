@@ -24,7 +24,7 @@ import { Haptics } from './haptics.js';
 import {
   showOverlay, hideOverlay, showToast, updateHud, setRecordStyle, setCountdown,
   themeBar, wordmark, menuBackdrop, actionBar, textButton, textRow, rule,
-  setUndo, settingRow, stepper, toggle,
+  setUndo, settingRow, stepper, toggle, setBoardShowing,
 } from './ui.js';
 
 function setReady(ms) {
@@ -859,6 +859,7 @@ export function showMenu() {
   openPick = null;
   arriving = false;
   menuAt = Date.now();
+  setBoardShowing(false); // nothing behind the menu is worth its glow bleeding through
   renderMenu(true);
 }
 
