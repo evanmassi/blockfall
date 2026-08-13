@@ -33,10 +33,13 @@ try {
 </head>
 <body>
 <div id="app">
-  <!-- Outside #overlay on purpose: the overlay is a scroll container and clips
-       to the viewport, which installed is 62pt shorter than the screen. Out
-       here it can be sized to the screen and reach the bottom of it. -->
-  <div class="bgfall" id="bgfall" aria-hidden="true" hidden></div>
+  <!-- Three layers, bottom to top: the scrim darkens and blurs the board behind
+       it, the debris drift on top of that, and #overlay carries the UI above
+       them both. The tint has to be its own element — with it on #overlay the
+       debris were either clipped to the viewport (inside) or seen through 90%
+       opacity and a 3px blur (outside), which is a glass wall. -->
+  <div id="scrim" aria-hidden="true" hidden></div>
+  <div id="bgfall" aria-hidden="true" hidden></div>
 
   <header id="hud">
     <div id="scoreBox">

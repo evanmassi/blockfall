@@ -43,6 +43,19 @@ section('Boot');
         els.bgfall.innerHTML.includes('debrisCv') && els.bgfall.hidden === false);
   check('and they are not inside the overlay to be clipped by it',
         !els.overlay.innerHTML.includes('debrisCv'), 'debris still in the overlay');
+
+  // Three layers: the scrim tints the board, the debris drift on top of it, the
+  // UI sits above them both. With the tint on #overlay the debris were either
+  // clipped to the viewport or seen through 90% opacity and a blur.
+  const sheet = fs.readFileSync('style.css', 'utf8').replace(/\s+/g, ' ');
+  const layer = id => {
+    const rule = new RegExp(`#${id} \\{([^}]*)\\}`).exec(sheet)?.[1] ?? '';
+    return +(/z-index:\s*(\d+)/.exec(rule)?.[1] ?? -1);
+  };
+  check('the debris sit above the tint and below the UI',
+        layer('scrim') < layer('bgfall') && layer('bgfall') < layer('overlay'),
+        `scrim ${layer('scrim')}, bgfall ${layer('bgfall')}, overlay ${layer('overlay')}`);
+  check('the scrim comes up with the overlay', els.scrim.hidden === false);
   const types = [...els.bgfall.innerHTML.matchAll(/data-type="(\w+)"/g)].map(m => m[1]);
   check('debris are real tetrominoes', types.length > 0 && types.every(t => TYPES.includes(t)),
         types.join(' '));

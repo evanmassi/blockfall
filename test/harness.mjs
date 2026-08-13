@@ -28,7 +28,7 @@ const ctxStub = () => {
 export const docHandlers = {}, handlers = {}, els = {};
 const IDS = ['app','hud','board','holdCanvas','nextCanvas','overlay','toast','countdown','stage',
              'railLeft','railRight','score','level','lines','comboStat','combo','pauseBtn','muteBtn',
-             'undoBtn','undoLeft','sysBtns','bgfall'];
+             'undoBtn','undoLeft','sysBtns','bgfall','scrim'];
 
 for (const id of IDS) {
   const listeners = handlers[id] = {};

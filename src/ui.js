@@ -8,7 +8,7 @@ import { applyTheme, drawThemePreview, drawWordmarkL, drawDebris } from './rende
 import { READY_MS, READY_BEATS } from './config.js';
 import {
   overlay, toastEl, countdownEl, scoreEl, levelEl, linesEl, comboStat, comboEl,
-  undoBtn, undoLeftEl, stage, hud, sysBtns, bgfall,
+  undoBtn, undoLeftEl, stage, hud, sysBtns, bgfall, scrim,
 } from './dom.js';
 
 export function themeBar() {
@@ -142,6 +142,9 @@ export function onOverlayAction(fn) { actionHandler = fn; }
 export function showOverlay(html, opts = {}) {
   overlay.innerHTML = html;
   overlay.classList.toggle('soft', !!opts.soft);
+  // The tint lives on the scrim, under the debris — see index.html.
+  scrim.hidden = false;
+  scrim.classList.toggle('soft', !!opts.soft);
   overlay.classList.toggle('intro', !!opts.intro);
   overlay.classList.toggle('modal', !!opts.modal);
   overlay.classList.remove('hidden');
@@ -225,6 +228,7 @@ export function setBoardShowing(on) {
 
 export function hideOverlay() {
   overlay.classList.add('hidden');
+  scrim.hidden = true;
   setBoardShowing(true);
   hideBackdrop();
   setChrome('base');
