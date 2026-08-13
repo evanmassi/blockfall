@@ -192,9 +192,12 @@ html, body {
   position:fixed; top:0; left:0; right:0; height:var(--screen-h, 100%);
   z-index:5;
   background:var(--overlay);
-  backdrop-filter:blur(3px);
 }
 #scrim[hidden] { display:none; }
+/* Blur only where there is something behind worth blurring. WebKit puts an
+   element with backdrop-filter on its own compositing layer, which can paint it
+   over siblings whatever their z-index says — and on the menu the board is
+   hidden anyway, so it was buying a layering hazard for no picture. */
 #scrim.soft { background:var(--overlay-soft); backdrop-filter:blur(1px); }
 
 #overlay {

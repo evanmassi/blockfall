@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b49';
+const BUILD = 'b50';
 
 // An installed app can't be handed a query string — the icon keeps whatever URL
 // it was added with — so five taps on the wordmark toggle it from inside. That
