@@ -7,22 +7,22 @@ import {
   LINE_SCORES, TSPIN_SCORES, TSPIN_MINI_SCORES, PERFECT_SCORES,
   LOCK_DELAY, MAX_LOCK_RESETS, CLEAR_FX, DEATH_ROW_MS, DEATH_HOLD_MS,
   FRAME_MS, GRAVITY_FRAMES, GRAVITY_MIN_FRAMES,
-  ZEN_SPEED_CAP_LEVEL, ZEN_RESCUE_ROWS, READY_MS, READY_BEATS,
+  ZEN_SPEED_CAP_LEVEL, ZEN_RESCUE_ROWS, READY_MS, READY_BEATS, CHAIN_SCORES, FALL_MS,
 } from './config.js';
 import { ROTATIONS, KICKS, topRow } from './pieces.js';
 import { theme } from './themes.js';
 import {
-  G, emptyGrid, saveStats, blankTally,
+  G, emptyGrid, saveStats, blankTally, MODES,
   saveRun, loadRun, clearRun, encodeGrid, decodeGrid,
   saveLastMode, loadLastMode,
 } from './state.js';
-import { collides, fillQueue, makePiece } from './board.js';
+import { collides, fillQueue, makePiece, settle } from './board.js';
 import { view, drawSidePanels, syncLevelPalette } from './render.js';
 import { Sound } from './audio.js';
 import { Haptics } from './haptics.js';
 import {
   showOverlay, hideOverlay, showToast, updateHud, setRecordStyle, setCountdown,
-  themeBar, wordmark, menuBackdrop, actionBar,
+  themeBar, wordmark, menuBackdrop, actionBar, textButton,
 } from './ui.js';
 
 function setReady(ms) {
@@ -229,8 +229,7 @@ export function lockPiece() {
     }
   }
 
-  const full = [];
-  for (let y = 0; y < ROWS; y++) if (G.grid[y].every(Boolean)) full.push(y);
+  const full = fullRows();
 
   // Locked entirely in the hidden buffer: a top-out everywhere but Zen.
   if (!anyVisible && !full.length) {
@@ -241,16 +240,7 @@ export function lockPiece() {
   }
 
   if (full.length) {
-    const fx = CLEAR_FX[Math.min(full.length, 4)];
-    spawnClearParticles(full, fx);
-    G.pendingClear = { rows: full, spin };
-    G.clearRows = full;
-    G.clearCount = full.length;
-    G.clearTime = fx.time;
-    G.clearTimer = fx.time;
-    G.shake = Math.max(G.shake, fx.shake);
-    G.state = 'clearing';
-    G.active = null;
+    beginClear(full, spin);
   } else {
     if (spin) applyScore(0, spin);
     else { G.combo = -1; Sound.lock(); Haptics.lock(); }
@@ -259,20 +249,78 @@ export function lockPiece() {
   }
 }
 
+// Deeper chains hit harder: a clear four links in reads as a Tetris even when
+// it is one row.
+function beginClear(rows, spin) {
+  const fx = CLEAR_FX[Math.min(rows.length + G.chain, 4)];
+  spawnClearParticles(rows, fx);
+  G.pendingClear = { rows, spin };
+  G.clearRows = rows;
+  G.clearCount = rows.length;
+  G.clearTime = fx.time;
+  G.clearTimer = fx.time;
+  G.shake = Math.max(G.shake, fx.shake);
+  G.state = 'clearing';
+  G.active = null;
+}
+
+const fullRows = () => {
+  const full = [];
+  for (let y = 0; y < ROWS; y++) if (G.grid[y].every(Boolean)) full.push(y);
+  return full;
+};
+
 function finishClear() {
   const { rows, spin } = G.pendingClear;
-  const kept = G.grid.filter((_, y) => !rows.includes(y));
-  while (kept.length < ROWS) kept.unshift(Array(COLS).fill(null));
-  G.grid = kept;
 
-  applyScore(rows.length, spin);
+  // Cascade blanks the rows in place and lets the survivors fall; everywhere
+  // else the stack shifts down as whole rows.
+  let moved = null;
+  if (G.mode === 'cascade') {
+    for (const y of rows) G.grid[y] = Array(COLS).fill(null);
+    moved = settle(G.grid);
+  } else {
+    const kept = G.grid.filter((_, y) => !rows.includes(y));
+    while (kept.length < ROWS) kept.unshift(Array(COLS).fill(null));
+    G.grid = kept;
+  }
+
+  applyScore(rows.length, spin, G.chain);
   G.pendingClear = null;
   G.clearRows = null;
+
+  // The fall is the whole point of cascade: snapping the survivors into place
+  // left a chained clear looking like a bonus with no cause.
+  if (moved?.length) {
+    G.falling = moved;
+    G.fallTimer = FALL_MS;
+    G.state = 'settling';
+    return;
+  }
+
+  afterSettle();
+}
+
+function afterSettle() {
+  G.falling = null;
+
+  if (G.mode === 'cascade') {
+    const next = fullRows();
+    if (next.length) {
+      G.chain++;
+      G.tally.chain = Math.max(G.tally.chain, G.chain + 1);
+      beginClear(next, null); // a spin credits the placement, not what it set off
+      return;
+    }
+  }
+
+  G.chain = 0;
   G.state = 'playing';
   spawn();
 }
 
-function applyScore(cleared, spin) {
+/** @param {number} chain  links already set off by this one placement. */
+function applyScore(cleared, spin, chain = 0) {
   const prevLevel = G.level;
   let gain = 0, label = '', color = theme.accent;
 
@@ -299,15 +347,25 @@ function applyScore(cleared, spin) {
   if (spin) G.tally.tspins++;
   if (cleared === 4) G.tally.tetris++;
 
+  if (chain > 0) {
+    gain = Math.round(gain * CHAIN_SCORES[Math.min(chain, CHAIN_SCORES.length - 1)]);
+    label = `CHAIN ${chain + 1}×` + (label ? '  ' + label : '');
+    color = theme.pieces.S;
+  }
+
   if (cleared) {
-    G.combo++;
-    if (G.combo > 0) {
-      gain += 50 * G.combo * G.level;
-      if (!label) label = G.combo + 1 + '× COMBO';
-      else label += '  ' + (G.combo + 1) + '×';
+    // Combo counts consecutive *placements* that cleared, so the extra clears one
+    // placement sets off must not touch it — four links would read as a 4× combo.
+    if (!chain) {
+      G.combo++;
+      if (G.combo > 0) {
+        gain += 50 * G.combo * G.level;
+        if (!label) label = G.combo + 1 + '× COMBO';
+        else label += '  ' + (G.combo + 1) + '×';
+      }
+      G.stats[G.mode].combo = Math.max(G.stats[G.mode].combo, G.combo + 1);
+      G.tally.combo = Math.max(G.tally.combo, G.combo + 1);
     }
-    G.stats[G.mode].combo = Math.max(G.stats[G.mode].combo, G.combo + 1);
-    G.tally.combo = Math.max(G.tally.combo, G.combo + 1);
 
     G.lines += cleared;
     G.level = Math.floor(G.lines / 10) + 1;
@@ -321,7 +379,10 @@ function applyScore(cleared, spin) {
       G.shake = Math.max(G.shake, 12);
     }
 
-    if (spin) { Sound.tspin(); Haptics.tspin(); } else { Sound.clear(cleared); Haptics.clear(cleared); }
+    if (chain > 0) Sound.chain(chain);
+    else if (spin) { Sound.tspin(); Haptics.tspin(); }
+    else Sound.clear(cleared);
+    Haptics.clear(cleared);
     if (G.combo > 0) Sound.combo(G.combo);
   } else {
     G.combo = -1;
@@ -384,9 +445,7 @@ export function snapshotRun() {
 export function pendingRun() {
   const last = loadLastMode();
   if (loadRun(last)) return last;
-  if (loadRun('marathon')) return 'marathon';
-  if (loadRun('zen')) return 'zen';
-  return null;
+  return MODES.find(m => loadRun(m)) ?? null;
 }
 
 export function resumeRun(mode = pendingRun()) {
@@ -394,7 +453,7 @@ export function resumeRun(mode = pendingRun()) {
   if (!saved) { startGame(); return; }
   saveLastMode(mode);
 
-  G.mode = saved.mode === 'zen' ? 'zen' : 'marathon';
+  G.mode = MODES.includes(saved.mode) ? saved.mode : 'marathon';
   G.grid = decodeGrid(saved.grid);
   G.queue = Array.isArray(saved.queue) ? [...saved.queue] : [];
   G.bag = Array.isArray(saved.bag) ? [...saved.bag] : null;
@@ -411,7 +470,8 @@ export function resumeRun(mode = pendingRun()) {
   G.tally = { ...blankTally(), ...saved.tally };
 
   G.gravityAcc = 0; G.particles = []; G.shake = 0;
-  G.clearRows = null; G.pendingClear = null; G.clearCount = 0;
+  G.clearRows = null; G.pendingClear = null; G.clearCount = 0; G.chain = 0;
+  G.falling = null; G.fallTimer = 0;
   G.deathRow = ROWS; G.deathTimer = 0;
   G.rotatedLast = false; G.lastKick = 0;
   resetLockState();
@@ -445,7 +505,8 @@ export function startGame(mode = 'marathon') {
   G.newBest = false;
   setRecordStyle(false);
   G.gravityAcc = 0; G.particles = []; G.shake = 0;
-  G.clearRows = null; G.pendingClear = null;
+  G.clearRows = null; G.pendingClear = null; G.chain = 0;
+  G.falling = null; G.fallTimer = 0;
   G.deathRow = ROWS; G.deathTimer = 0;
   G.state = 'playing';
   setReady(0);
@@ -488,6 +549,8 @@ function tallyCard() {
     ['PIECES', t.pieces.toLocaleString()], ['TETRIS', t.tetris],
     ['T-SPINS', t.tspins], ['PERFECT', t.perfect], ['BEST COMBO', t.combo + '&times;'],
   ];
+  // Chains are impossible outside cascade, so elsewhere the row is always zero.
+  if (G.mode === 'cascade') rows.push(['BEST CHAIN', t.chain + '&times;']);
   return `<dl class="tally">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
 }
 
@@ -540,26 +603,57 @@ export function showPauseScreen() {
   showOverlay(`
     <h2>PAUSED</h2>
     ${themeBar()}
+    ${textButton('how', 'HOW TO PLAY')}
     ${actionBar(actions)}
-    ${controlsHint()}
     <p class="cta">TAP TO RESUME</p>
   `, { soft: true });
 }
 
+// Reached from the menu and from pause; where BACK returns is read off the state
+// rather than tracked, since only those two screens can open it.
+export function showControls() {
+  const fromPause = G.state !== 'menu';
+  showOverlay(`
+    <h2>HOW TO PLAY</h2>
+    ${controlsHint()}
+    ${actionBar([['back', 'BACK']])}
+  `, { soft: fromPause, modal: true });
+}
+
+export function closeControls() {
+  if (G.state === 'menu') showMenu();
+  else showPauseScreen();
+}
+
+// Each live state has a paused twin, so pausing mid-clear or mid-fall resumes
+// into the same beat rather than skipping it.
+const PAUSED_AS = { playing: 'paused', clearing: 'pausedClearing', settling: 'pausedSettling' };
+const RESUMED_AS = { paused: 'playing', pausedClearing: 'clearing', pausedSettling: 'settling' };
+
 export function togglePause() {
-  if (G.state === 'playing' || G.state === 'clearing') {
-    G.state = G.state === 'clearing' ? 'pausedClearing' : 'paused';
+  if (PAUSED_AS[G.state]) {
+    G.state = PAUSED_AS[G.state];
     setReady(0);
     snapshotRun();
     showPauseScreen();
-  } else if (G.state === 'paused' || G.state === 'pausedClearing') {
-    G.state = G.state === 'pausedClearing' ? 'clearing' : 'playing';
+  } else if (RESUMED_AS[G.state]) {
+    G.state = RESUMED_AS[G.state];
     hideOverlay();
     setReady(READY_MS);
   }
 }
 
 const lineCount = n => `${n.toLocaleString()} ${n === 1 ? 'LINE' : 'LINES'}`;
+
+// Menu order, and what a run in progress reads as on its resume button.
+const MENU_MODES = [
+  { mode: 'marathon', name: 'CLASSIC', start: 'new', resume: 'continue',
+    progress: s => (s.score | 0).toLocaleString() },
+  { mode: 'zen', name: 'ZEN', start: 'zen', resume: 'continue-zen',
+    progress: s => lineCount(s.lines | 0) },
+  { mode: 'cascade', name: 'CASCADE', start: 'cascade', resume: 'continue-cascade',
+    progress: s => (s.score | 0).toLocaleString() },
+];
 
 /** One card per mode that has anything to show. */
 function recordCards() {
@@ -574,7 +668,7 @@ function recordCards() {
       </div>`;
   };
 
-  const cards = card('marathon', 'CLASSIC') + card('zen', 'ZEN');
+  const cards = card('marathon', 'CLASSIC') + card('zen', 'ZEN') + card('cascade', 'CASCADE');
   return cards ? `<div class="records">${cards}</div>` : '';
 }
 
@@ -587,37 +681,32 @@ export function showMenu() {
   G.particles = [];
   G.clearRows = null;
   G.pendingClear = null;
+  G.chain = 0;
+  G.falling = null;
   G.deathRow = ROWS;
   setReady(0);
   setRecordStyle(false);
 
-  const savedMarathon = loadRun('marathon');
-  const savedZen = loadRun('zen');
-  const saved = savedMarathon || savedZen;
+  // Starting on the first row, resuming below it. Progress goes on a second line
+  // inside the button rather than after the label: "RESUME CASCADE · 18,400" on
+  // one line is wider than a phone, and three of those stacked ran off the bottom.
+  const actions = [];
+  const resumes = [];
 
-  // New on the first row, resume on the second, one verb throughout.
-  const actions = [
-    ['new', saved ? 'NEW CLASSIC' : 'CLASSIC MODE'],
-    ['zen', saved ? 'NEW ZEN' : 'ZEN MODE'],
-  ];
-
-  if (saved) {
-    actions.push(null);
-    if (savedMarathon) {
-      actions.push(['continue', `RESUME CLASSIC · ${(savedMarathon.score | 0).toLocaleString()}`]);
-    }
-    if (savedZen) {
-      actions.push(['continue-zen', `RESUME ZEN · ${lineCount(savedZen.lines | 0)}`]);
-    }
+  for (const m of MENU_MODES) {
+    actions.push([m.start, `NEW ${m.name}`]);
+    const save = loadRun(m.mode);
+    if (save) resumes.push([m.resume, `RESUME ${m.name}`, m.progress(save)]);
   }
+
+  if (resumes.length) actions.push(null, ...resumes);
 
   showOverlay(`
     ${menuBackdrop()}
     ${wordmark()}
     ${recordCards()}
-    ${controlsHint()}
-    <p class="fine">HOLD SAVES A PIECE &nbsp;·&nbsp; ONCE PER DROP</p>
     ${themeBar()}
+    ${textButton('how', 'HOW TO PLAY')}
     ${actionBar(actions)}
   `, { intro: true });
 }
@@ -638,7 +727,7 @@ export function update(dt) {
     return;
   }
 
-  if (G.state === 'playing' || G.state === 'clearing') G.tally.ms += dt;
+  if (G.state === 'playing' || G.state === 'clearing' || G.state === 'settling') G.tally.ms += dt;
 
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 0.03);
 
@@ -664,6 +753,18 @@ export function update(dt) {
   if (G.state === 'clearing') {
     G.clearTimer -= dt;
     if (G.clearTimer <= 0) finishClear();
+    return;
+  }
+
+  if (G.state === 'settling') {
+    G.fallTimer -= dt;
+    if (G.fallTimer > 0) return;
+    // The stack landing, before whatever it completed lights up.
+    const drop = Math.max(...G.falling.map(f => f.to - f.from));
+    G.shake = Math.max(G.shake, Math.min(4, 1 + drop * 0.5));
+    Sound.settle(drop);
+    Haptics.lock();
+    afterSettle();
     return;
   }
 

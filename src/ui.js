@@ -8,12 +8,8 @@ import { applyTheme, drawThemePreview, drawWordmarkL, drawDebris } from './rende
 import { READY_MS, READY_BEATS } from './config.js';
 import { overlay, toastEl, countdownEl, scoreEl, levelEl, linesEl, comboStat, comboEl } from './dom.js';
 
-// Forced, so the hardware recreations get their own row regardless of viewport.
-const PICKER_ROW_BREAK = 3;
-
 export function themeBar() {
-  const swatches = Object.entries(THEMES).map(([key, t], i) => `
-    ${i === PICKER_ROW_BREAK ? '<span class="themeBreak"></span>' : ''}
+  const swatches = Object.entries(THEMES).map(([key, t]) => `
     <button class="swatch${key === theme.key ? ' on' : ''}" data-theme="${key}" aria-label="${t.name}">
       <canvas class="swatchCv"></canvas>
       <em>${t.name}</em>
@@ -111,15 +107,18 @@ let actionHandler = null;
 export function onOverlayAction(fn) { actionHandler = fn; }
 
 /**
- * @param {{soft?: boolean, intro?: boolean}} [opts]
+ * @param {{soft?: boolean, intro?: boolean, modal?: boolean}} [opts]
  *   soft  — lighter backdrop, board readable behind it (pause).
  *   intro — stage contents in after the title drop. Off anywhere that must
  *           appear instantly.
+ *   modal — a screen reached from another screen. Suppresses the pause screen's
+ *           tap-anywhere, which would otherwise resume out from under it.
  */
 export function showOverlay(html, opts = {}) {
   overlay.innerHTML = html;
   overlay.classList.toggle('soft', !!opts.soft);
   overlay.classList.toggle('intro', !!opts.intro);
+  overlay.classList.toggle('modal', !!opts.modal);
   overlay.classList.remove('hidden');
   paintOverlayCanvases();
 
@@ -135,18 +134,25 @@ export function showOverlay(html, opts = {}) {
 }
 
 /**
- * @param {Array<[string, string]>} actions  [action, label] pairs, or null for
- *   a row break. An action with no branch in input.js's handler produces a
+ * @param {Array<[string, string, string?]>} actions  [action, label, sub] — sub
+ *   goes on a second line, which halves how wide a long label needs to be. null
+ *   for a row break. An action with no branch in input.js's handler produces a
  *   button that silently does nothing, so the two must be kept in step.
  */
 export function actionBar(actions) {
   const buttons = actions
-    .map(entry => (entry === null
-      ? '<span class="btnBreak"></span>'
-      : `<button class="menuBtn" data-act="${entry[0]}">${entry[1]}</button>`))
+    .map(entry => {
+      if (entry === null) return '<span class="btnBreak"></span>';
+      const [act, label, sub] = entry;
+      return `<button class="menuBtn" data-act="${act}">${label}${sub ? `<em>${sub}</em>` : ''}</button>`;
+    })
     .join('');
   return `<div class="menuBtns">${buttons}</div>`;
 }
+
+/** A control that costs a line of text rather than a 46px button row. */
+export const textButton = (act, label) =>
+  `<button class="textBtn" data-act="${act}">${label}</button>`;
 
 export function hideOverlay() {
   overlay.classList.add('hidden');

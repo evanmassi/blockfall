@@ -10,6 +10,7 @@ import { onOverlayAction } from './ui.js';
 import {
   move, rotate, softDrop, hardDrop, holdPiece,
   startGame, togglePause, showMenu, pendingRun, resumeRun, showPauseScreen,
+  showControls, closeControls,
 } from './game.js';
 import { Haptics } from './haptics.js';
 
@@ -99,6 +100,9 @@ overlay.addEventListener('pointerdown', e => {
   // through resumes the game they were trying to leave, which reads as broken.
   if (e.target.closest?.('.menuBtns')) return;
 
+  // A screen opened from pause: resuming here would close it out from under them.
+  if (overlay.classList.contains('modal')) return;
+
   Sound.init();
   // The only tap-anywhere screen left: resuming is the one action with no button.
   if (G.state === 'paused' || G.state === 'pausedClearing') togglePause();
@@ -107,11 +111,15 @@ overlay.addEventListener('pointerdown', e => {
 onOverlayAction(act => {
   Sound.init();
   if (act === 'zen') startGame('zen');
+  else if (act === 'cascade') startGame('cascade');
   else if (act === 'restart') startGame(G.mode); // restart stays in the mode you were in
   else if (act === 'new') startGame();
   else if (act === 'continue') resumeRun('marathon');
   else if (act === 'continue-zen') resumeRun('zen');
+  else if (act === 'continue-cascade') resumeRun('cascade');
   else if (act === 'menu') showMenu();
+  else if (act === 'how') showControls();
+  else if (act === 'back') closeControls();
   else if (act === 'resume') togglePause();
   else if (act === 'haptics') {
     Haptics.setEnabled(!Haptics.enabled);

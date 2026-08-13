@@ -8,7 +8,7 @@
 
 import {
   // harness
-  check, section, report, reset, fresh, pumpMs, pumpPastDeath, now, noop, fs,
+  check, section, report, reset, fresh, pumpMs, pumpPastDeath, now, noop, fs, blankStats,
   els, handlers, docHandlers, store, cssVars, metaThemeColor,
   swatchEls, actionButtons, debrisCanvases, fakeSwatch, previewCanvas, markCv,
   // board + input helpers
@@ -168,7 +168,15 @@ section('Offline packaging');
   // tappable controls has to be id-qualified or it silently loses.
   const flat = css.replace(/\s+/g, ' ');
   check('touch-action override outranks #app *',
-        /#app \.menuBtn, #app \.swatch, #app \.sysBtn \{ touch-action:manipulation/.test(flat));
+        /#app \.menuBtn, #app \.swatch, #app \.sysBtn, #app \.textBtn \{ touch-action:manipulation/.test(flat));
+
+  // #app * would otherwise leave the overlay unscrollable by finger, so a menu
+  // taller than the screen loses everything past the fold with no way to reach it.
+  check('a too-tall overlay can still be scrolled', /touch-action:\s*pan-y/.test(overlayRule),
+        'overlay inherits touch-action:none');
+  check('and it is declared after #app *',
+        css.indexOf('touch-action:pan-y') > css.indexOf('#app, #app *'),
+        'pan-y loses to #app * on source order');
 
   // Splash motion has to be opt-out, and must never gate starting a game.
   check('motion respects prefers-reduced-motion',
@@ -545,7 +553,7 @@ section('New high score');
   };
 
   // First ever game: nothing to beat, so scoring at all must not celebrate.
-  G.stats = { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } };
+  G.stats = { ...blankStats(), marathon: { score: 0, lines: 0, combo: 0 } };
   game.startGame();
   pumpMs(20);
   clearGrid();
@@ -554,7 +562,7 @@ section('New high score');
   check('score stays unmarked', !els.score.classes.has('record'));
 
   // With a real target, it fires exactly when the score passes it.
-  G.stats = { marathon: { score: 150, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } };
+  G.stats = { ...blankStats(), marathon: { score: 150, lines: 0, combo: 0 } };
   game.startGame();
   pumpMs(20);
   clearGrid();
@@ -595,19 +603,48 @@ section('Pause screen contents');
 
   // Controls used to appear on the menu only, so once you started playing there
   // was no way to look them up again — the gestures aren't guessable.
-  check('pause lists the controls', paused.includes('class="controls"'), 'no control list on pause');
-  // Two columns per row, so a gesture can never be orphaned from its action.
-  const dts = (paused.match(/<dt>/g) || []).length;
-  const dds = (paused.match(/<dd>/g) || []).length;
-  check('every control is a key/action pair', dts > 0 && dts === dds, `${dts} keys, ${dds} actions`);
-  check('the hold gesture is spelled out somewhere reachable',
-        /hold/i.test(paused), 'hold gesture not documented in game');
+  // The gestures aren't guessable, so they must stay reachable mid-game — but as
+  // a screen you open, not five rows of the pause screen's height.
+  check('pause offers a route to the controls', paused.includes('data-act="how"'),
+        'no way to look up the controls');
+}
 
-  // Both screens must render the same list from one source. Checked statically
-  // rather than by rendering the menu, which would move the state under us.
+section('The controls screen');
+{
+  reset();
+  pressAction('how');
+  const opened = els.overlay.innerHTML;
+  check('it lists the controls', opened.includes('class="controls"'), 'no control list');
+  // Two columns per pair, so a gesture can never be orphaned from its action.
+  const dts = (opened.match(/<dt>/g) || []).length;
+  const dds = (opened.match(/<dd>/g) || []).length;
+  check('every control is a key/action pair', dts > 0 && dts === dds, `${dts} keys, ${dds} actions`);
+  check('the hold gesture is spelled out', /hold/i.test(opened), 'hold gesture not documented');
+
+  pressAction('back');
+  check('back returns to the menu', G.state === 'menu' && els.overlay.innerHTML.includes('markWrap'), G.state);
+
+  fresh();
+  game.togglePause();
+  pressAction('how');
+  check('reachable from pause too', els.overlay.innerHTML.includes('class="controls"'));
+  check('board stays readable behind it', els.overlay.classes.has('soft'));
+
+  // Pause is a tap-anywhere surface; without the modal guard, reading the
+  // controls would drop you back into the game on the first stray tap.
+  tapOverlay(backdropTarget);
+  check('a stray tap does not resume out from under it', G.state === 'paused', G.state);
+
+  pressAction('back');
+  check('back returns to pause, still paused',
+        G.state === 'paused' && els.overlay.innerHTML.includes('PAUSED'), G.state);
+  check('and the modal guard is lifted', !els.overlay.classes.has('modal'));
+
+  // One list, one call site — both screens route here rather than each rendering
+  // their own, which is how the two used to drift apart.
   const gameSrc = fs.readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
   const uses = (gameSrc.match(/controlsHint\(\)/g) || []).length;
-  check('menu and pause share one control list', uses >= 3, `controlsHint used ${uses} times`);
+  check('one control list, reached from both screens', uses === 2, `controlsHint appears ${uses} times`);
 }
 
 section('Overlay taps');
@@ -746,7 +783,11 @@ section('Saved runs, one slot per mode');
   check('starting marathon left the zen run alone', hasSavedRun('zen'));
   check('both runs offered', menu.includes('data-act="continue"') && menu.includes('data-act="continue-zen"'));
   check('each resume shows its own progress', menu.includes('3,210') && menu.includes('42'));
-  check('classic resume carries its score', menu.includes('RESUME CLASSIC') && menu.includes('3,210'));
+  // The mode name is already on the row beside it, so the resume button carries
+  // progress alone — three "RESUME <MODE> · <score>" buttons stacked ran off the
+  // bottom of a phone.
+  check('classic resume carries its score',
+        /data-act="continue">RESUME CLASSIC<em>3,210<\/em>/.test(menu), 'resume button lost its progress');
 
   // A plain tap picks up whichever was played most recently.
   check('most recent mode is what a plain tap resumes', game.pendingRun() === 'marathon', game.pendingRun());
@@ -782,9 +823,30 @@ section('Menu wording');
   check('menu offers zen', menu.includes('data-act="zen"'));
   check('no tap prompt competing with them', !menu.includes('TAP TO'), 'menu still hints at tapping');
   check('resume button carries its progress',
-        menu.includes('RESUME ZEN &middot; 42 LINES') || menu.includes('RESUME ZEN · 42 LINES'),
-        'no progress on button');
-  check('zen button reads as starting a new one', menu.includes('NEW ZEN'));
+        /data-act="continue-zen">RESUME ZEN<em>42 LINES<\/em>/.test(menu), 'no progress on button');
+  // Start buttons are bare mode names; only RESUME carries a verb, which is what
+  // keeps three modes on one row instead of wrapping to two.
+  // Bare mode names did not read as "this starts a game" — the verb has to be on
+  // the button, not implied by the RESUME beside it.
+  check('start buttons say what they do', /data-act="zen">NEW ZEN</.test(menu), 'start button lost its verb');
+  check('every mode can be started', ['new', 'zen', 'cascade'].every(a => menu.includes(`data-act="${a}"`)));
+
+  // Worst case: a run going in all three. Starting on the first row, resuming
+  // below it, one break between them.
+  fresh('marathon'); G.score = 3210; game.showMenu();
+  fresh('zen'); G.lines = 42; game.showMenu();
+  fresh('cascade'); G.score = 18400; game.showMenu();
+  const full = els.overlay.innerHTML;
+  const buttons = (full.match(/class="menuBtn"/g) || []).length;
+  const breaks = (full.match(/btnBreak/g) || []).length;
+  check('all three modes are offered with their runs', buttons === 6, String(buttons));
+  check('starting and resuming are split by one break', breaks === 1, `${breaks} row breaks, expected 1`);
+  check('no dangling row break', !full.includes('btnBreak"></span></div>'), 'trailing break');
+  // Progress on its own line is what keeps three resume buttons off three rows.
+  // Sliced to the button row: the theme swatches carry an <em> each too.
+  const btnRow = full.slice(full.indexOf('menuBtns'));
+  check('progress sits on a second line', (btnRow.match(/<em>/g) || []).length === 3,
+        String((btnRow.match(/<em>/g) || []).length));
   check('with a way to start over beside it', menu.includes('data-act="new"'));
   // One verb throughout — no CONTINUE anywhere alongside RESUME.
   check('one word for the action, not two', !menu.includes('CONTINUE'), 'mixed CONTINUE and RESUME');
@@ -1042,7 +1104,7 @@ section('Haptics');
 section('Records on the menu');
 {
   reset();
-  G.stats = { marathon: { score: 8400, lines: 63, combo: 5 }, zen: { score: 0, lines: 0, combo: 0 } };
+  G.stats = { ...blankStats(), marathon: { score: 8400, lines: 63, combo: 5 } };
   game.showMenu();
   const menu = els.overlay.innerHTML;
   check('high score shown', menu.includes('8,400'));
@@ -1050,7 +1112,7 @@ section('Records on the menu');
   check('combo shown', menu.includes('5&times;') || menu.includes('5×'));
 
   // Nothing to boast about before the first game.
-  G.stats = { marathon: { score: 0, lines: 0, combo: 0 }, zen: { score: 0, lines: 0, combo: 0 } };
+  G.stats = { ...blankStats(), marathon: { score: 0, lines: 0, combo: 0 } };
   game.showMenu();
   check('records hidden before the first game', !els.overlay.innerHTML.includes('recordCard'));
 }
@@ -1160,7 +1222,8 @@ section('Starting another game is a button, not a hint');
   const first = els.overlay.innerHTML;
   check('a first-run menu offers a new game outright',
         first.includes('data-act="new"'), 'classic mode was tap-only');
-  check('with the other mode beside it', first.includes('ZEN MODE'));
+  check('with the other modes beside it',
+        first.includes('data-act="zen"') && first.includes('data-act="cascade"'));
 
   reset();
   fresh('zen');
@@ -1180,6 +1243,164 @@ section('Starting another game is a button, not a hint');
   pressAction('restart');
   check('play again stays in the mode you died in', G.mode === 'zen', G.mode);
   check('and starts from scratch', G.score === 0 && G.lines === 0, `${G.score}/${G.lines}`);
+}
+
+section('Cascade gravity');
+{
+  reset();
+
+  // Cells fall independently, so a piece bridging a hole comes apart and fills
+  // it. Rigid clumps were tried first and barely differed from classic: a cleared
+  // row leaves an empty band, so everything above it is one clump falling one row.
+  clearGrid();
+  G.grid[ROWS - 3][1] = 'I'; G.grid[ROWS - 3][2] = 'I'; G.grid[ROWS - 3][3] = 'I';
+  G.grid[ROWS - 2][3] = 'O';
+  board.settle(G.grid);
+  check('unsupported cells drop to the floor',
+        G.grid[ROWS - 1][1] === 'I' && G.grid[ROWS - 1][2] === 'I',
+        G.grid[ROWS - 1].map(c => c || '.').join(''));
+  check('a supported one stacks on its support',
+        G.grid[ROWS - 1][3] === 'O' && G.grid[ROWS - 2][3] === 'I',
+        `${G.grid[ROWS - 2][3]}/${G.grid[ROWS - 1][3]}`);
+  check('nothing is left floating', G.grid[ROWS - 3].every(c => !c),
+        G.grid[ROWS - 3].map(c => c || '.').join(''));
+
+  // Several gaps in one column all close, not just the lowest.
+  clearGrid();
+  G.grid[ROWS - 6][0] = 'T';
+  G.grid[ROWS - 4][0] = 'S';
+  G.grid[ROWS - 2][0] = 'Z';
+  board.settle(G.grid);
+  check('a column compacts completely',
+        G.grid.map(r => r[0] || '.').join('').endsWith('TSZ'),
+        G.grid.map(r => r[0] || '.').join(''));
+
+  // Nothing floating means nothing moves.
+  clearGrid();
+  fillRow(ROWS - 1, 4);
+  const before = G.grid[ROWS - 1].join('|');
+  board.settle(G.grid);
+  check('a settled board is left alone', G.grid[ROWS - 1].join('|') === before);
+}
+
+section('Cascade mode');
+{
+  reset();
+  fresh('cascade');
+  check('cascade is its own mode', G.mode === 'cascade', G.mode);
+
+  // Bottom row complete but for one column, with a lone block stranded two rows
+  // up in that column. Clearing the bottom row drops it into the next gap.
+  clearGrid();
+  fillRow(ROWS - 1, 0);
+  fillRow(ROWS - 2, 0);
+  G.grid[ROWS - 2][0] = null;
+  put('I', -2, ROWS - 4, 1); // vertical I filling column 0
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 80);
+
+  check('the first clear lands', G.lines >= 1, String(G.lines));
+  check('chain reset once it settles', G.chain === 0, String(G.chain));
+
+  // A real chain, built by hand. Bottom row is short only column 0; the row above
+  // is short columns 0 and 9; a block sits stranded high in column 9. Dropping a
+  // vertical I down column 0 completes the bottom row, and when what is left
+  // settles, the stranded block falls in to complete it a second time.
+  reset();
+  fresh('cascade');
+  clearGrid();
+  for (let x = 1; x < COLS; x++) G.grid[ROWS - 1][x] = 'I';
+  for (let x = 1; x < COLS - 1; x++) G.grid[ROWS - 2][x] = 'I';
+  G.grid[ROWS - 5][COLS - 1] = 'T';
+  put('I', -2, 0, 1);
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX * 4 + 400);
+  check('one clear sets off another', G.lines === 2, String(G.lines));
+  check('and the chain is recorded', G.tally.chain === 2, String(G.tally.chain));
+  check('the chain closes out', G.chain === 0 && G.state === 'playing', `${G.chain}/${G.state}`);
+
+  // Combo counts placements, not links. One piece cannot run it up.
+  reset();
+  fresh('cascade');
+  clearGrid();
+  for (let y = ROWS - 4; y < ROWS; y++) fillRow(y, 0);
+  put('I', -2, 0, 1);
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX * 5 + 400);
+  check('one placement is one combo step', G.combo <= 0, String(G.combo));
+
+  // Classic must still collapse rows wholesale rather than cascading.
+  reset();
+  fresh('marathon');
+  clearGrid();
+  fillRow(ROWS - 1, 0);
+  G.grid[ROWS - 3][5] = 'T'; // floating, and must stay floating
+  put('I', -2, ROWS - 4, 1);
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 80);
+  check('classic leaves overhangs where they are', G.grid[ROWS - 2][5] === 'T',
+        G.grid.map(r => r[5] || '.').join(''));
+
+  // The fall has to be watchable: snapping the survivors into place left a
+  // chained clear looking like a bonus with nothing to explain it.
+  reset();
+  fresh('cascade');
+  clearGrid();
+  fillRow(ROWS - 1, 0);
+  G.grid[ROWS - 4][5] = 'T'; // stranded three rows up, with air beneath it
+  put('I', -2, 0, 1);
+  game.hardDrop();
+
+  const pumpUntil = (pred, cap = 4000) => {
+    for (let t = 0; t < cap && !pred(); t += 16.7) pumpMs(16.7);
+    return pred();
+  };
+  check('a cascade clear settles before it moves on', pumpUntil(() => G.state === 'settling'), G.state);
+  check('and reports what is in flight', G.falling?.length > 0, JSON.stringify(G.falling));
+
+  const flight = G.falling.find(f => f.x === 5);
+  check('a stranded cell falls to the floor', flight && flight.to === ROWS - 1,
+        JSON.stringify(flight));
+  check('from where it actually was', flight && flight.from === ROWS - 4, JSON.stringify(flight));
+  // The renderer draws in-flight cells itself, so the grid must already be final.
+  check('the grid is settled while they are still falling', G.grid[ROWS - 1][5] === 'T',
+        G.grid[ROWS - 1].map(c => c || '.').join(''));
+
+  // Pausing mid-fall must come back to the fall, not skip it.
+  game.togglePause();
+  check('pausing mid-fall has its own state', G.state === 'pausedSettling', G.state);
+  pumpMs(600);
+  check('and the fall is frozen', G.state === 'pausedSettling', G.state);
+  game.togglePause();
+  check('resuming returns to the fall', G.state === 'settling', G.state);
+
+  pumpMs(READY_MS + 600);
+  check('which finishes on its own', G.falling === null && G.state === 'playing', G.state);
+
+  // Classic collapses rows wholesale, so nothing is ever in flight.
+  reset();
+  fresh('marathon');
+  clearGrid();
+  fillRow(ROWS - 1, 0);
+  G.grid[ROWS - 4][5] = 'T';
+  put('I', -2, 0, 1);
+  game.hardDrop();
+  pumpMs(CLEAR_TIME_MAX + 200);
+  check('classic never settles', G.falling === null && G.state === 'playing', G.state);
+
+  // Records and saves are per mode, so a cascade score cannot flatter classic.
+  reset();
+  fresh('cascade');
+  G.score = 12000;
+  G.lines = 40;
+  game.showMenu();
+  check('cascade keeps its own record', G.stats.cascade.score === 12000, String(G.stats.cascade.score));
+  check('and leaves classic alone', G.stats.marathon.score === 0, String(G.stats.marathon.score));
+  check('with its own saved run', hasSavedRun('cascade'));
+  check('offered on the menu', els.overlay.innerHTML.includes('data-act="continue-cascade"'));
+
+  game.resumeRun('cascade');
+  check('and it resumes as cascade', G.mode === 'cascade' && G.score === 12000, `${G.mode}/${G.score}`);
 }
 
 section('End-of-run tally');

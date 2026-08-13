@@ -33,6 +33,15 @@ export const DEATH_ROW_MS = 34, DEATH_HOLD_MS = 280;
 
 export const READY_MS = 2500, READY_BEATS = 3;
 
+// Cascade only: multiplier by chain depth, so a clear that sets off three more
+// is worth chasing. Indexed by depth, last value repeats.
+export const CHAIN_SCORES = [1, 1.5, 2, 3, 4];
+
+// How long the survivors take to fall into the holes a clear opened. Long enough
+// to read as cause and effect — snapping them into place made a chained clear
+// look like an arbitrary bonus rather than something the placement knocked loose.
+export const FALL_MS = 190;
+
 // Clear feedback by rows cleared. A single stays modest on purpose — if singles
 // are exciting there is nowhere left to go for a Tetris.
 //   time  ms the animation holds before the stack collapses

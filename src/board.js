@@ -26,6 +26,35 @@ export function makePiece(type) {
   return { type, rot: 0, x: type === 'O' ? 4 : 3, y: 0, m: ROTATIONS[type][0] };
 }
 
+/**
+ * Cascade gravity: every cell drops to the lowest free spot in its own column,
+ * so a clear fills the holes under it and can complete further rows.
+ *
+ * Rigid connected clumps were tried first and were nearly indistinguishable from
+ * Classic: a cleared row leaves an empty band, which makes everything above it
+ * one clump, which then falls exactly one row — a row shift by another name.
+ *
+ * @returns {Array<{x, from, to, type}>} what moved, for the renderer to animate.
+ *   The grid is already in its final state; these are only where cells came from.
+ */
+export function settle(grid) {
+  const moved = [];
+
+  for (let x = 0; x < COLS; x++) {
+    let write = ROWS - 1;
+    for (let y = ROWS - 1; y >= 0; y--) {
+      if (!grid[y][x]) continue;
+      if (write !== y) {
+        moved.push({ x, from: y, to: write, type: grid[y][x] });
+        grid[write][x] = grid[y][x];
+        grid[y][x] = null;
+      }
+      write--;
+    }
+  }
+  return moved;
+}
+
 // Asymmetric on purpose: sides and floor block, the ceiling does not. Pieces
 // spawn above the field, so a solid ceiling would collide on every spawn.
 export function collides(m, px, py) {

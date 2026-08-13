@@ -40,6 +40,7 @@ for (const id of IDS) {
     classList: {
       add: c => classes.add(c),
       remove: c => classes.delete(c),
+      contains: c => classes.has(c),
       toggle: (c, v) => { (v ?? !classes.has(c)) ? classes.add(c) : classes.delete(c); },
     },
     ctx,
@@ -188,6 +189,7 @@ export function report() {
 export const blankStats = () => ({
   marathon: { score: 0, lines: 0, combo: 0 },
   zen: { score: 0, lines: 0, combo: 0 },
+  cascade: { score: 0, lines: 0, combo: 0 },
 });
 
 /**
@@ -209,7 +211,9 @@ export function reset({ stats = blankStats(), themeName = 'neon' } = {}) {
   G.lines = 0;
   G.level = 1;
   G.combo = -1;
-  G.stats = stats;
+  // Merged, so a block naming only the modes it cares about still gets a
+  // complete stats object — every mode must have a bucket.
+  G.stats = { ...blankStats(), ...stats };
 
   Haptics.supported = false;
   Haptics.enabled = true;

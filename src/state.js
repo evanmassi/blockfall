@@ -5,30 +5,32 @@ import { COLS, ROWS } from './config.js';
 
 const STORE = 'blockfall.stats';
 
-export const blankTally = () => ({ ms: 0, pieces: 0, tetris: 0, tspins: 0, perfect: 0, combo: 0 });
+export const blankTally = () => ({ ms: 0, pieces: 0, tetris: 0, tspins: 0, perfect: 0, combo: 0, chain: 0 });
 
 export function emptyGrid() {
   return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 }
 
 // Per mode: Zen's score is unbounded, so it must never share with Marathon.
+export const MODES = ['marathon', 'zen', 'cascade'];
+
 const blankModeStats = () => ({ score: 0, lines: 0, combo: 0 });
-const blankStats = () => ({ marathon: blankModeStats(), zen: blankModeStats() });
+const blankStats = () => Object.fromEntries(MODES.map(m => [m, blankModeStats()]));
 
 export function loadStats() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORE) || 'null');
     if (!raw) return blankStats();
 
-    if (raw.marathon || raw.zen) {
-      return {
-        marathon: { ...blankModeStats(), ...raw.marathon },
-        zen: { ...blankModeStats(), ...raw.zen },
-      };
+    // Spread over a blank so a mode added after this save was written arrives
+    // empty rather than undefined.
+    if (MODES.some(m => raw[m])) {
+      return Object.fromEntries(MODES.map(m => [m, { ...blankModeStats(), ...raw[m] }]));
     }
 
     // Flat shape from before the split: everything but zen lines was marathon.
     return {
+      ...blankStats(),
       marathon: { score: raw.best | 0, lines: raw.bestLines | 0, combo: raw.bestCombo | 0 },
       zen: { score: 0, lines: raw.bestZenLines | 0, combo: 0 },
     };
@@ -69,8 +71,10 @@ export function saveLastMode(mode) {
 }
 
 export function loadLastMode() {
-  try { return localStorage.getItem(LAST_MODE_STORE) === 'zen' ? 'zen' : 'marathon'; }
-  catch { return 'marathon'; }
+  try {
+    const mode = localStorage.getItem(LAST_MODE_STORE);
+    return MODES.includes(mode) ? mode : 'marathon';
+  } catch { return 'marathon'; }
 }
 
 /** Rehomes a run saved before the slots were split by mode. */
@@ -112,9 +116,10 @@ export const G = {
   hold: null,
   canHold: true,
 
-  state: 'menu',   // menu | playing | clearing | paused | pausedClearing | dying | over
+  state: 'menu',   // menu | playing | clearing | settling | paused | pausedClearing | pausedSettling | dying | over
   mode: 'marathon', // marathon | zen
   score: 0, lines: 0, level: 1, combo: -1, backToBack: false,
+  chain: 0,        // cascade: clears set off by one placement, 0 for the first
   tally: blankTally(),
   runBest: 0,      // score to beat, captured at the start of the run
   newBest: false,
@@ -133,6 +138,9 @@ export const G = {
   lastKick: 0, rotatedLast: false,
 
   clearRows: null, clearTimer: 0, clearTime: 200, clearCount: 0, pendingClear: null,
+  // Cascade: cells in flight, and how far through their fall. The grid already
+  // holds their destinations, so the renderer draws these instead of those.
+  falling: null, fallTimer: 0,
   deathRow: ROWS, deathTimer: 0,
 
   particles: [], shake: 0,

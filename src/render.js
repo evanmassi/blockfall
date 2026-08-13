@@ -1,7 +1,7 @@
 // All canvas drawing and the layout maths that sizes it. Reads G, never writes
 // it, so a dropped frame can only ever cost a repaint.
 
-import { COLS, VIS_ROWS, HIDDEN, ROWS, CLEAR_FX } from './config.js';
+import { COLS, VIS_ROWS, HIDDEN, ROWS, CLEAR_FX, FALL_MS } from './config.js';
 import { ROTATIONS, forEachCell, bounds } from './pieces.js';
 import { theme, setTheme, applyLevelPalette } from './themes.js';
 import { G } from './state.js';
@@ -125,8 +125,8 @@ function buildWell() {
 }
 
 export function render() {
-  const moving = G.state === 'playing' || G.state === 'clearing' || G.state === 'dying'
-    || G.particles.length > 0 || G.shake > 0;
+  const moving = G.state === 'playing' || G.state === 'clearing' || G.state === 'settling'
+    || G.state === 'dying' || G.particles.length > 0 || G.shake > 0;
   if (!moving && !dirty && G.state === lastState) return;
   lastState = G.state;
   dirty = false;
@@ -143,12 +143,26 @@ export function render() {
 
   boardCtx.drawImage(wellCanvas, 0, 0, w, h);
 
+  // The grid already holds the settled positions, so cells still in flight are
+  // skipped here and drawn below at where they have actually fallen to.
+  const inFlight = G.falling && new Set(G.falling.map(f => f.to * COLS + f.x));
+
   for (let y = HIDDEN; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const t = G.grid[y][x];
-      if (!t) continue;
+      if (!t || inFlight?.has(y * COLS + x)) continue;
       const color = theme.pieces[t];
       drawBlock(boardCtx, x * cell, (y - HIDDEN) * cell, y >= G.deathRow ? grayOf(color) : color, cell, t);
+    }
+  }
+
+  if (G.falling) {
+    // Squared, so they accelerate downward instead of drifting at a constant rate.
+    const p = 1 - Math.max(0, G.fallTimer) / FALL_MS;
+    const eased = p * p;
+    for (const f of G.falling) {
+      const y = f.from + (f.to - f.from) * eased;
+      drawBlock(boardCtx, f.x * cell, (y - HIDDEN) * cell, theme.pieces[f.type], cell, f.type);
     }
   }
 

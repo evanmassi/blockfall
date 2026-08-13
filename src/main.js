@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b18';
+const BUILD = 'b24';
 
 // ?debug — the real event sequence for a tap. Capture phase, so it sees every
 // event regardless of what any handler does with it.

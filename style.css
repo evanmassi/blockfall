@@ -53,7 +53,7 @@ html, body {
 /* ...but tappable controls want `manipulation` instead: still no double-tap
    zoom, but taps behave normally. Needs the #app prefix — `#app *` carries an
    id, so a bare class selector loses to it. */
-#app .menuBtn, #app .swatch, #app .sysBtn { touch-action:manipulation; }
+#app .menuBtn, #app .swatch, #app .sysBtn, #app .textBtn { touch-action:manipulation; }
 
 /* justify-content:center so the HUD and the board are centred together as one
    block. Centring the board inside a top-anchored column instead would open a
@@ -178,6 +178,10 @@ html, body {
   padding:calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + 24px)
           calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 24px);
   overflow-y:auto;
+  /* Beats `#app *`'s touch-action:none on equal specificity by coming later.
+     Without it the overlay scrolls but no finger can scroll it, so a menu taller
+     than the screen simply loses whatever sits past the fold. */
+  touch-action:pan-y;
 }
 /* Column flex items shrink by default — without this the swatch canvases get
    squeezed flat when the menu is taller than the screen. */
@@ -187,18 +191,19 @@ html, body {
 /* Pause keeps the board readable underneath rather than blanking it out. */
 #overlay.soft { background:var(--overlay-soft); backdrop-filter:blur(1px); }
 
-.themes { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
-.themeBreak { flex-basis:100%; height:0; margin:0; }
+/* Sized so all five fit one row on a phone: 5 x 64px plus four 6px gaps is
+   344px, inside the ~364px an overlay leaves after its safe-area padding. */
+.themes { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
 
 .swatch {
   flex:0 0 auto;
-  display:flex; flex-direction:column; align-items:stretch; gap:6px;
-  padding:4px 4px 6px; border-radius:var(--radius); cursor:pointer;
+  display:flex; flex-direction:column; align-items:stretch; gap:4px;
+  padding:3px 3px 4px; border-radius:var(--radius); cursor:pointer;
   background:var(--panel); border:1px solid var(--edge);
   color:var(--dim); font:inherit;
 }
 .swatch .swatchCv {
-  display:block; width:76px; height:62px;
+  display:block; width:56px; height:46px;
   border-radius:0; border:1px solid var(--edge);
 }
 .swatch em {
@@ -239,19 +244,22 @@ html, body {
   color:var(--text); text-shadow:0 0 14px var(--accent), 0 0 34px var(--accent);
 }
 
-/* One card per mode, identical in shape — Zen is not a lesser record. */
-.records { display:flex; flex-wrap:wrap; justify-content:center; gap:14px; }
+/* One card per mode, identical in shape — Zen is not a lesser record. Sized so
+   all three share a row: a six-digit score at the old 22px was 132px of glyphs
+   on its own, which stacked them two deep and pushed the buttons off screen. */
+.records { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
 .recordCard {
-  display:flex; flex-direction:column; align-items:center; gap:5px;
-  padding:8px 16px; min-width:112px;
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  padding:7px 10px; min-width:96px;
   border-top:1px solid var(--edge); border-bottom:1px solid var(--edge);
 }
-.recordCard .label { font-size:7px; letter-spacing:.26em; }
+.recordCard .label { font-size:7px; letter-spacing:.18em; }
 .recordCard b {
-  font-size:clamp(15px,5vw,22px); line-height:1.3; letter-spacing:.01em;
+  font-size:clamp(11px,3.6vw,15px); line-height:1.3; letter-spacing:.01em;
   color:var(--text); text-shadow:0 0 12px var(--accent), 0 0 28px var(--accent);
 }
-.recordCard .sub { font-size:7px; letter-spacing:.1em; color:var(--dim); }
+/* The widest line on the card, so it decides whether three share a row. */
+.recordCard .sub { font-size:6px; letter-spacing:.04em; color:var(--dim); }
 
 .best.new { border-color:var(--accent); }
 .best.new .label, .best.new b { color:var(--accent); }
@@ -264,16 +272,19 @@ html, body {
 /* Two columns so a gesture can never be split from its action. The key column
    never wraps; only the description may, and only on a very narrow screen. */
 .controls, .tally {
-  display:grid; grid-template-columns:auto auto;
-  justify-content:center; align-items:baseline;
-  gap:6px 14px; margin:0;
+  display:grid; justify-content:center; align-items:baseline;
+  margin:0;
   font-size:clamp(7px,2.3vw,9px); letter-spacing:.08em; line-height:1.4;
 }
 .controls dt, .tally dt { color:var(--dim); text-align:right; white-space:nowrap; }
 .controls dd, .tally dd { color:var(--text); text-align:left; margin:0; }
 
+/* Two gesture/action pairs per row rather than one: five gestures listed one to
+   a row cost more height than the menu can spare. */
+.controls { grid-template-columns:auto auto auto auto; gap:5px 10px; }
+
 /* Right-aligned so the numbers line up as a column rather than ragged. */
-.tally { gap:5px 16px; }
+.tally { grid-template-columns:auto auto; gap:5px 16px; }
 .tally dd { text-align:right; min-width:3.2em; }
 #overlay .cta { color:var(--text); font-size:9px; letter-spacing:.06em; line-height:1.6; animation:pulse 1.7s ease-in-out infinite; }
 
@@ -339,16 +350,33 @@ html, body {
    that lands in here but misses is swallowed rather than resuming the game. */
 .menuBtns {
   display:flex; flex-wrap:wrap; justify-content:center; gap:10px;
-  padding:6px 10px;
+  padding:6px;
 }
+/* 8px is this face's native size, and it has to be: NEW CLASSIC / NEW ZEN /
+   NEW CASCADE come to 325px against the 352px left after the overlay's
+   safe-area padding and this row's own. min-height keeps the touch target. */
 .menuBtn {
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
   font-family:var(--font-display); font-weight:400; font-synthesis:none;
-  font-size:10px; letter-spacing:.06em; line-height:1;
-  min-height:46px; padding:8px 18px; border-radius:var(--radius); cursor:pointer;
+  font-size:8px; letter-spacing:.06em; line-height:1;
+  min-height:46px; padding:8px 10px; border-radius:var(--radius); cursor:pointer;
   background:var(--panel); border:1px solid var(--edge); color:var(--dim);
 }
+/* Progress on a second line rather than after the label — one line would be
+   wider than the screen. */
+.menuBtn em { font-size:7px; font-style:normal; letter-spacing:.04em; color:var(--text); }
 .menuBtn:active { color:var(--text); border-color:var(--accent); background:var(--edge); }
+.menuBtn:active em { color:var(--accent); }
 .btnBreak { flex-basis:100%; height:0; margin:0; }
+
+/* Reference material behind a line of text, not a 46px button row. */
+.textBtn {
+  font-family:var(--font-display); font-weight:400; font-synthesis:none;
+  font-size:8px; letter-spacing:.1em; line-height:1;
+  padding:5px 10px; background:none; border:0; cursor:pointer; color:var(--dim);
+  text-decoration:underline; text-underline-offset:3px;
+}
+.textBtn:active { color:var(--accent); }
 
 .bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
 /* Real block sprites, so the debris carry the theme's bevel, glow and Game Boy

@@ -44,6 +44,11 @@ export const Sound = {
     if (n >= 4) this.tone(62, 0.34, 'sine', 0.09);
   },
   combo(n)  { this.tone(Math.min(1400, 340 + n * 70), 0.07, 'triangle', 0.04); },
+  // Each link of a cascade transposed a fourth above the last, so a chain is
+  // heard climbing rather than sounding like two unrelated clears.
+  chain(n)  { this.arp([523, 659, 784].map(f => f * Math.pow(1.335, n)), 0.05, 'square', 0.05); },
+  // The stack landing in the holes the clear opened. Pitched off how far it fell.
+  settle(rows) { this.tone(Math.max(70, 150 - rows * 14), 0.11, 'triangle', 0.05); },
   tspin()   { this.arp([392, 587, 880, 1175], 0.05, 'sine', 0.06); },
   levelUp() { this.arp([523, 784, 1047], 0.07, 'triangle', 0.05); },
   curtain(i){ this.tone(Math.max(90, 300 - i * 9), 0.05, 'square', 0.022); },
