@@ -311,9 +311,10 @@ html, body {
 .controls dt, .tally dt { color:var(--dim); text-align:right; white-space:nowrap; }
 .controls dd, .tally dd { color:var(--text); text-align:left; margin:0; }
 
-/* Two gesture/action pairs per row rather than one: five gestures listed one to
-   a row cost more height than the menu can spare. */
-.controls { grid-template-columns:auto auto auto auto; gap:5px 10px; }
+/* One pair per row: paired two-to-a-row to save height back when this list sat
+   on the menu itself, which left the eye hunting for where a row started. On a
+   screen of its own there is height to spend on reading straight down. */
+.controls { grid-template-columns:auto auto; gap:7px 14px; }
 
 /* Right-aligned so the numbers line up as a column rather than ragged. */
 .tally { grid-template-columns:auto auto; gap:5px 16px; }

@@ -636,10 +636,15 @@ section('The controls screen');
   pressAction('how');
   const opened = els.overlay.innerHTML;
   check('it lists the controls', opened.includes('class="controls"'), 'no control list');
-  // Two columns per pair, so a gesture can never be orphaned from its action.
   const dts = (opened.match(/<dt>/g) || []).length;
   const dds = (opened.match(/<dd>/g) || []).length;
   check('every control is a key/action pair', dts > 0 && dts === dds, `${dts} keys, ${dds} actions`);
+
+  // One pair per row, now that the list has a screen to itself: doubled up, the
+  // eye had to find where each row started.
+  const rule = /\.controls \{([^}]*)\}/.exec(fs.readFileSync('style.css', 'utf8').replace(/\s+/g, ' '));
+  check('listed one to a row, not two', /grid-template-columns:auto auto;/.test(rule?.[1] ?? ''),
+        rule?.[1]?.trim() ?? 'no .controls rule');
   check('the hold gesture is spelled out', /hold/i.test(opened), 'hold gesture not documented');
 
   pressAction('back');
