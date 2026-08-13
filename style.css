@@ -498,7 +498,17 @@ html, body {
 .stepBtn { width:32px; height:32px; padding:0; }
 .stepBtn:active { color:var(--accent); border-color:var(--accent); }
 
-.bgfall { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
+/* Faded out before the floor of the viewport, which is not the floor of the
+   screen. Installed, black-translucent starts the web view under the status bar
+   but still sizes it to screen-minus-status-bar — 812 of 874 — so the page ends
+   62pt above the physical bottom and nothing can be drawn into the strip below.
+   The strip carries the body's colour and matches; what gave it away was the
+   debris stopping dead at the edge. Fading them means there is no edge to see. */
+.bgfall {
+  position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0;
+  -webkit-mask-image:linear-gradient(to bottom, #000 78%, transparent 97%);
+  mask-image:linear-gradient(to bottom, #000 78%, transparent 97%);
+}
 /* Real block sprites, so the debris carry the theme's bevel, glow and Game Boy
    fill marks. Size, opacity, blur, spin and sway all come off the piece's depth.
    will-change so a blurred piece rasterises once and only its transform

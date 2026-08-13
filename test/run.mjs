@@ -237,6 +237,17 @@ section('Offline packaging');
         ['#undoBtn', '.setToggle', '.stepBtn'].every(s => tapSelectors.some(t => t.includes(s))),
         tapSelectors.join(','));
 
+  // Installed, black-translucent starts the web view under the status bar but
+  // sizes it to screen-minus-status-bar — 812 of 874 — so the page stops 62pt
+  // above the physical bottom and nothing can be drawn into the strip below it.
+  // The strip is the body's colour and matches; the debris ending at a hard line
+  // is what read as a seam, so they have to fade before they reach it.
+  const bgfall = /\.bgfall \{[^}]*\}/.exec(flat)?.[0] ?? '';
+  check('the debris fade out before the foot of the viewport',
+        /mask-image:linear-gradient\(to bottom/.test(bgfall), bgfall || 'no .bgfall rule');
+  check('with the webkit prefix iOS still needs',
+        /-webkit-mask-image:linear-gradient/.test(bgfall), 'unprefixed only');
+
   // #app * would otherwise leave the overlay unscrollable by finger, so a menu
   // taller than the screen loses everything past the fold with no way to reach it.
   check('a too-tall overlay can still be scrolled', /touch-action:\s*pan-y/.test(overlayRule),
