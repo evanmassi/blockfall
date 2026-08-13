@@ -54,11 +54,22 @@ function debrisField() {
     type: pick(TYPES),
     left: i * lane + Math.random() * lane,
     sign: Math.random() < 0.5 ? -1 : 1,
+    phase: Math.random(), // where in its fall it starts, as a fraction
   }));
 }
 
-export function menuBackdrop() {
-  const bits = debrisField().map(({ d, type, left, sign }) => {
+let field = null;
+
+/**
+ * @param {number} [drifted]  seconds the field has already been falling. A
+ *   re-render rebuilds these elements from scratch, which restarts their
+ *   animations — passing the elapsed time as extra negative delay picks each
+ *   block up where it was instead of throwing it back to where it started.
+ *   Omit for a new field.
+ */
+export function menuBackdrop(drifted) {
+  if (drifted === undefined) field = debrisField();
+  const bits = field.map(({ d, type, left, sign, phase }) => {
     // Snapped to even pixels: the sprite cache keys on size and is only dropped
     // on resize or theme change, so free-floating sizes would grow it forever.
     const unit = Math.max(4, Math.round(lerp(4, 20, d) / 2) * 2);
@@ -72,7 +83,7 @@ export function menuBackdrop() {
       opacity:${lerp(0.05, 0.22, d).toFixed(3)};
       ${blur > 0.15 ? `filter:blur(${blur.toFixed(2)}px);` : ''}
       animation-duration:${dur.toFixed(1)}s;
-      animation-delay:-${(Math.random() * dur).toFixed(1)}s;"></canvas>`;
+      animation-delay:-${(phase * dur + (drifted ?? 0)).toFixed(1)}s;"></canvas>`;
   }).join('');
   return `<div class="bgfall" aria-hidden="true">${bits}</div>`;
 }

@@ -818,11 +818,11 @@ function recordCards() {
   return `<div class="records"><span></span>${heads}${rows}</div>`;
 }
 
-// Which NEW button has its two clears showing, and the debris drifting behind
-// the menu. The backdrop is held rather than rebuilt so that opening a button
-// doesn't restart every animation on screen.
+// Which NEW button has its two clears showing, and when the menu was opened —
+// the backdrop is redrawn from that so a re-render resumes the drift rather
+// than restarting it.
 let openPick = null;
-let backdrop = '';
+let menuAt = 0;
 
 /** Shows a mode's two clears under it, or puts them away again. */
 export function openPicker(mode) {
@@ -852,7 +852,7 @@ export function showMenu() {
   refreshUndo();
 
   openPick = null;
-  backdrop = menuBackdrop();
+  menuAt = Date.now();
   renderMenu(true);
 }
 
@@ -884,7 +884,7 @@ function renderMenu(intro) {
   }));
 
   showOverlay(`
-    ${backdrop}
+    ${intro ? menuBackdrop() : menuBackdrop((Date.now() - menuAt) / 1000)}
     ${wordmark()}
     ${recordCards()}
     ${themeBar()}

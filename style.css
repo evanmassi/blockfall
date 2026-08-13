@@ -330,14 +330,17 @@ html, body {
 .markFloor {
   width:62%; height:3px; border-radius:1px;
   background:var(--accent); opacity:.22; box-shadow:0 0 14px var(--accent);
-  animation:mark-floor 1.5s linear both;
 }
 
-.mark { animation:mark-jolt 1.5s linear both; }
-.mark .markL {
-  transform-origin:bottom center;
-  animation:mark-drop 1.5s linear both;
-}
+.mark .markL { transform-origin:bottom center; }
+
+/* Scoped to .intro like the rest of the reveal: the menu re-renders whenever a
+   button opens its choices, and unscoped the title dropped in again every time.
+   Every one of these ends where the element sits without it, so the resting
+   screen is identical either way. */
+#overlay.intro .markFloor { animation:mark-floor 1.5s linear both; }
+#overlay.intro .mark { animation:mark-jolt 1.5s linear both; }
+#overlay.intro .mark .markL { animation:mark-drop 1.5s linear both; }
 
 /* Impact is at 55% of 1.5s. The fall accelerates into it via a per-keyframe
    ease-in, then everything after that frame is the recoil. */

@@ -96,6 +96,35 @@ section('Menu depth field');
   const blurred = pieces.filter(p => p.includes('filter:blur')).length;
   check('only the back of the field carries a filter', blurred >= 7 && blurred <= 11, String(blurred));
 
+  // Opening a button re-renders the menu, which rebuilds these elements and so
+  // restarts their animations. Without the elapsed time added back as delay,
+  // every block on screen jumped to where it was when the menu opened.
+  const drift = () => [...els.overlay.innerHTML.replace(/\s+/g, ' ').matchAll(
+    /data-type="(\w+)" data-cell="\d+" style="left:([\d.]+)%;[^"]*animation-delay:-([\d.]+)s/g)]
+    .map(m => ({ type: m[1], left: m[2], delay: +m[3] }));
+
+  const settled = drift();
+  const realNow = Date.now;
+  Date.now = () => realNow() + 2000; // two seconds of falling
+  game.openPicker('marathon');
+  Date.now = realNow;
+  const resumed = drift();
+
+  check('the same field survives a re-render', settled.length === 14 &&
+        settled.every((p, i) => resumed[i]?.type === p.type && resumed[i]?.left === p.left),
+        `${settled.length} then ${resumed.length}`);
+  check('carried on from where it had fallen to',
+        settled.every((p, i) => Math.abs((resumed[i].delay - p.delay) - 2) < 0.11),
+        settled.map((p, i) => (resumed[i].delay - p.delay).toFixed(1)).join(' '));
+
+  // The title drop is part of that reveal too, and replayed on every re-render.
+  const introCss = fs.readFileSync('style.css', 'utf8').replace(/\s+/g, ' ');
+  check('and the mark only drops when the menu is first opened',
+        ['mark-floor', 'mark-jolt', 'mark-drop'].every(a =>
+          new RegExp(`#overlay\\.intro [^{]*\\{ animation:${a}`).test(introCss)),
+        'a title animation runs outside .intro');
+  game.showMenu();
+
   // Lanes, so fourteen random positions cannot clump into one column.
   const lefts = pieces.map(p => Number(p.match(/left:([\d.]+)%/)[1]));
   check('pieces are spread across the width',
