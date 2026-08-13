@@ -369,11 +369,13 @@ section('Themes');
   // and restored by an inline script before anything renders.
   check('the colour is kept for the next launch',
         store['blockfall.paint'] === '#000000', String(store['blockfall.paint']));
+  // Measured, not assumed: painting html alone left the band untouched, and a
+  // probe that coloured each surface separately came back green — the body's.
   const head = fs.readFileSync('index.html', 'utf8').split('</head>')[0];
   check('and index restores it before first paint',
-        head.includes("localStorage.getItem('blockfall.paint')") &&
-        head.includes('documentElement.style.background'),
-        'no inline restore in <head>');
+        head.includes("localStorage.getItem('blockfall.paint')"), 'no inline restore in <head>');
+  check('onto the body, which is the surface that paints the band',
+        /html\s*,\s*body\s*\{\s*background:/.test(head), 'the restore misses body');
   check('inline rather than fetched, which would land too late',
         !/<script[^>]*\ssrc=/.test(head), 'the restore is an external script');
 

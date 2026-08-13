@@ -20,7 +20,7 @@ if ('serviceWorker' in navigator) {
 
 // Bumped by hand when testing on a device, so a stale cache is visible rather
 // than looking like a bug. Shown in the ?debug readout.
-const BUILD = 'b45';
+const BUILD = 'b46';
 
 // An installed app can't be handed a query string — the icon keeps whatever URL
 // it was added with — so five taps on the wordmark toggle it from inside. That
@@ -93,18 +93,8 @@ if (debugging) {
     head.forEach(post);
   };
 
-  // Which surface is the band below the app? Three candidates, three loud
-  // colours, applied after boot so nothing overwrites them: whichever one the
-  // band turns out to be names itself in a single screenshot.
-  const probe = () => {
-    document.documentElement.style.background = '#ff00ff'; // magenta: the canvas
-    document.body.style.background = '#00cc00';            // green: the body box
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#ffcc00'); // yellow
-    log('probe html=magenta body=green meta=yellow');
-  };
-
   // After the intro settles, and again whenever the URL bar resizes the viewport.
-  setTimeout(() => { boxes(); probe(); }, 1600);
+  setTimeout(boxes, 1600);
   addEventListener('resize', () => setTimeout(boxes, 120));
   visualViewport?.addEventListener('resize', () => setTimeout(boxes, 120));
   for (const type of ['pointerdown', 'pointerup', 'click']) {

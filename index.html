@@ -13,14 +13,21 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-180.png">
 <link rel="stylesheet" href="style.css">
 <script>
-/* Installed, the viewport is shorter than the screen and iOS fills the rest
-   from the page background as it stands at first paint — a band below the app
-   that JS cannot reach afterwards. This runs before that paint, restoring the
-   colour the last session settled on. Inline and tiny on purpose: a separate
-   file would be fetched too late to matter. */
+/* Installed, the viewport is 62pt shorter than the screen (812 of 874), and the
+   strip below it is painted by the body's background — measured, not assumed.
+   The overlay tints the page but never reaches down there, so the two match
+   only when the body carries the colour the overlay settles to.
+
+   A style element rather than a style property: body does not exist yet this
+   early, and this has to beat the first paint. Inline for the same reason — a
+   fetched file lands too late. */
 try {
   var paint = localStorage.getItem('blockfall.paint');
-  if (paint) document.documentElement.style.background = paint;
+  if (/^#[0-9a-f]{6}$/i.test(paint)) {          // only ever a hex colour
+    var el = document.createElement('style');
+    el.textContent = 'html,body{background:' + paint + '}';
+    document.head.appendChild(el);
+  }
 } catch (e) {}
 </script>
 </head>
