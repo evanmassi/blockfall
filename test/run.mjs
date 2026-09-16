@@ -1949,7 +1949,7 @@ section('Drop gestures');
   check('a deliberate flick still hard drops', flick.dropped);
   pumpMs(CLEAR_TIME_MAX + 60);
 
-  const twitch = drag(22, [[20, 8], [18, 8]]);
+  const twitch = drag(22, [[11, 8], [10, 8]]);
   check('a short fast twitch does not hard drop', !twitch.dropped);
 
   const steps = Array.from({ length: 9 }, (_, i) => 6 + 4.5 * i);
