@@ -182,9 +182,6 @@ export function hardDrop() {
   while (!collides(a.m, a.x, a.y + 1)) { a.y++; dist++; }
   addScore(dist * 2);
   if (dist > 0) G.rotatedLast = false; // a 0-cell drop must not cancel a T-spin
-  // Capped at 4: a long drop shaking as hard as a Tetris flattened the whole
-  // clear escalation.
-  G.shake = Math.max(G.shake, Math.min(4, 1 + dist * 0.18));
   Sound.drop();
   Haptics.drop();
   lockPiece();
