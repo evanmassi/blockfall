@@ -134,12 +134,7 @@ html, body {
 }
 .slot .label { font-size:6px; letter-spacing:.02em; }
 
-/* Stretched only on the right, so the button can sit at the foot of the board
-   rather than under NEXT — it has to be where a thumb already rests, and the
-   bottom of the screen is past the board on a tall phone. */
-#railRight { align-self:stretch; }
 #undoBtn {
-  margin-top:auto;
   display:flex; flex-direction:column; align-items:center; gap:3px;
   background:var(--panel); border:1px solid var(--edge); border-radius:var(--radius);
   padding:7px 3px 8px; cursor:pointer;

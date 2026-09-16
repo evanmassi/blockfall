@@ -85,8 +85,8 @@ export const CLEAR_FX = [
 export const CTRL = {
   moveStep: 0.55,   // cells of finger travel per horizontal step
   softStep: 0.85,   // cells of finger travel per soft-drop step
-  flickVel: 1.25,   // px/ms downward (smoothed) that counts as a hard-drop flick
-  flickDist: 2.00,  // cells that must be covered *while fast* to commit a flick
+  flickVel: 0.90,   // px/ms downward (smoothed) that counts as a hard-drop flick
+  flickDist: 1.00,  // cells that must be covered *while fast* to commit a flick
   flickSmooth: 0.45,// weight of the newest velocity sample; lower = steadier
   holdSwipe: 1.20,  // cells of upward travel that trigger hold
   tapDist: 12,      // px of travel still considered a tap
