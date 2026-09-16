@@ -6,7 +6,6 @@
 
 *{ margin:0; padding:0; box-sizing:border-box; }
 
-/* Defaults so the shell renders before JS runs; setTheme() overwrites these. */
 :root {
   --bg:#07060f;
   --panel:#0f0d1f;
@@ -23,9 +22,6 @@
   --font-display:'Press Start 2P',ui-monospace,Menlo,Consolas,monospace;
 }
 
-/* Press Start 2P is one weight and renders much larger and wider per px than a
-   normal face, so anything using it sets its own size and tight letter-spacing,
-   and must never be synthetically bolded. */
 [class*="label"], .stat b, .best b, .recordCard b, .recordCard .sub, .swatch em,
 .controls dt, .controls dd, .tally dt, .tally dd,
 .recHead, .recSide, .recordCard.empty, .setSub, .wheelTag, #undoBtn b,
@@ -35,10 +31,7 @@
   font-synthesis:none;
 }
 
-/* --screen-h, not 100%. Installed, 100% resolves against the viewport — 812 of
-   the screen's 874 — and body carries overflow:hidden, so it clips everything
-   inside it at a line short of the bottom. That is what cut the falling blocks,
-   and the outlines of the very boxes drawn to find it. */
+/* PITFALL: installed iOS sizes the viewport 62pt shorter than the screen, so 100% here (with overflow:hidden) clips the bottom; --screen-h is measured at runtime. */
 html, body {
   height:var(--screen-h, 100%);
   overflow:hidden;
@@ -51,28 +44,14 @@ html, body {
   touch-action:none;
 }
 
-/* touch-action does not inherit, so html/body alone leaves the board zoomable.
-   iOS Safari ignores user-scalable=no, which is where that showed up. */
+/* PITFALL: touch-action does not inherit, and iOS Safari ignores user-scalable=no, so html/body alone leaves the board zoomable. */
 #app, #app * { touch-action:none; }
 
-/* ...but tappable controls want `manipulation` instead: still no double-tap
-   zoom, but taps behave normally. Needs the #app prefix — `#app *` carries an
-   id, so a bare class selector loses to it. */
+/* PITFALL: the #app prefix is required; a bare class selector loses to `#app *` and the control keeps touch-action:none. */
 #app .menuBtn, #app .swatch, #app .sysBtn, #app .textBtn,
 #app #undoBtn, #app .setToggle { touch-action:manipulation; }
-/* The wheel needs a gesture of its own, and needs it id-qualified for the same
-   reason as the line above: a bare .wheelScroll loses to `#app *` and the wheel
-   cannot be turned by the finger it exists for. */
 #app .wheelScroll { touch-action:pan-y; }
 
-/* justify-content:center so the HUD and the board are centred together as one
-   block. Centring the board inside a top-anchored column instead would open a
-   gap under the score while leaving the void at the bottom. */
-/* Height from --screen-h, not inset:0. Installed, black-translucent starts the
-   web view at the top of the screen but sizes it to screen-minus-status-bar --
-   812 of 874 -- so inset:0 left every layer inside here 62pt short of the
-   bottom, and the falling blocks stopped at a line. --screen-h is the screen,
-   measured at runtime; everywhere else it equals the viewport. */
 #app {
   position:fixed; top:0; left:0; right:0;
   height:var(--screen-h, 100%);
@@ -80,9 +59,7 @@ html, body {
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* Hidden until a run starts, set in the markup so the very first paint has it
-   away: nothing behind the menu is worth reading, and it flashed SCORE 0 on
-   every launch. visibility, not display — resize() measures these boxes. */
+/* PITFALL: visibility, not display; resize() measures these boxes. */
 #app.atMenu #hud, #app.atMenu #stage, #app.atMenu #sysBtns { visibility:hidden; }
 
 #hud {
@@ -101,7 +78,6 @@ html, body {
   color:var(--text); text-shadow:0 0 16px var(--accent), 0 0 40px var(--accent);
 }
 
-/* Stays lit for the rest of the run once the record falls. */
 #score.record { color:var(--accent); text-shadow:0 0 18px var(--accent), 0 0 48px var(--accent); }
 
 #subStats { display:flex; gap:22px; margin-top:6px; }
@@ -109,12 +85,9 @@ html, body {
 .stat b { font-size:clamp(10px,3.2vw,14px); letter-spacing:.01em; }
 .stat[hidden] { display:none; }
 
-/* Only on screen while a chain is alive, so it should read as live. */
 #comboStat .label, #comboStat b { color:var(--accent); }
 #comboStat b { text-shadow:0 0 10px var(--accent); }
 
-/* Sized by its contents, not by the leftover height — #app centres the column,
-   so the stage must not stretch or there would be nothing left to centre. */
 #stage {
   flex:0 0 auto; display:flex; align-items:flex-start; justify-content:center; gap:8px;
   min-height:0; padding:0 10px 10px;
@@ -141,18 +114,12 @@ html, body {
 }
 #undoBtn .label { font-size:6px; letter-spacing:.02em; }
 #undoBtn b { font-size:12px; line-height:1; color:var(--text); }
-/* display:flex would otherwise win over the attribute's display:none. */
 #undoBtn[hidden] { display:none; }
 #undoBtn:disabled { opacity:.3; }
 #undoBtn:not(:disabled):active { border-color:var(--accent); }
 #undoBtn:not(:disabled):active b { color:var(--accent); }
 
-/* The insets have to be added to the offsets here, not inherited from #app's
-   padding. An absolutely positioned element's containing block *is* the padding
-   box, so top:6px measures from inside the border and lands within the padding —
-   which put these under the status bar once installed, where nothing could
-   reach them. Invisible in a browser tab, where the inset is 0.
-   Below #overlay's z-index so pausing can't trap you. */
+/* PITFALL: an absolutely positioned box measures from #app's padding box, so the safe-area insets must be re-added here or these land under the status bar once installed. */
 #sysBtns {
   position:absolute; z-index:4;
   top:calc(env(safe-area-inset-top) + 6px);
@@ -186,8 +153,6 @@ html, body {
   position:absolute; left:50%; top:26%;
   transform:translate(-50%,-50%);
   font-size:clamp(11px,3.9vw,17px); letter-spacing:.02em; line-height:1.5;
-  /* Wraps rather than nowrap: "NEW HIGH SCORE!" and "B2B T-SPIN DOUBLE 3×" are
-     both wider than the well in a pixel face. */
   max-width:94%; text-align:center; pointer-events:none; opacity:0;
   text-shadow:0 0 18px currentColor;
 }
@@ -205,32 +170,19 @@ html, body {
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
   background:var(--overlay);
   text-align:center;
-  /* Same trap as #sysBtns: inset:0 spans #app's padding box, so overlay content
-     needs its own safe-area allowance or a tall screen can run under the status
-     bar and the home indicator. */
+  /* PITFALL: inset:0 spans #app's padding box, so the safe-area insets must be re-added here. */
   padding:calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + 24px)
           calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 24px);
   overflow-y:auto;
-  /* Beats `#app *`'s touch-action:none on equal specificity by coming later.
-     Without it the overlay scrolls but no finger can scroll it, so a menu taller
-     than the screen simply loses whatever sits past the fold. */
+  /* PITFALL: beats `#app *`'s touch-action:none only by coming later at equal specificity; without it no finger can scroll the overlay. */
   touch-action:pan-y;
 }
-/* Column flex items shrink by default — without this the swatch canvases get
-   squeezed flat when the menu is taller than the screen. */
 #overlay > * { flex:0 0 auto; }
 #overlay.hidden { display:none; }
 
-/* Pause keeps the board readable underneath rather than blanking it out. The
-   blur lives here and nowhere else: backdrop-filter puts the element and its
-   whole subtree in a compositing layer, and iOS rasterises that against the
-   viewport rather than the box — so on the menu it cut the falling blocks at a
-   line short of the bottom of the screen. The pause screen holds no debris, and
-   is the only screen with anything behind it worth blurring. */
+/* PITFALL: backdrop-filter must stay on the pause screen only; iOS rasterises the compositing layer against the viewport and clipped the menu's falling blocks short of the bottom. */
 #overlay.soft { background:var(--overlay-soft); backdrop-filter:blur(1px); }
 
-/* Sized so all five fit one row on a phone: 5 x 64px plus four 6px gaps is
-   344px, inside the ~364px an overlay leaves after its safe-area padding. */
 .themes { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
 
 .swatch {
@@ -255,10 +207,6 @@ html, body {
   color:var(--accent); text-shadow:0 0 26px var(--accent), 0 0 60px var(--accent);
 }
 
-/* The first L is the real L tetromino, drawn with the theme's bevel and glow.
-   Baseline alignment plus 1cap locks it to the same baseline and cap height as
-   the letters, so it reads as a device rather than a mistake. The em fallback
-   is only for browsers without cap units. */
 #overlay h1.mark { display:flex; align-items:baseline; justify-content:center; }
 #overlay h1.mark .markL {
   height:.62em;
@@ -282,24 +230,18 @@ html, body {
   color:var(--text); text-shadow:0 0 14px var(--accent), 0 0 34px var(--accent);
 }
 
-/* A grid, not a row of cards: mode across, clears down. Loose cards had to name
-   themselves "CLASSIC CASCADE", which reads as a mode of its own — the exact
-   confusion that splitting cascade off was meant to end. The row label column is
-   sized to the words, the two score columns share what is left equally. */
 .records {
   display:grid; grid-template-columns:auto 1fr 1fr;
   align-items:center; justify-items:center; gap:4px 8px;
   max-width:300px;
 }
 .recHead { font-size:7px; letter-spacing:.14em; color:var(--dim); }
-/* Right-aligned against its row so the label sits with the numbers it heads. */
 .recSide { font-size:6px; letter-spacing:.1em; color:var(--dim); justify-self:end; }
 .recordCard {
   display:flex; flex-direction:column; align-items:center; gap:4px;
   padding:7px 10px; min-width:96px;
   border-top:1px solid var(--edge); border-bottom:1px solid var(--edge);
 }
-/* Held open at the same height as a filled one, so the grid stays a grid. */
 .recordCard.empty {
   justify-content:center; min-height:38px;
   font-size:9px; color:var(--dim); opacity:.5;
@@ -309,19 +251,14 @@ html, body {
   font-size:clamp(11px,3.6vw,15px); line-height:1.3; letter-spacing:.01em;
   color:var(--text); text-shadow:0 0 12px var(--accent), 0 0 28px var(--accent);
 }
-/* The widest line on the card, so it decides whether three share a row. */
 .recordCard .sub { font-size:6px; letter-spacing:.04em; color:var(--dim); }
 
 .best.new { border-color:var(--accent); }
 .best.new .label, .best.new b { color:var(--accent); }
 #overlay h2.record { color:var(--accent); text-shadow:0 0 24px var(--accent), 0 0 56px var(--accent); }
-/* Sized to sit with the labels and the control list — 13px in a pixel face read
-   as a different typeface next to 7px labels. */
 #overlay p { color:var(--dim); font-size:clamp(7px,2.3vw,9px); line-height:1.7; letter-spacing:.06em; }
 #overlay .fine { opacity:.72; margin-top:-4px; }
 
-/* Two columns so a gesture can never be split from its action. The key column
-   never wraps; only the description may, and only on a very narrow screen. */
 .controls, .tally {
   display:grid; justify-content:center; align-items:baseline;
   margin:0;
@@ -330,19 +267,13 @@ html, body {
 .controls dt, .tally dt { color:var(--dim); text-align:right; white-space:nowrap; }
 .controls dd, .tally dd { color:var(--text); text-align:left; margin:0; }
 
-/* One pair per row: paired two-to-a-row to save height back when this list sat
-   on the menu itself, which left the eye hunting for where a row started. On a
-   screen of its own there is height to spend on reading straight down. */
 .controls { grid-template-columns:auto auto; gap:7px 14px; }
 
-/* Right-aligned so the numbers line up as a column rather than ragged. */
 .tally { grid-template-columns:auto auto; gap:5px 16px; }
 .tally dd { text-align:right; min-width:3.2em; }
 #overlay .cta { color:var(--text); font-size:9px; letter-spacing:.06em; line-height:1.6; animation:pulse 1.7s ease-in-out infinite; }
 
 @keyframes pulse { 0%,100%{opacity:.35} 50%{opacity:1} }
-
-/* ---- menu: the mark drops and locks, debris drifts behind ---- */
 
 .markWrap { display:flex; flex-direction:column; align-items:center; gap:12px; }
 
@@ -353,16 +284,10 @@ html, body {
 
 .mark .markL { transform-origin:bottom center; }
 
-/* Scoped to .intro like the rest of the reveal: the menu re-renders whenever a
-   button opens its choices, and unscoped the title dropped in again every time.
-   Every one of these ends where the element sits without it, so the resting
-   screen is identical either way. */
 #overlay.intro .markFloor { animation:mark-floor 1.5s linear both; }
 #overlay.intro .mark { animation:mark-jolt 1.5s linear both; }
 #overlay.intro .mark .markL { animation:mark-drop 1.5s linear both; }
 
-/* Impact is at 55% of 1.5s. The fall accelerates into it via a per-keyframe
-   ease-in, then everything after that frame is the recoil. */
 @keyframes mark-drop {
   0%   { transform:translateY(-78vh); opacity:0; animation-timing-function:cubic-bezier(.55,.02,.9,.28); }
   9%   { opacity:1; }
@@ -374,7 +299,6 @@ html, body {
   100% { transform:translateY(0) scale(1,1); }
 }
 
-/* The whole word absorbs the landing, then settles. */
 @keyframes mark-jolt {
   0%,55% { transform:translateY(0); }
   62%    { transform:translateY(7px); }
@@ -390,10 +314,6 @@ html, body {
   100%   { opacity:.22; transform:scaleX(1); }
 }
 
-/* Everything below the mark arrives after the impact, so the drop is the event
-   rather than one thing moving in an already-finished screen. Scoped to .intro
-   so pausing stays instant, and .cta is excluded because this shorthand would
-   otherwise replace its pulse outright. */
 #overlay.intro > *:not(.bgfall):not(.markWrap):not(.cta) { animation:menu-in .5s ease-out .95s both; }
 #overlay.intro > .cta { animation:menu-in .5s ease-out .95s both, pulse 1.7s ease-in-out 1.45s infinite; }
 @keyframes menu-in {
@@ -401,15 +321,10 @@ html, body {
   100% { opacity:1; transform:translateY(0); }
 }
 
-/* Padding on the row itself widens the forgiving area around the buttons; a tap
-   that lands in here but misses is swallowed rather than resuming the game. */
 .menuBtns {
   display:flex; flex-wrap:wrap; justify-content:center; gap:10px;
   padding:6px;
 }
-/* 8px is this face's native size, and it has to be: NEW CLASSIC / NEW ZEN /
-   NEW CASCADE come to 325px against the 352px left after the overlay's
-   safe-area padding and this row's own. min-height keeps the touch target. */
 .menuBtn {
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
   font-family:var(--font-display); font-weight:400; font-synthesis:none;
@@ -417,23 +332,15 @@ html, body {
   min-height:46px; padding:8px 10px; border-radius:var(--radius); cursor:pointer;
   background:var(--panel); border:1px solid var(--edge); color:var(--dim);
 }
-/* Progress on a second line rather than after the label — one line would be
-   wider than the screen. */
 .menuBtn em { font-size:7px; font-style:normal; letter-spacing:.04em; color:var(--text); }
 .menuBtn:active { color:var(--text); border-color:var(--accent); background:var(--edge); }
 .menuBtn:active em { color:var(--accent); }
-/* The mode whose clears are showing. Lit the same way a chosen theme swatch is,
-   because it means the same thing — this is the one you have picked. */
 .menuBtn.on {
   color:var(--text); border-color:var(--accent);
   box-shadow:0 0 14px -3px var(--accent);
 }
 .btnBreak { flex-basis:100%; height:0; margin:0; }
 
-/* The runs waiting to be resumed, in a panel over the button that opened them —
-   four buttons laid out flat was the whole menu, and this only exists while it
-   is being read. Anchored above rather than below so it opens into the screen
-   instead of under the thumb that tapped. */
 .resumeWrap { position:relative; display:flex; flex-direction:column; align-items:center; }
 .picker {
   position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%);
@@ -453,9 +360,6 @@ html, body {
 .pickRow em { font-size:7px; font-style:normal; color:var(--text); }
 .pickRow:active { color:var(--text); background:var(--edge); }
 
-/* Everything else stands down while the list is open. The chosen theme is lit
-   the same way the list is, and the button underneath it was too, so three
-   things claimed the eye at once and none of them was the question being asked. */
 #overlay.picking .swatch.on {
   border-color:var(--edge); color:var(--dim); box-shadow:none;
 }
@@ -465,14 +369,11 @@ html, body {
   100% { opacity:1; transform:translate(-50%, 0); }
 }
 
-
-/* Hairlines, and only as wide as the buttons they separate. */
 .menuRule {
   width:100%; max-width:300px; height:1px;
   background:var(--edge);
 }
 
-/* Reference material behind a line of text, not a 46px button row. */
 .textBtn {
   font-family:var(--font-display); font-weight:400; font-synthesis:none;
   font-size:8px; letter-spacing:.1em; line-height:1;
@@ -482,10 +383,6 @@ html, body {
 .textBtn:active { color:var(--accent); }
 .textBtns { display:flex; flex-wrap:wrap; justify-content:center; gap:2px 10px; }
 
-/* Name over meaning on the left, control on the right, and the control centred
-   against the pair however tall it is. As a grid the row's height came from the
-   control, so the sub line sat right under a toggle and three rows under a
-   wheel — no two rows agreeing on where to look. */
 .settings { display:flex; flex-direction:column; gap:13px; width:100%; max-width:320px; }
 .setRow {
   display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -506,22 +403,12 @@ html, body {
   color:var(--dim);
   min-width:56px; min-height:32px; padding:8px 10px; letter-spacing:.06em;
 }
-/* On is lit the way a chosen theme and an open button are, rather than differing
-   only by the word inside it — off and on read the same at a glance otherwise. */
 .setToggle.on {
   color:var(--text); border-color:var(--accent);
   box-shadow:0 0 14px -3px var(--accent);
 }
 .setToggle:active { color:var(--accent); border-color:var(--accent); }
 
-/* A picker wheel drawn as one of ours. The phone's own comes free with a
-   <select> but arrives in system chrome — white, rounded, its own typeface —
-   which reads as a piece of iOS dropped into an 8px pixel font.
-
-   The barrel is real 3D: perspective here, and each row tilted and shrunk by its
-   distance from the middle in ui.js, since CSS cannot know what that distance
-   is. --rowH is the whole geometry — three rows tall, the band marks the middle,
-   and the padding lets the first and last value reach it. */
 .wheel {
   --rowH:26px;
   position:relative; width:62px; height:calc(var(--rowH) * 3);
@@ -538,9 +425,6 @@ html, body {
 }
 .wheelScroll::-webkit-scrollbar { display:none; }
 .wheelItem {
-  /* Centred by the box, not by line-height: leading is distributed from the
-     font's own ascent and descent, and this face carries more above the digits
-     than below, which sat every value high in the band. */
   display:flex; align-items:center; justify-content:center;
   width:100%; height:var(--rowH);
   scroll-snap-align:center;
@@ -548,21 +432,15 @@ html, body {
   font-family:var(--font-display); font-weight:400; font-synthesis:none;
   font-size:9px; letter-spacing:.04em; line-height:1;
   color:var(--text);
-  /* Scaled rather than resized: the middle row grows as it arrives instead of
-     snapping between two sizes, and nothing reflows while the wheel turns. */
   transform-origin:center center;
   will-change:transform, opacity;
 }
-/* Curved away from the light at the ends, like the far side of a drum. */
 .wheel::before, .wheel::after {
   content:''; position:absolute; left:0; right:0; height:var(--rowH);
   pointer-events:none; z-index:1;
 }
 .wheel::before { top:0; background:linear-gradient(var(--panel), transparent); }
 .wheel::after { bottom:0; background:linear-gradient(transparent, var(--panel)); }
-/* The band is the selection, so it sits above the numbers but takes no taps.
-   Drawn in the text colour rather than the accent: the accent is how the app
-   says "look here", and a wheel sitting quietly at its value is not asking. */
 .wheelBand {
   position:absolute; left:0; right:0; top:var(--rowH); height:var(--rowH);
   border-top:1px solid var(--text); border-bottom:1px solid var(--text);
@@ -570,23 +448,15 @@ html, body {
 }
 #app .wheelItem { touch-action:manipulation; }
 
-/* MIN and MAX under one label, each named above its own wheel. */
 .wheelPair { display:flex; align-items:flex-end; gap:10px; }
 .wheelCol { display:flex; flex-direction:column; align-items:center; gap:4px; }
 .wheelTag { font-size:6px; letter-spacing:.1em; color:var(--dim); }
 
-/* fixed, not absolute: absolute inside #overlay reported the full height but
-   rendered cut at viewport + bottom inset. b48 proved a fixed layer paints to
-   the true bottom; inside #overlay it still sits above the tint and below the
-   UI, which is where it has to be. */
+/* PITFALL: fixed, not absolute; absolute inside #overlay measured full height but rendered cut at viewport + bottom inset on iOS. */
 .bgfall {
   position:fixed; top:0; left:0; right:0; height:var(--screen-h, 100%);
   overflow:hidden; pointer-events:none; z-index:0;
 }
-/* Real block sprites, so the debris carry the theme's bevel, glow and Game Boy
-   fill marks. Size, opacity, blur, spin and sway all come off the piece's depth.
-   will-change so a blurred piece rasterises once and only its transform
-   animates - without it the far layers re-blur every frame. */
 .bgfall canvas {
   position:absolute; top:0;
   will-change:transform;
@@ -599,12 +469,6 @@ html, body {
 }
 #overlay > *:not(.bgfall) { position:relative; z-index:1; }
 
-/* Solid black over the foot of the screen, which is indistinguishable from the
-   app drawing a black band there — it sent a hunt for a seam that was this. Half
-   transparent and outlined so it always reads as the tool, not as the page. */
-/* Flush to the bottom, with the inset as padding instead. Offset by it, this
-   left an undarkened 34px strip under its own translucent background — a hard
-   edge across the foot of the screen, from the tool being used to hunt one. */
 #debug {
   position:fixed; left:0; right:0; z-index:99;
   bottom:0;
@@ -615,14 +479,11 @@ html, body {
   pointer-events:none; word-break:break-all; white-space:pre-wrap;
 }
 
-/* ?debug only: where each layer actually lands, since a seam between them can
-   only be seen on the device it happens on. */
 #app.showBoxes #overlay { outline:2px solid #f0f; outline-offset:-2px; }
 #app.showBoxes .bgfall  { outline:2px solid #0f0; outline-offset:-4px; }
 #app.showBoxes #stage   { outline:2px solid #0ff; outline-offset:-2px; }
 
 @media (prefers-reduced-motion: reduce) {
-  /* !important because the staged reveal uses a multi-animation shorthand. */
   #overlay * { animation:none !important; }
   .bgfall { display:none; }
 }

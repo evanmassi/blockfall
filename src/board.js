@@ -1,6 +1,3 @@
-// Piece supply and collision — the rules that only need the grid. Separate from
-// game.js so render.js can test the ghost piece without importing the loop.
-
 import { COLS, ROWS } from './config.js';
 import { TYPES, ROTATIONS } from './pieces.js';
 import { G } from './state.js';
@@ -26,17 +23,6 @@ export function makePiece(type) {
   return { type, rot: 0, x: type === 'O' ? 4 : 3, y: 0, m: ROTATIONS[type][0] };
 }
 
-/**
- * Cascade gravity: every cell drops to the lowest free spot in its own column,
- * so a clear fills the holes under it and can complete further rows.
- *
- * Rigid connected clumps were tried first and were nearly indistinguishable from
- * Classic: a cleared row leaves an empty band, which makes everything above it
- * one clump, which then falls exactly one row — a row shift by another name.
- *
- * @returns {Array<{x, from, to, type}>} what moved, for the renderer to animate.
- *   The grid is already in its final state; these are only where cells came from.
- */
 export function settle(grid) {
   const moved = [];
 
@@ -55,8 +41,7 @@ export function settle(grid) {
   return moved;
 }
 
-// Asymmetric on purpose: sides and floor block, the ceiling does not. Pieces
-// spawn above the field, so a solid ceiling would collide on every spawn.
+// PITFALL: the ceiling must not block; pieces spawn above row 0 and would collide on every spawn.
 export function collides(m, px, py) {
   for (let y = 0; y < m.length; y++) {
     for (let x = 0; x < m.length; x++) {

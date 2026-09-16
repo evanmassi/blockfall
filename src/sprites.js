@@ -1,14 +1,7 @@
-// Pre-rendered block sprites, baked once per (theme, colour, size) so the frame
-// loop only calls drawImage. shadowBlur per block per frame is far too slow on
-// a phone.
-
 const sprites = new Map();
 
-/** Must be called whenever the theme or the cell size changes. */
 export function clearSprites() { sprites.clear(); }
 
-// `th` is passed rather than read from the module so the picker can draw a
-// swatch in a palette that isn't the active one.
 export function blockSprite(color, size, th, type) {
   const key = th.key + (type || '') + color + '@' + size;
   if (sprites.has(key)) return sprites.get(key);
@@ -21,8 +14,6 @@ export function blockSprite(color, size, th, type) {
   const g = cv.getContext('2d');
   g.translate(pad, pad);
 
-  // Only the bevel treats cells as separate objects; the hardware styles butt
-  // together, their outlines forming the grid.
   const gap = kind === 'bevel' ? Math.max(1, Math.round(size * 0.045)) : 0;
   const x0 = gap, y0 = gap, s = size - gap * 2;
 
@@ -44,7 +35,6 @@ export function blockSprite(color, size, th, type) {
   return sprite;
 }
 
-/** Raised 3D block: lit top-left, shaded bottom-right. */
 function paintBevel(g, x0, y0, s, th) {
   const style = th.block;
   const b = Math.max(1, Math.round(s * 0.16));
@@ -69,7 +59,6 @@ function paintBevel(g, x0, y0, s, th) {
   g.strokeRect(x0 + .5, y0 + .5, s - 1, s - 1);
 }
 
-// On a monochrome LCD the fill pattern, not the colour, identifies a piece.
 export const INSET_MARKS = {
   I: 'stipple',
   J: 'ringLarge',
@@ -80,7 +69,6 @@ export const INSET_MARKS = {
   Z: 'solid',
 };
 
-// No lighting: the LCD had none, and a bevel reads as the wrong machine.
 function paintInset(g, x0, y0, s, th, type) {
   const style = th.block;
   const edge = Math.max(1, Math.round(s * 0.1));
@@ -145,12 +133,9 @@ function paintInset(g, x0, y0, s, th, type) {
   }
 }
 
-// Two tiles per level on the hardware: a solid square with a corner highlight,
-// and a hollow ring for the pale piece. Ring goes to the near-white pieces,
-// which also fixes a white highlight being invisible on a white block.
 export const NES_MARKS = {
   I: 'solid', J: 'solid', L: 'solid', S: 'solid', Z: 'solid',
-  O: 'ring', T: 'ring', // the level's white pieces
+  O: 'ring', T: 'ring',
 };
 
 function paintNes(g, x0, y0, s, th, type) {
@@ -166,7 +151,6 @@ function paintNes(g, x0, y0, s, th, type) {
     g.lineWidth = lw;
     g.strokeRect(x0 + lw / 2, y0 + lw / 2, s - lw, s - lw);
 
-    // Three pixels, not a 2x2 block — that L is the original tile's highlight.
     const u = Math.max(1, Math.round(s * 0.15));
     const hx = x0 + Math.round(lw * 1.5), hy = y0 + Math.round(lw * 1.5);
     g.fillStyle = `rgba(255,255,255,${Math.min(1, style.light + 0.35)})`;
@@ -203,7 +187,6 @@ export function ghostSprite(color, size, th) {
   return sprite;
 }
 
-// "r,g,b" so callers can build rgba() strings with their own alpha.
 export function rgbOf(hex) {
   const n = parseInt(hex.slice(1), 16);
   return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
@@ -211,7 +194,6 @@ export function rgbOf(hex) {
 
 const grayCache = new Map();
 
-/** Luminance-preserving grey, so a drained stack stays readable as shapes. */
 export function grayOf(hex) {
   let out = grayCache.get(hex);
   if (out) return out;

@@ -13,17 +13,10 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-180.png">
 <link rel="stylesheet" href="style.css">
 <script>
-/* Installed, the viewport is 62pt shorter than the screen (812 of 874), and the
-   strip below it is painted by the body's background — measured, not assumed.
-   The overlay tints the page but never reaches down there, so the two match
-   only when the body carries the colour the overlay settles to.
-
-   A style element rather than a style property: body does not exist yet this
-   early, and this has to beat the first paint. Inline for the same reason — a
-   fetched file lands too late. */
+// PITFALL: must beat first paint, so inline and a <style> element rather than a body style; body does not exist yet and a fetched file lands too late.
 try {
   var paint = localStorage.getItem('blockfall.paint');
-  if (/^#[0-9a-f]{6}$/i.test(paint)) {          // only ever a hex colour
+  if (/^#[0-9a-f]{6}$/i.test(paint)) {
     var el = document.createElement('style');
     el.textContent = 'html,body{background:' + paint + '}';
     document.head.appendChild(el);
@@ -32,9 +25,6 @@ try {
 </script>
 </head>
 <body>
-<!-- The board starts hidden. Boot renders the shell, then showMenu() hides it a
-     frame later, which flashed an empty board reading SCORE 0 on every launch.
-     game.js reveals it when a run starts. -->
 <div id="app" class="atMenu">
   <header id="hud">
     <div id="scoreBox">

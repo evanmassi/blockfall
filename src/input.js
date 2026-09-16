@@ -1,6 +1,3 @@
-// Keyboard and touch. Gestures are measured in cells, not pixels, so they
-// behave the same on any screen size.
-
 import { CTRL } from './config.js';
 import { G } from './state.js';
 import { view } from './render.js';
@@ -16,14 +13,9 @@ import { Haptics } from './haptics.js';
 
 const playFromMenu = () => (pendingRun() ? resumeRun() : startGame());
 
-// ---------- keyboard ----------
-
 const keys = { left: 0, right: 0, down: 0 };
 let dasTimer = 0, arrTimer = 0, softTimer = 0, dasDir = 0;
 
-// DAS before the first repeat, ARR between them. Called from the frame loop
-// rather than update(), so the dependency between the two modules stays
-// one-way. Must run before update() for the same frame.
 export function updateKeyRepeat(dt) {
   const dir = keys.left && !keys.right ? -1 : keys.right && !keys.left ? 1 : 0;
   if (dir !== dasDir) { dasDir = dir; dasTimer = 0; arrTimer = 0; }
@@ -74,54 +66,41 @@ document.addEventListener('keyup', e => {
   if (e.key === 'ArrowDown') keys.down = 0;
 });
 
-// ---------- touch ----------
-
 let gesture = null, extraPointers = 0;
 
-// pointerdown, not click: the overlay is a tap-anywhere surface, so the button
-// case has to be decided in the same event that would otherwise resume, and
-// click is not guaranteed to arrive at all under `touch-action: none`.
 let lastTouchTap = -Infinity;
 
+// PITFALL: pointerdown, not click: click is not guaranteed to arrive under `touch-action: none`.
 overlay.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
 
-  // A touch also emits a compatibility "mouse" pointerdown a moment later. If
-  // the first swapped the overlay's contents, the ghost lands on whatever
-  // replaced them — which is how MAIN MENU started a game instead.
+  // PITFALL: a touch also emits a delayed compatibility "mouse" pointerdown that lands on whatever replaced the overlay's contents.
   const now = e.timeStamp ?? 0;
   if (e.pointerType === 'mouse' && now - lastTouchTap < 700) return;
   if (e.pointerType !== 'mouse') lastTouchTap = now;
   e.preventDefault();
 
-  if (e.target.closest?.('[data-theme]')) return; // the swatch handles it
+  if (e.target.closest?.('[data-theme]')) return;
 
-  // A thumb that lands in the button row but misses must do nothing. Falling
-  // through resumes the game they were trying to leave, which reads as broken.
   if (e.target.closest?.('.menuBtns')) return;
 
-  // A screen opened from pause: resuming here would close it out from under them.
   if (overlay.classList.contains('modal')) return;
 
   Sound.init();
-  // The only tap-anywhere screen left: resuming is the one action with no button.
   if (G.state === 'paused' || G.state === 'pausedClearing') togglePause();
 });
 
 onOverlayAction(act => {
   Sound.init();
-  // Prefixed rather than named one by one: the menu builds these from the slots,
-  // so a fixed list here would have to be kept in step by hand.
   if (act === 'new-marathon' || act === 'new-zen') startSlot(act.slice(4));
   else if (act === 'pick-resume') openPicker();
   else if (act.startsWith('go-')) resumeRun(act.slice(3));
-  else if (act === 'restart') startGame(G.mode, G.cascade); // stays as it was being played
+  else if (act === 'restart') startGame(G.mode, G.cascade);
   else if (act === 'menu') showMenu();
   else if (act === 'how') showControls();
   else if (act === 'settings') showSettings();
   else if (act === 'back') closeSubScreen();
   else if (act === 'resume') togglePause();
-  // set-<key>-<value>; the toggles carry no value and flip whatever they are.
   else if (act.startsWith('set-')) {
     const at = act.lastIndexOf('-');
     changeSetting(act.slice(4, at), Number(act.slice(at + 1)));
@@ -129,8 +108,8 @@ onOverlayAction(act => {
   else if (act === 'countdown' || act === 'cascade') changeSetting(act);
   else if (act === 'haptics') {
     Haptics.setEnabled(!Haptics.enabled);
-    Haptics.lock();          // a sample of what was just switched on
-    showPauseScreen();       // redraw so the label matches, without resuming
+    Haptics.lock();
+    showPauseScreen();
   }
 });
 
@@ -161,9 +140,6 @@ stage.addEventListener('pointermove', e => {
   const totalX = e.clientX - gesture.startX, totalY = e.clientY - gesture.startY;
   gesture.maxDist = Math.max(gesture.maxDist, Math.hypot(totalX, totalY));
 
-  // One pointermove is a terrible speedometer: at 120Hz a single 8ms sample
-  // read as a flick mid-drag and slammed the piece to the floor. Smoothed, and
-  // the finger has to stay fast across enough distance to mean it.
   gesture.vy += (dy / dt - gesture.vy) * CTRL.flickSmooth;
   const fastDown = gesture.vy >= CTRL.flickVel * 0.5;
   if (!fastDown) gesture.burstY = 0;
@@ -177,7 +153,6 @@ stage.addEventListener('pointermove', e => {
     return;
   }
 
-  // A thumb arcs as it flicks, and one column is only half a cell of drift.
   if (fastDown && dy > Math.abs(dx)) {
     gesture.accX = 0;
   } else {
@@ -220,9 +195,7 @@ function endGesture(e) {
 stage.addEventListener('pointerup', endGesture);
 stage.addEventListener('pointercancel', e => { if (gesture && e.pointerId === gesture.id) gesture = null; });
 
-// ---------- buttons ----------
-
-// WebKit-only pinch-zoom events; touch-action alone doesn't stop these on iOS.
+// PITFALL: WebKit-only pinch-zoom events; touch-action alone does not stop them on iOS.
 for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
   document.addEventListener(type, e => e.preventDefault());
 }
@@ -230,8 +203,6 @@ document.addEventListener('dblclick', e => e.preventDefault());
 
 pauseBtn.addEventListener('click', () => { Sound.init(); togglePause(); });
 
-// pointerdown with the propagation stopped: the button sits inside #stage, whose
-// gesture handler would otherwise read the same tap as a rotate.
 undoBtn.addEventListener('pointerdown', e => {
   e.stopPropagation();
   e.preventDefault();

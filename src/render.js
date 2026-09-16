@@ -1,6 +1,3 @@
-// All canvas drawing and the layout maths that sizes it. Reads G, never writes
-// it, so a dropped frame can only ever cost a repaint.
-
 import { COLS, VIS_ROWS, HIDDEN, ROWS, CLEAR_FX, FALL_MS } from './config.js';
 import { ROTATIONS, forEachCell, bounds } from './pieces.js';
 import { theme, setTheme, applyLevelPalette } from './themes.js';
@@ -8,17 +5,11 @@ import { G } from './state.js';
 import { collides } from './board.js';
 import { blockSprite, ghostSprite, grayOf, rgbOf, clearSprites } from './sprites.js';
 import { boardCv, boardCtx, holdCv, holdCtx, nextCv, nextCtx, app, hud, stage, railLeft, railRight } from './dom.js';
-// railLeft/railRight are sized directly rather than measured — reading back a
-// width we just wrote would force an extra layout every resize.
 
-// CSS pixels. `cell` is also what input.js measures gestures against, so a drag
-// covers the same number of cells on any screen.
 export const view = { cell: 24, dpr: 1, previewSize: 12 };
 
 let wellCanvas;
 
-// A repaint also forces the overlay's backdrop-filter to re-blur, so static
-// screens redrawing at 120Hz cost about what playing does.
 let dirty = true, lastState = null;
 
 const MIN_RAIL = 46, MAX_RAIL = 88;
@@ -27,15 +18,12 @@ const PAD_X = 20, PAD_Y = 10, GAPS = 16;
 export function resize() {
   view.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 
-  // The app box, not the stage: the stage is sized by its contents, so asking
-  // its height would echo back the board we are about to size.
+  // PITFALL: measure app, not stage; stage is sized by its contents and would echo back the board being sized.
   const appStyle = getComputedStyle(app);
   const appInner = app.clientHeight
     - (parseFloat(appStyle.paddingTop) || 0)
     - (parseFloat(appStyle.paddingBottom) || 0);
 
-  // A 10x20 well on a tall phone is width-bound, so rails are sized last: the
-  // board takes every pixel its height can use, the remainder becomes rail.
   const availH = appInner - hud.offsetHeight - PAD_Y;
   const totalW = stage.clientWidth - PAD_X - GAPS;
   const cellByH = Math.floor(availH / VIS_ROWS);
@@ -52,13 +40,9 @@ export function resize() {
   boardCv.height = Math.round(h * view.dpr);
   boardCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
 
-  // The board is centred in the screen's vertical slack, so rails have to be
-  // pinned to its height or their contents float above it.
   railLeft.style.height = h + 'px';
   railRight.style.height = h + 'px';
 
-  // Every spawn orientation is at most 4 cells wide and 2 tall, so previews are
-  // width-bound: size off the rail's inner width and let height follow.
   view.previewSize = Math.max(6, Math.floor((railW - 12) / 4));
   view.nextTail = Math.max(5, Math.round(view.previewSize * NEXT_TAIL));
   sizeMini(holdCv, holdCtx, view.previewSize * 4 + 2, view.previewSize * 2 + 4);
@@ -70,18 +54,15 @@ export function resize() {
   dirty = true;
 }
 
-// Swaps palette without recomputing layout: the sprite cache and the
-// pre-rendered well both bake in theme colors, so both have to go.
 export function applyTheme(name) {
   setTheme(name);
-  applyLevelPalette(G.level); // a theme picked mid-run joins at the right level
+  applyLevelPalette(G.level);
   clearSprites();
   buildWell();
   drawSidePanels();
   dirty = true;
 }
 
-/** Called on level-up. Repaints only when the palette actually moved. */
 export function syncLevelPalette() {
   if (!applyLevelPalette(G.level)) return;
   clearSprites();
@@ -143,8 +124,6 @@ export function render() {
 
   boardCtx.drawImage(wellCanvas, 0, 0, w, h);
 
-  // The grid already holds the settled positions, so cells still in flight are
-  // skipped here and drawn below at where they have actually fallen to.
   const inFlight = G.falling && new Set(G.falling.map(f => f.to * COLS + f.x));
 
   for (let y = HIDDEN; y < ROWS; y++) {
@@ -157,7 +136,6 @@ export function render() {
   }
 
   if (G.falling) {
-    // Squared, so they accelerate downward instead of drifting at a constant rate.
     const p = 1 - Math.max(0, G.fallTimer) / FALL_MS;
     const eased = p * p;
     for (const f of G.falling) {
@@ -192,11 +170,9 @@ export function render() {
   boardCtx.globalAlpha = 1;
 }
 
-// Escalates with the row count: the bar thickens and tints as the clear grows,
-// and a Tetris additionally throws columns of light up through the board.
 function drawClearFx(w, h, cell) {
   const fx = CLEAR_FX[Math.min(G.clearCount, 4)] || CLEAR_FX[1];
-  const p = Math.min(1, Math.max(0, 1 - G.clearTimer / G.clearTime)); // 0 -> 1
+  const p = Math.min(1, Math.max(0, 1 - G.clearTimer / G.clearTime));
   const rgb = fx.tint === 'I' ? rgbOf(theme.pieces.I)
             : fx.tint === 'accent' ? rgbOf(theme.accent)
             : theme.flash;
@@ -205,7 +181,6 @@ function drawClearFx(w, h, cell) {
   boardCtx.fillStyle = `rgba(${theme.flash},${0.12 + wash * 0.78})`;
   for (const y of G.clearRows) boardCtx.fillRect(0, (y - HIDDEN) * cell, w, cell);
 
-  // Bar sweeps out from the middle over the first half, then fades.
   const grow = Math.min(1, p / 0.5);
   const barW = w * (1 - Math.pow(1 - grow, 3));
   const barH = cell * fx.beam;
@@ -243,8 +218,6 @@ function drawClearFx(w, h, cell) {
   }
 }
 
-// `type` cannot be inferred from colour: Game Boy picks a fill pattern per
-// piece, and the death curtain greys the colour while identity must survive.
 function drawBlock(ctx, px, py, color, size, type, th = theme) {
   drawSprite(ctx, blockSprite(color, size, th, type), px, py);
 }
@@ -254,15 +227,11 @@ function drawSprite(ctx, sprite, px, py) {
   ctx.drawImage(sprite.cv, px - sprite.pad, py - sprite.pad, s, s);
 }
 
-// A miniature of the real thing — colour chips alone don't tell you what a
-// theme looks like.
 const PREVIEW_STACK = [
   [0, 3, 'I'], [1, 3, 'J'], [2, 3, 'L'], [3, 3, 'S'], [4, 3, 'T'],
   [1, 2, 'Z'], [3, 2, 'O'],
 ];
 
-/** `th` is any THEMES entry, not necessarily the active one — the picker has to
- *  show palettes that are not applied. */
 export function drawThemePreview(cv, th) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   const w = cv.clientWidth || 64, h = cv.clientHeight || 52;
@@ -295,13 +264,10 @@ export function drawThemePreview(cv, th) {
   }
 }
 
-/** One menu-backdrop piece, drawn with the real block renderer so it carries
- *  the theme's bevel, glow and Game Boy fill marks rather than a flat chip. */
 export function drawDebris(cv, type, cell, th = theme) {
   const m = ROTATIONS[type][0];
   const b = bounds(m);
-  // Sprites overdraw by half a cell for their glow; without matching padding
-  // here it is clipped square at the piece's edge.
+  // PITFALL: must match the half-cell glow pad in sprites.js or the glow is clipped square.
   const pad = Math.ceil(cell * 0.5);
   const w = b.w * cell + pad * 2, h = b.h * cell + pad * 2;
 
@@ -318,10 +284,8 @@ export function drawDebris(cv, type, cell, th = theme) {
   });
 }
 
-// The L tetromino in its first rotation is, conveniently, the letter L.
 const WORDMARK_L = [[0, 0], [0, 1], [0, 2], [1, 2]];
 
-/** Draws the title's L glyph. Sized by CSS to 1cap, so it matches the type. */
 export function drawWordmarkL(cv, th = theme) {
   const cell = 26, pad = 3;
   cv.width = cell * 2 + pad * 2;
@@ -332,17 +296,14 @@ export function drawWordmarkL(cv, th = theme) {
   }
 }
 
-// ---------- next queue ----------
-
 const NEXT_SHOWN = 3;
-const NEXT_TAIL = 0.68;   // the two behind the lead are drawn smaller
+const NEXT_TAIL = 0.68;
 const NEXT_SLIDE_MS = 190;
 
-let nextShown = [];       // what the canvas currently depicts
-let slideFrom = null;     // the pre-shift queue, while animating
-let slideT = 1;           // 0 -> 1 progress; 1 means settled
+let nextShown = [];
+let slideFrom = null;
+let slideT = 1;
 
-/** Fractional index, so a piece can sit between two slots mid-slide. */
 function nextSlotTop(f) {
   const lead = view.previewSize * 2 + 12;
   const tail = view.nextTail * 2 + 10;
@@ -359,8 +320,6 @@ function nextScale(f) {
   return 1 - (1 - NEXT_TAIL) * f;
 }
 
-// Centres on the filled bounding box, not the matrix, so a 4x4 I and a 3x3 T
-// both sit visually centred. Shared by the HOLD slot and the queue.
 function drawPieceInBox(ctx, type, w, top, slotH, size, alpha = 1) {
   const m = ROTATIONS[type][0];
   let minX = 9, maxX = -1, minY = 9, maxY = -1;
@@ -385,12 +344,11 @@ function drawNext() {
 
   const sliding = slideT < 1 && slideFrom;
   const list = sliding ? slideFrom : nextShown;
-  const shift = sliding ? 1 - Math.pow(1 - slideT, 3) : 0; // eased so it settles
+  const shift = sliding ? 1 - Math.pow(1 - slideT, 3) : 0;
 
   list.forEach((type, i) => {
     const f = i - shift;
     if (f < -1 || f > NEXT_SHOWN) return;
-    // Fades out past the top, and in as the fourth piece rises into view.
     const alpha = f < 0 ? Math.max(0, 1 + f)
                 : f > NEXT_SHOWN - 1 ? Math.max(0, NEXT_SHOWN - f)
                 : 1;
@@ -407,14 +365,12 @@ function drawHold() {
   holdCtx.clearRect(0, 0, w, h);
 
   if (!G.hold) { drawEmptySlot(holdCtx, w, h); return; }
-  drawPieceInBox(holdCtx, G.hold, w, 0, h, size, G.canHold ? 1 : 0.35); // dim = spent
+  drawPieceInBox(holdCtx, G.hold, w, 0, h, size, G.canHold ? 1 : 0.35);
 }
 
 export function drawSidePanels() {
   drawHold();
 
-  // One extra, so the piece rising into the last slot has something to be. A
-  // queue that shifted by exactly one animates; anything else snaps.
   const now = G.queue.slice(0, NEXT_SHOWN + 1);
   if (nextShown.length > 1 && now[0] === nextShown[1]) {
     slideFrom = nextShown;
@@ -427,14 +383,12 @@ export function drawSidePanels() {
   drawNext();
 }
 
-/** From the frame loop, not on queue changes. */
 export function tickQueue(dt) {
   if (slideT >= 1) return;
   slideT = Math.min(1, slideT + dt / NEXT_SLIDE_MS);
   drawNext();
 }
 
-// Otherwise an empty HOLD slot reads as dead space rather than a destination.
 function drawEmptySlot(ctx, w, h) {
   const bw = Math.round(view.previewSize * 2.4), bh = Math.round(view.previewSize * 1.5);
   ctx.globalAlpha = 0.32;

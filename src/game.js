@@ -1,7 +1,3 @@
-// The rules: spawning, movement, locking, clearing, scoring and the state
-// machine behind the menu, pause, death and game-over screens. The only module
-// that writes G, apart from input.js's gesture bookkeeping.
-
 import {
   COLS, ROWS, HIDDEN, VIS_ROWS,
   LINE_SCORES, TSPIN_SCORES, TSPIN_MINI_SCORES, PERFECT_SCORES,
@@ -34,11 +30,8 @@ function setReady(ms) {
 
 const resumeDelay = () => (G.settings.countdown ? READY_MS : 0);
 
-/** The record and save slot the run in play belongs to. */
 const currentSlot = () => slotOf(G.mode, G.cascade);
 
-// Single funnel, so beating the record is caught the instant it happens rather
-// than on the game-over screen.
 function addScore(n) {
   G.score += n;
   if (!G.newBest && G.runBest > 0 && G.score > G.runBest) {
@@ -51,10 +44,6 @@ function addScore(n) {
   updateHud();
 }
 
-// ---------- spawning ----------
-
-// Settles a new piece into the visible field so it never appears half-cut by
-// the hidden buffer rows.
 function enterPiece(piece) {
   if (collides(piece.m, piece.x, piece.y)) {
     if (G.mode !== 'zen') { gameOver(); return false; }
@@ -77,9 +66,9 @@ export function spawn() {
   fillQueue();
   if (!enterPiece(piece)) return;
   G.canHold = true;
-  pushUndo();    // ...and the point an undo winds back to
+  pushUndo();
   refreshUndo();
-  snapshotRun(); // a new piece is a stable point to save at
+  snapshotRun();
 }
 
 function resetLockState() {
@@ -88,9 +77,6 @@ function resetLockState() {
   G.lockResets = 0;
 }
 
-/** Milliseconds a piece takes to fall one row. Must not be clamped to a floor:
- *  that silently stopped progression while the level counter kept climbing. */
-/** The level Zen plays at: never below its floor, never above its ceiling. */
 export function levelFor(lines) {
   const step = Math.floor(lines / 10) + 1;
   if (G.mode !== 'zen') return step;
@@ -98,16 +84,16 @@ export function levelFor(lines) {
   return Math.max(zenMin, zenMax ? Math.min(step, zenMax) : step);
 }
 
+// PITFALL: clamping this to a floor silently stalls speed while the level counter keeps climbing.
 export function gravityInterval() {
   const frames = GRAVITY_FRAMES[G.level - 1] ?? GRAVITY_MIN_FRAMES;
   return frames * FRAME_MS;
 }
 
-// Zen's answer to topping out: drop the bottom rows and let the stack fall in.
 function rescue() {
   const rows = [];
   for (let y = ROWS - ZEN_RESCUE_ROWS; y < ROWS; y++) rows.push(y);
-  spawnClearParticles(rows, CLEAR_FX[4]); // read the colours before dropping them
+  spawnClearParticles(rows, CLEAR_FX[4]); // PITFALL: reads cell colours, so it must run before the rows are dropped.
 
   const kept = G.grid.slice(0, ROWS - ZEN_RESCUE_ROWS);
   while (kept.length < ROWS) kept.unshift(Array(COLS).fill(null));
@@ -125,8 +111,6 @@ function touchLock() {
   if (G.lockResets < MAX_LOCK_RESETS) { G.lockTimer = 0; G.lockResets++; }
 }
 
-// ---------- actions ----------
-
 export function move(dx) {
   const a = G.active;
   if (!a || collides(a.m, a.x + dx, a.y)) return false;
@@ -137,10 +121,6 @@ export function move(dx) {
   return true;
 }
 
-/**
- * @param {number} dir  positive clockwise, negative anticlockwise.
- * @returns {boolean} false if every SRS kick was blocked, piece left as-is.
- */
 export function rotate(dir) {
   const a = G.active;
   if (!a || a.type === 'O') return false;
@@ -181,7 +161,7 @@ export function hardDrop() {
   let dist = 0;
   while (!collides(a.m, a.x, a.y + 1)) { a.y++; dist++; }
   addScore(dist * 2);
-  if (dist > 0) G.rotatedLast = false; // a 0-cell drop must not cancel a T-spin
+  if (dist > 0) G.rotatedLast = false; // PITFALL: a 0-cell drop must not cancel a T-spin.
   Sound.drop();
   Haptics.drop();
   lockPiece();
@@ -199,26 +179,19 @@ export function holdPiece() {
     if (G.state !== 'playing') return;
   }
 
-  G.canHold = false; // must follow spawn(), which re-arms the hold
+  G.canHold = false; // PITFALL: must follow spawn(), which re-arms the hold.
   drawSidePanels();
   Sound.holdSfx();
   Haptics.hold();
 }
 
-// ---------- locking & clearing ----------
-
-/**
- * Three-corner rule. Must be called *before* the piece is written into the
- * grid, or the corners it inspects include the piece itself.
- * @returns {'full'|'mini'|null}
- */
+// PITFALL: must be called before the piece is written into the grid, or the corners it inspects include the piece itself.
 export function tSpinType() {
   const a = G.active;
   if (a.type !== 'T' || !G.rotatedLast) return null;
 
   const cx = a.x + 1, cy = a.y + 1;
   const blocked = (x, y) => x < 0 || x >= COLS || y >= ROWS || (y >= 0 && !!G.grid[y][x]);
-  // TL, TR, BL, BR
   const corners = [blocked(cx - 1, cy - 1), blocked(cx + 1, cy - 1), blocked(cx - 1, cy + 1), blocked(cx + 1, cy + 1)];
   if (corners.filter(Boolean).length < 3) return null;
 
@@ -244,7 +217,6 @@ export function lockPiece() {
 
   const full = fullRows();
 
-  // Locked entirely in the hidden buffer: a top-out everywhere but Zen.
   if (!anyVisible && !full.length) {
     G.active = null;
     if (G.mode === 'zen') { rescue(); spawn(); return; }
@@ -262,8 +234,6 @@ export function lockPiece() {
   }
 }
 
-// Deeper chains hit harder: a clear four links in reads as a Tetris even when
-// it is one row.
 function beginClear(rows, spin) {
   const fx = CLEAR_FX[Math.min(rows.length + G.chain, 4)];
   spawnClearParticles(rows, fx);
@@ -286,8 +256,6 @@ const fullRows = () => {
 function finishClear() {
   const { rows, spin } = G.pendingClear;
 
-  // Cascade blanks the rows in place and lets the survivors fall; everywhere
-  // else the stack shifts down as whole rows.
   let moved = null;
   if (G.cascade) {
     for (const y of rows) G.grid[y] = Array(COLS).fill(null);
@@ -302,8 +270,6 @@ function finishClear() {
   G.pendingClear = null;
   G.clearRows = null;
 
-  // The fall is the whole point of cascade: snapping the survivors into place
-  // left a chained clear looking like a bonus with no cause.
   if (moved?.length) {
     G.falling = moved;
     G.fallTimer = FALL_MS;
@@ -322,7 +288,7 @@ function afterSettle() {
     if (next.length) {
       G.chain++;
       G.tally.chain = Math.max(G.tally.chain, G.chain + 1);
-      beginClear(next, null); // a spin credits the placement, not what it set off
+      beginClear(next, null);
       return;
     }
   }
@@ -332,7 +298,6 @@ function afterSettle() {
   spawn();
 }
 
-/** @param {number} chain  links already set off by this one placement. */
 function applyScore(cleared, spin, chain = 0) {
   const prevLevel = G.level;
   let gain = 0, label = '', color = theme.accent;
@@ -344,7 +309,7 @@ function applyScore(cleared, spin, chain = 0) {
     color = theme.pieces.T;
   } else if (cleared) {
     gain = LINE_SCORES[cleared] * G.level;
-    label = ['', '', 'DOUBLE', 'TRIPLE', 'TETRIS'][cleared]; // a single stays quiet
+    label = ['', '', 'DOUBLE', 'TRIPLE', 'TETRIS'][cleared];
     if (cleared === 4) color = theme.pieces.I;
     else if (cleared === 3) color = theme.accent;
   }
@@ -367,8 +332,6 @@ function applyScore(cleared, spin, chain = 0) {
   }
 
   if (cleared) {
-    // Combo counts consecutive *placements* that cleared, so the extra clears one
-    // placement sets off must not touch it — four links would read as a 4× combo.
     if (!chain) {
       G.combo++;
       if (G.combo > 0) {
@@ -408,8 +371,7 @@ function applyScore(cleared, spin, chain = 0) {
 
   if (G.level > prevLevel) { Sound.levelUp(); Haptics.levelUp(); }
 
-  // A record outranks the clear label; addScore already toasted it.
-  if (!hadBest && G.newBest) { /* leave the high-score toast up */ }
+  if (!hadBest && G.newBest) {}
   else if (G.level > prevLevel) showToast('LEVEL ' + G.level, theme.pieces.S);
   else if (label) showToast(label, color);
 }
@@ -435,15 +397,10 @@ function spawnClearParticles(rows, fx) {
   if (G.particles.length > 900) G.particles.splice(0, G.particles.length - 900);
 }
 
-// ---------- saving and resuming a run ----------
-
-// Everything needed to put a run back. Copied, not referenced: an undo entry has
-// to survive the play that follows it rather than follow along with it.
 function runPayload() {
   return {
     mode: G.mode, cascade: G.cascade,
     grid: encodeGrid(G.grid),
-    // The rotation matrix is rebuilt from ROTATIONS, so only the index is kept.
     active: G.active ? { type: G.active.type, rot: G.active.rot, x: G.active.x, y: G.active.y } : null,
     queue: [...G.queue], bag: G.bag ? [...G.bag] : null, hold: G.hold, canHold: G.canHold,
     score: G.score, lines: G.lines, level: G.level,
@@ -453,18 +410,13 @@ function runPayload() {
   };
 }
 
-// Stable points only — a new piece, a pause, the menu, the page being hidden —
-// never mid-clear or mid-death, so a restored board is always a playable one.
 export function snapshotRun() {
   if (G.state !== 'playing' && G.state !== 'paused') return;
   saveRun(currentSlot(), { ...runPayload(), undosUsed: G.undosUsed, undoStack: G.undoStack });
 }
 
-/** The live board becomes `saved`. Shared by resuming and undoing. */
 function applyRun(saved) {
-  // A run saved while cascade was a mode carries it in `mode` and has no flag of
-  // its own. Read as-is it came back as plain Classic, and the next snapshot
-  // filed it under Classic too — one run becoming two, neither of them cascading.
+  // PITFALL: older saves stored cascade as mode 'cascade' with no flag; reading them as-is silently forks the run into a plain Classic save.
   G.mode = BASES.includes(saved.mode) ? saved.mode : 'marathon';
   G.cascade = !!saved.cascade || saved.mode === 'cascade';
   G.grid = decodeGrid(saved.grid);
@@ -475,8 +427,6 @@ function applyRun(saved) {
 
   G.score = saved.score | 0;
   G.lines = saved.lines | 0;
-  // Clamped to the current floor and ceiling: a run saved under other settings
-  // must not resume playing at a speed those settings no longer allow.
   G.level = Math.max(1, saved.level | 0);
   if (G.mode === 'zen') {
     const { zenMin, zenMax } = G.settings;
@@ -508,20 +458,14 @@ function applyRun(saved) {
   refreshUndo();
 }
 
-// ---------- undo ----------
-
 const undosLeft = () => Math.max(0, G.settings.undos - G.undosUsed);
 
-// Mid-clear counts: the entry restored predates the piece that set the clear off,
-// so it cancels cleanly — and the button doesn't die for a third of a second
-// after every landing.
 const UNDOABLE = { playing: 1, clearing: 1, settling: 1 };
 
-// Two deep at minimum: the top is the piece in play, so something has to be under it.
 const canUndo = () => !!UNDOABLE[G.state] && undosLeft() > 0 && G.undoStack.length > 1;
 
 function pushUndo() {
-  if (!G.settings.undos) return; // nothing to spend, nothing worth keeping
+  if (!G.settings.undos) return;
   G.undoStack.push(runPayload());
   if (G.undoStack.length > UNDO_MAX + 1) G.undoStack.shift();
 }
@@ -531,7 +475,6 @@ function refreshUndo() {
   setUndo(G.settings.undos > 0 && live, undosLeft(), canUndo());
 }
 
-/** Takes back the piece in play, putting the board where it was one spawn ago. */
 export function undo() {
   if (!canUndo()) return;
   G.undoStack.pop();
@@ -543,8 +486,6 @@ export function undo() {
   snapshotRun();
 }
 
-/** Which slot a plain tap on the menu picks up: last played if it has a save,
- *  else whichever does, else none. */
 export function pendingRun() {
   const last = loadLastSlot();
   if (loadRun(last)) return last;
@@ -559,26 +500,23 @@ export function resumeRun(slot = pendingRun()) {
   G.undosUsed = Math.max(0, saved.undosUsed | 0);
   G.undoStack = Array.isArray(saved.undoStack) ? saved.undoStack : [];
   applyRun(saved);
-  // A run saved before undo existed, or with undos switched off at the time.
   if (!G.undoStack.length) pushUndo();
 
   hideOverlay();
-  if (G.state === 'playing') setReady(resumeDelay()); // spawn() above can have topped out
+  if (G.state === 'playing') setReady(resumeDelay());
 }
 
-// ---------- flow ----------
-
 export function startGame(mode = 'marathon', cascade = false) {
-  commitStats(); // the run being replaced may be holding a record
+  commitStats();
   G.mode = mode;
   G.cascade = !!cascade;
   const slot = currentSlot();
-  clearRun(slot); // only this slot — the other three stay waiting
+  clearRun(slot);
   saveLastSlot(slot);
   G.grid = emptyGrid();
   G.queue = []; G.bag = null; G.hold = null; G.canHold = true;
   G.score = 0; G.lines = 0; G.combo = -1; G.backToBack = false;
-  G.level = levelFor(0); // Zen opens at its floor rather than crawling up to it
+  G.level = levelFor(0);
   G.tally = blankTally();
   G.runBest = G.stats[slot].score;
   G.newBest = false;
@@ -593,13 +531,12 @@ export function startGame(mode = 'marathon', cascade = false) {
   G.undoStack = [];
 
   hideOverlay();
-  syncLevelPalette(); // back to level 1 after a high-level run
+  syncLevelPalette();
   fillQueue();
   spawn();
   updateHud();
 }
 
-// Two beats: a grey curtain sweeps up from the floor, then the summary.
 export function gameOver() {
   if (G.state === 'dying' || G.state === 'over') return;
   G.state = 'dying';
@@ -609,7 +546,6 @@ export function gameOver() {
   refreshUndo();
 }
 
-// Per mode, so Zen's unbounded score can never flatter Marathon's.
 function commitStats() {
   const best = G.stats[currentSlot()];
   best.score = Math.max(best.score, G.score);
@@ -631,7 +567,6 @@ function tallyCard() {
     ['PIECES', t.pieces.toLocaleString()], ['TETRIS', t.tetris],
     ['T-SPINS', t.tspins], ['PERFECT', t.perfect], ['BEST COMBO', t.combo + '&times;'],
   ];
-  // Chains are impossible outside cascade, so elsewhere the row is always zero.
   if (G.cascade) rows.push(['BEST CHAIN', t.chain + '&times;']);
   return `<dl class="tally">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
 }
@@ -641,7 +576,7 @@ function finishGameOver() {
   Sound.over();
   Haptics.over();
   commitStats();
-  clearRun(currentSlot()); // the other three saves are untouched
+  clearRun(currentSlot());
 
   showOverlay(`
     <h2${G.newBest ? ' class="record"' : ''}>${G.newBest ? 'NEW HIGH SCORE!' : 'GAME OVER'}</h2>
@@ -656,13 +591,9 @@ function finishGameOver() {
   `);
 }
 
-// Shared by the menu and the pause screen so the two can't drift. Phones get
-// the gestures, desktop the keys; showing both is clutter.
 function controlsHint() {
   const touch = window.matchMedia?.('(pointer: coarse)')?.matches ?? true;
 
-  // Two columns, not a run of text: middots let the browser wrap at any space,
-  // which split "FLICK DOWN" from "drop".
   const rows = touch
     ? [['DRAG', 'move'], ['TAP', 'rotate'], ['FLICK DOWN', 'hard drop'],
        ['SWIPE UP', 'hold'], ['TWO-FINGER TAP', 'rotate back']]
@@ -673,10 +604,7 @@ function controlsHint() {
   return `<dl class="controls">${cells}</dl>`;
 }
 
-// Separate from togglePause so a control on the screen can redraw it without
-// resuming the game.
 export function showPauseScreen() {
-  // iOS has no vibration API at all, and a toggle for nothing is worse than none.
   const actions = [['restart', 'RESTART'], ['menu', 'MAIN MENU']];
   if (Haptics.supported) {
     actions.push(['haptics', Haptics.enabled ? 'BUZZ ON' : 'BUZZ OFF']);
@@ -691,9 +619,6 @@ export function showPauseScreen() {
   `, { soft: true });
 }
 
-// How a level reads as a speed. Seconds for a piece to fall the height of the
-// well: a number she can picture, where milliseconds-a-row had to be translated
-// first. The word ahead of it is the feel, the number is the fact.
 const FEEL = [[3, 'GENTLE'], [6, 'STEADY'], [8, 'BRISK'], [10, 'RELENTLESS']];
 
 const secondsToFloor = level => {
@@ -702,8 +627,6 @@ const secondsToFloor = level => {
 };
 const feelOf = level => FEEL.find(([upto]) => level <= upto)?.[1] ?? 'RELENTLESS';
 
-/** What each row currently means, keyed by row. Also rewritten in place when a
- *  wheel reports a value, so the screen never has to be rebuilt mid-scroll. */
 function settingSubs() {
   const s = G.settings;
   const takeBacks = s.undos === 1 ? '1 TAKE-BACK EACH GAME' : `${s.undos} TAKE-BACKS EACH GAME`;
@@ -717,8 +640,6 @@ function settingSubs() {
   };
 }
 
-// Ordered by how often they get touched: the countdown and cascade are settled
-// once, the numbers are a mood.
 function settingsRows() {
   const s = G.settings;
   const subs = settingSubs();
@@ -750,14 +671,6 @@ export function showSettings() {
   `, { soft: G.state !== 'menu', modal: true });
 }
 
-/**
- * @param {string} key    which setting.
- * @param {number} [value] the wheel's choice; omitted by the toggles.
- *
- * Zen's floor and ceiling cannot cross, so moving one past the other pushes it
- * rather than refusing: she asked for a speed and gets it, from whichever end
- * she reached for.
- */
 export function changeSetting(key, value) {
   const s = G.settings;
   const before = { ...s };
@@ -774,9 +687,6 @@ export function changeSetting(key, value) {
   }
   saveSettings();
 
-  // Nothing is recorded while undos are off, so history kept across that gap
-  // would wind back to whenever they were last on — a whole run, in the worst
-  // case. Dropped on the way out, seeded from where she stands on the way in.
   if (key === 'undos') {
     if (!s.undos) G.undoStack = [];
     else if (!G.undoStack.length && G.active) pushUndo();
@@ -784,23 +694,15 @@ export function changeSetting(key, value) {
 
   refreshUndo();
 
-  // A wheel is never redrawn by the value it just reported: rebuilding the
-  // screen resets its scroll while iOS momentum is still running, which pulls it
-  // out from under the finger and can leave it a number off. Only the meaning
-  // underneath changes — unless the other end of the Zen range was pushed along,
-  // which is a wheel that genuinely has to move.
+  // PITFALL: never re-render the screen for a wheel's own value; rebuilding resets its scroll while iOS momentum is still running and can leave it a number off.
   const turned = key === 'undos' || key === 'zenMin' || key === 'zenMax';
   if (!turned) { showSettings(); return; }
 
   setSettingText(settingSubs());
-  // The far end of the range, if this pushed it: turned rather than re-rendered,
-  // so the wheel under the finger is never rebuilt out from under it.
   if (key === 'zenMin' && before.zenMax !== s.zenMax) setWheel('zenMax', ZEN_CAPS.indexOf(s.zenMax));
   if (key === 'zenMax' && before.zenMin !== s.zenMin) setWheel('zenMin', ZEN_LEVELS.indexOf(s.zenMin));
 }
 
-// Reached from the menu and from pause; where BACK returns is read off the state
-// rather than tracked, since only those two screens can open it.
 export function showControls() {
   const fromPause = G.state !== 'menu';
   showOverlay(`
@@ -815,8 +717,6 @@ export function closeSubScreen() {
   else showPauseScreen();
 }
 
-// Each live state has a paused twin, so pausing mid-clear or mid-fall resumes
-// into the same beat rather than skipping it.
 const PAUSED_AS = { playing: 'paused', clearing: 'pausedClearing', settling: 'pausedSettling' };
 const RESUMED_AS = { paused: 'playing', pausedClearing: 'clearing', pausedSettling: 'settling' };
 
@@ -836,8 +736,6 @@ export function togglePause() {
 
 const lineCount = n => `${n.toLocaleString()} ${n === 1 ? 'LINE' : 'LINES'}`;
 
-// What the menu calls each axis, and which number a run is measured by: Zen has
-// no score worth chasing, so it counts lines instead.
 const BASE_MENU = {
   marathon: { name: 'CLASSIC', progress: s => (s.score | 0).toLocaleString() },
   zen: { name: 'ZEN', progress: s => lineCount(s.lines | 0) },
@@ -849,11 +747,6 @@ const slotName = slot => {
   return `${BASE_MENU[mode].name} ${cascade ? 'CASCADE' : 'NORMAL'}`;
 };
 
-/**
- * Four records as a grid: mode across, clears down. A row of loose cards made
- * "CLASSIC CASCADE" read as a mode of its own, which is the confusion the whole
- * change is meant to undo.
- */
 function recordCards() {
   const s = slot => G.stats[slot] ?? { score: 0, lines: 0, combo: 0 };
   if (!SLOTS.some(slot => s(slot).score || s(slot).lines)) return '';
@@ -876,26 +769,21 @@ function recordCards() {
   return `<div class="records"><span></span>${heads}${rows}</div>`;
 }
 
-// Which NEW button has its two clears showing, and when the menu was opened —
-// the backdrop is redrawn from that so a re-render resumes the drift rather
-// than restarting it.
 let openPick = false;
 let menuAt = 0;
 
-/** Opens the list of runs waiting to be resumed, or puts it away. */
 export function openPicker() {
   openPick = !openPick;
   renderMenu(false);
 }
 
-/** A mode name; the clears come from the setting rather than from the button. */
 export function startSlot(mode) {
   startGame(mode, G.settings.cascade);
 }
 
 export function showMenu() {
-  snapshotRun();  // stay resumable before the board is torn down
-  commitStats();  // may be arriving from an abandoned run
+  snapshotRun();
+  commitStats();
   G.state = 'menu';
   G.grid = emptyGrid();
   G.active = null;
@@ -911,30 +799,16 @@ export function showMenu() {
 
   openPick = false;
   menuAt = Date.now();
-  setBoardShowing(false); // nothing behind the menu is worth its glow bleeding through
+  setBoardShowing(false);
   renderMenu(true);
 }
 
-/**
- * Three groups behind rules: starting, resuming, everything else. Starting a
- * game is a mode then its clears, which open *under* the button pressed so that
- * the row already read doesn't move. Resuming is one button per saved run, laid
- * out in the modes' own columns — four buttons rather than a question, because a
- * run is easier to pick out by sight than to remember the name of.
- *
- * Progress goes on a second line inside the button rather than after the label:
- * "RESUME CLASSIC · 18,400" on one line is wider than a phone.
- */
 function renderMenu(intro) {
-  // Which clears a new game gets is a setting now, so it rides on the button
-  // rather than being asked for: she should never start one without seeing it.
   const clears = G.settings.cascade ? 'CASCADE' : 'NORMAL';
   const starts = BASES.map(mode => [`new-${mode}`, `NEW ${BASE_MENU[mode].name}`, clears]);
 
   const waiting = SLOTS.map(slot => ({ slot, save: loadRun(slot) })).filter(w => w.save);
 
-  // One button, and the runs behind it. Four of them laid out flat was the whole
-  // menu; the list only exists while it is being read.
   const picker = waiting.map(({ slot, save }) => {
     const { mode, cascade } = parseSlot(slot);
     return `<button class="pickRow" data-act="go-${slot}">
@@ -961,16 +835,8 @@ function renderMenu(intro) {
   `, { intro, picking: openPick });
 }
 
-// ---------- per-frame ----------
-
-/**
- * @param {number} dt  ms since the last frame, clamped by the caller.
- *
- * Must run *after* updateKeyRepeat for the same frame, so a piece moved by held
- * keys is settled before gravity and lock delay apply.
- */
+// PITFALL: must run after updateKeyRepeat in the same frame, so held-key movement settles before gravity and lock delay apply.
 export function update(dt) {
-  // First, so one guard freezes gravity, lock delay, clears and particles alike.
   if (G.ready > 0) {
     G.ready = Math.max(0, G.ready - dt);
     setCountdown(Math.ceil(G.ready / (READY_MS / READY_BEATS)));
@@ -1009,7 +875,6 @@ export function update(dt) {
   if (G.state === 'settling') {
     G.fallTimer -= dt;
     if (G.fallTimer > 0) return;
-    // The stack landing, before whatever it completed lights up.
     const drop = Math.max(...G.falling.map(f => f.to - f.from));
     G.shake = Math.max(G.shake, Math.min(4, 1 + drop * 0.5));
     Sound.settle(drop);

@@ -1,5 +1,4 @@
-// Element and context lookups, done once. These run at import time, so nothing
-// may import this module before the document has parsed.
+// PITFALL: lookups run at import time, so nothing may import this module before the document has parsed.
 
 const $ = id => document.getElementById(id);
 

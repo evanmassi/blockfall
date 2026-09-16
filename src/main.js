@@ -1,6 +1,3 @@
-// Boot order, the frame loop, and the window-level listeners that belong to no
-// single subsystem.
-
 import { G, loadStats, loadSettings, migrateLegacyRun } from './state.js';
 import { setTheme, savedThemeName } from './themes.js';
 import { resize, render, tickQueue } from './render.js';
@@ -10,25 +7,13 @@ import { updateKeyRepeat } from './input.js';
 import { Sound } from './audio.js';
 import { muteBtn } from './dom.js';
 
-// Bumped by hand when testing on a device, so a stale cache is visible rather
-// than looking like a bug. Shown in the ?debug readout.
 const BUILD = 'b70';
 
-// An installed app can't be handed a query string — the icon keeps whatever URL
-// it was added with — so it is toggled from inside. On the settings screen's
-// heading rather than the wordmark: the menu is where she spends her taps, and
-// stumbling into a green readout with no idea how to leave would read as the
-// game breaking.
 const DEBUG_KEY = 'blockfall.debug';
 const debugging = new URLSearchParams(location.search).has('debug') ||
   (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
 
-// Resolved against this module so it still lands on /sw.js when served from a
-// subpath like /blockfall/. Needs HTTPS or localhost.
-//
-// Skipped while debugging, and anything it already cached torn down with it: an
-// installed app testing a change against a dev server has to be reading the
-// bytes on disk, not a copy of them from two builds ago.
+// PITFALL: resolved against import.meta.url so it still finds /sw.js when served from a subpath.
 if ('serviceWorker' in navigator) {
   if (debugging) {
     navigator.serviceWorker.getRegistrations?.()
@@ -54,24 +39,18 @@ document.addEventListener('pointerdown', e => {
     const on = localStorage.getItem(DEBUG_KEY) === '1';
     localStorage.setItem(DEBUG_KEY, on ? '0' : '1');
   } catch {}
-  location.reload(); // so the boot-time measurements run under the new setting
+  location.reload();
 }, true);
 
-// The real event sequence for a tap. Capture phase, so it sees every event
-// regardless of what any handler does with it.
 if (debugging) {
   const out = document.createElement('div');
   out.id = 'debug';
   document.body.appendChild(out);
   document.getElementById('app').classList.add('showBoxes');
 
-  // The measurements are pinned above the event log rather than scrolling with
-  // it: on an installed app there is no dev server to post to, so a screenshot
-  // of this readout is the only way they leave the device.
   let head = [], tail = [];
   const draw = () => { out.textContent = [`build ${BUILD}`, ...head, ...tail].join('\n'); };
   const post = line => {
-    // An image GET, not fetch/sendBeacon: nothing can quietly drop it.
     try { new Image().src = '/log?m=' + encodeURIComponent(line) + '&t=' + Date.now(); } catch {}
   };
   const log = line => {
@@ -83,9 +62,6 @@ if (debugging) {
   globalThis.__bfLog = log;
   post(`--- session start, build ${BUILD} ---`);
 
-  // Where each layer actually lands. A seam between them is only visible on the
-  // device it happens on, and reading it off a screenshot is guesswork — these
-  // are the numbers that say which box is short and by how much.
   const boxes = () => {
     const cs = getComputedStyle(document.getElementById('app'));
     const r = sel => {
@@ -99,7 +75,6 @@ if (debugging) {
       `safe t${cs.paddingTop} b${cs.paddingBottom} standalone=${!!navigator.standalone}`,
       `${r('#app')} ${r('#overlay')}`,
       `${r('.bgfall')} ${r('#stage')}`,
-      // Never measured before tonight, and they contain everything else.
       `html ${Math.round(document.documentElement.getBoundingClientRect().bottom)} ` +
       `body ${Math.round(document.body.getBoundingClientRect().bottom)} ` +
       `ovf ${getComputedStyle(document.body).overflow}`,
@@ -109,7 +84,6 @@ if (debugging) {
     head.forEach(post);
   };
 
-  // After the intro settles, and again whenever the URL bar resizes the viewport.
   setTimeout(boxes, 1600);
   addEventListener('resize', () => setTimeout(boxes, 120));
   visualViewport?.addEventListener('resize', () => setTimeout(boxes, 120));
@@ -119,8 +93,6 @@ if (debugging) {
       const cls = typeof t.className === 'string' && t.className
         ? '.' + t.className.trim().split(/\s+/).join('.') : '';
       const act = t.closest?.('[data-act]')?.dataset.act ?? '-';
-      // Coordinates too: tapping a seam is the only way to say where it is in
-      // the page's own terms rather than in screenshot pixels.
       const at = `@${Math.round(e.clientY)}/${innerHeight}`;
       log(`${type}/${e.pointerType || 'x'} ${at} ${t.tagName}${cls} act=${act} → ${G.state}`);
     }, true);
@@ -129,11 +101,10 @@ if (debugging) {
 
 document.addEventListener('contextmenu', e => e.preventDefault());
 
-// pagehide is the one that fires on iOS when an app is swiped away; unload is
-// not reliable there.
+// PITFALL: pagehide, not unload: unload does not fire reliably on iOS when the app is swiped away.
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) return;
-  if (G.state === 'playing') togglePause(); // also snapshots
+  if (G.state === 'playing') togglePause();
   else snapshotRun();
 });
 window.addEventListener('pagehide', snapshotRun);
@@ -143,30 +114,27 @@ window.visualViewport?.addEventListener('resize', resize);
 let lastFrame = 0;
 
 function frame(t) {
-  // Clamped so a backgrounded tab doesn't return with a delta big enough to
-  // drop a piece through the stack in one step.
   const dt = Math.min(t - lastFrame, 100);
   lastFrame = t;
 
-  // Order matters: held keys move the piece, then gravity and lock delay act on
-  // where it ended up, then it is drawn once.
+  // PITFALL: updateKeyRepeat must run before update() in the same frame.
   if (G.state === 'playing' && G.active && !G.ready) updateKeyRepeat(dt);
   update(dt);
   render();
 
-  // Presentation only, so both are safe every frame regardless of state.
   tickScore();
   tickQueue(dt);
 
   requestAnimationFrame(frame);
 }
 
+// PITFALL: boot order matters: settings load before showMenu, syncScreenHeight before resize.
 migrateLegacyRun();
 G.stats = loadStats();
-G.settings = loadSettings(); // before showMenu, which reads them to size the undo button
+G.settings = loadSettings();
 muteBtn.textContent = Sound.muted ? '♪̸' : '♪';
-setTheme(savedThemeName()); // resize() does the sprite/well rebuild that follows
-syncScreenHeight();          // #app is sized from it, so before anything measures
+setTheme(savedThemeName());
+syncScreenHeight();
 resize();
 showMenu();
 requestAnimationFrame(t => { lastFrame = t; frame(t); });

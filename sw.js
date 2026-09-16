@@ -1,6 +1,3 @@
-// Bumped only to recover from a bad cache, not per deploy — the fetch handler
-// revalidates on its own. v2 discards whatever the pre-waitUntil worker left,
-// which could be stale entries it never managed to update.
 const CACHE = 'blockfall-v2';
 
 const ASSETS = [
@@ -14,11 +11,7 @@ const ASSETS = [
   './fonts/press-start-2p.woff2',
 ];
 
-// Assets are cached individually rather than with addAll, which is atomic: one
-// unreachable path there aborts the whole install, and the failure is silent —
-// the app keeps working online and simply never works offline. A stale entry in
-// ASSETS is caught at development time by the test that diffs it against the
-// filesystem, which is where a loud failure is actually useful.
+// PITFALL: not addAll; it is atomic and one unreachable path silently aborts the whole install, so the app never works offline.
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
@@ -35,17 +28,13 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Stale-while-revalidate: launches instantly from cache, and picks up a new
-// deploy on the following launch without needing the cache name bumped.
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
 
   const cached = caches.open(CACHE).then(cache => cache.match(req).then(hit => ({ cache, hit })));
 
-  // cache:'no-cache' revalidates against the server rather than letting the
-  // browser's own HTTP cache answer with the same stale bytes and write them
-  // back. Unchanged files come back 304, so it costs headers, not payloads.
+  // PITFALL: cache:'no-cache' forces revalidation; otherwise the browser's HTTP cache answers with the same stale bytes and they get written back.
   const fresh = cached.then(({ cache, hit }) =>
     fetch(req, { cache: 'no-cache' })
       .then(res => {
@@ -54,10 +43,7 @@ self.addEventListener('fetch', e => {
       })
       .catch(() => hit || (req.mode === 'navigate' ? cache.match('./index.html') : undefined)));
 
-  // Both called synchronously: a worker may be killed the moment respondWith
-  // settles, and without waitUntil the update half of stale-while-revalidate
-  // is never given time to finish. That is how an installed iOS app sits on an
-  // old build however many times it is relaunched.
+  // PITFALL: waitUntil must be called synchronously alongside respondWith; the worker may be killed once respondWith settles, and installed iOS then never picks up a new build.
   e.waitUntil(fresh);
   e.respondWith(cached.then(({ hit }) => hit || fresh));
 });
